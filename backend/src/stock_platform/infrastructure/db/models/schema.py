@@ -1,5 +1,7 @@
 """Canonical v0.2 table registry used by persistence and schema tooling."""
 
+from stock_platform.infrastructure.db.models import tables as _tables  # noqa: F401
+
 CORE_TABLES = frozenset(
     {
         "raw_data_object",

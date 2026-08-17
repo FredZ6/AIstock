@@ -53,3 +53,32 @@ read on 2026-08-17. Linear milestone: M0 Foundation (FRE-5, FRE-6, FRE-7).
 - Report: this file (`docs/progress.md`).
 - Risks: the M0 schema is intentionally foundational; business repositories, fixture datasets,
   provider adapters, and point-in-time query APIs begin at Task 4 and were not implemented.
+
+#### M0 re-acceptance remediation — 2026-08-18
+
+- SQLAlchemy metadata RED: `pytest -q backend/tests/unit/infrastructure/db/test_models.py` —
+  exit 1 because `Base.metadata` contained zero tables. GREEN: exit 0; all canonical tables are
+  now represented in `infrastructure/db/models/tables.py` and imported by Alembic.
+- Metadata integration: `alembic check` against a freshly migrated database — exit 0; `No new
+  upgrade operations detected`. The same check is now part of `make verify`.
+- Append-only idempotency RED: the regression test observed all seven protected tables changing
+  from 0 to 1 row. GREEN: writes now run inside a rolled-back outer transaction with savepoints
+  around rejected mutations; the database test suite ran twice with 11 passed each time and all
+  seven tables remained at 0 rows.
+- Deterministic DecisionDiff RED: two tests failed with `NotImplementedError`. GREEN: 2 passed;
+  `build_decision_diff` emits only changed fields in stable sorted order without an LLM path.
+- External provenance RED: `market_bar` and `option_snapshot` lacked five required columns.
+  GREEN: migration `0003_market_data_provenance` adds `raw_data_object_id`, `provider`,
+  `feed_type`, `content_hash`, `raw_object_key`, point-in-time checks, and raw-data foreign keys;
+  the focused integration test passed.
+- Empty database: `alembic upgrade head` — exit 0; migrations 0001, 0002, and 0003 applied.
+  Repeating `upgrade head` — exit 0.
+- Isolated database validation: `alembic check` — exit 0; database tests run twice — exit 0,
+  11 passed each; protected-table row counts remained zero.
+- Final validation: two consecutive `make verify` runs — exit 0 each; Ruff format/lint, strict
+  Mypy, Alembic drift check, 32 backend tests, TypeScript, ESLint, 1 Vitest test, and Next.js
+  production build passed. Development database protected-table counts remained 6 before and
+  after the second run; these six rows predate this remediation and were preserved because the
+  tables are append-only.
+- Installation and fixtures: `make bootstrap`, two consecutive `make seed`, and `make smoke` —
+  exit 0 for every command; no provider credentials or live-broker configuration were used.

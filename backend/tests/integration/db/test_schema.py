@@ -142,6 +142,27 @@ def test_external_data_and_quality_dimensions_are_raw_facts(engine: Engine) -> N
     assert "quality_grade" not in evidence_columns
 
 
+def test_external_market_data_has_complete_provenance_and_raw_lineage(engine: Engine) -> None:
+    required = {
+        "raw_data_object_id",
+        "provider",
+        "feed_type",
+        "event_time",
+        "available_at",
+        "ingested_at",
+        "content_hash",
+        "raw_object_key",
+    }
+    for table_name in ("market_bar", "option_snapshot"):
+        columns = {column["name"] for column in inspect(engine).get_columns(table_name)}
+        assert required <= columns
+        assert (
+            "raw_data_object_id",
+            "raw_data_object",
+            "id",
+        ) in _foreign_key_targets(engine, table_name)
+
+
 def test_timescale_hypertables_exist(engine: Engine) -> None:
     with engine.connect() as connection:
         hypertables = set(

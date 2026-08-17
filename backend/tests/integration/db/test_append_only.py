@@ -13,6 +13,14 @@ APPEND_ONLY_TABLES = {
 }
 
 
+def _row_counts(engine: Engine) -> dict[str, int]:
+    with engine.connect() as connection:
+        return {
+            table_name: connection.execute(text(f"SELECT count(*) FROM {table_name}")).scalar_one()
+            for table_name in APPEND_ONLY_TABLES
+        }
+
+
 def test_all_historical_fact_tables_have_append_only_triggers(engine: Engine) -> None:
     with engine.connect() as connection:
         protected = set(
@@ -31,7 +39,8 @@ def test_all_historical_fact_tables_have_append_only_triggers(engine: Engine) ->
 
 
 def test_database_rejects_update_and_delete_for_every_append_only_table(engine: Engine) -> None:
-    with engine.begin() as connection:
+    with engine.connect() as connection:
+        transaction = connection.begin()
         for policy_table in (
             "research_scoring_policy_version",
             "risk_policy_version",
@@ -73,17 +82,26 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
         for table_name in APPEND_ONLY_TABLES - {"investment_thesis", "decision_snapshot"}:
             connection.execute(text(f"INSERT INTO {table_name} DEFAULT VALUES"))
 
-    for operation in ("UPDATE", "DELETE"):
-        for table_name in sorted(APPEND_ONLY_TABLES):
-            statement = (
-                f"{operation} {table_name} SET created_at = created_at"
-                if operation == "UPDATE"
-                else f"{operation} FROM {table_name}"
-            )
-            try:
-                with engine.begin() as connection:
+        for operation in ("UPDATE", "DELETE"):
+            for table_name in sorted(APPEND_ONLY_TABLES):
+                statement = (
+                    f"{operation} {table_name} SET created_at = created_at"
+                    if operation == "UPDATE"
+                    else f"{operation} FROM {table_name}"
+                )
+                savepoint = connection.begin_nested()
+                try:
                     connection.execute(text(statement))
-            except DBAPIError as error:
-                assert "append-only" in str(error.orig)
-            else:
-                raise AssertionError(f"database allowed {operation} on {table_name}")
+                except DBAPIError as error:
+                    savepoint.rollback()
+                    assert "append-only" in str(error.orig)
+                else:
+                    savepoint.rollback()
+                    raise AssertionError(f"database allowed {operation} on {table_name}")
+        transaction.rollback()
+
+
+def test_append_only_verification_leaves_database_unchanged(engine: Engine) -> None:
+    before = _row_counts(engine)
+    test_database_rejects_update_and_delete_for_every_append_only_table(engine)
+    assert _row_counts(engine) == before

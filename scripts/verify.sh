@@ -9,6 +9,7 @@ cd "${repo_root}"
 uv run ruff format --check backend
 uv run ruff check backend
 uv run mypy
+uv run alembic -c backend/alembic.ini check
 uv run pytest -q
 CI=true pnpm --dir web typecheck
 CI=true pnpm --dir web lint
