@@ -126,3 +126,24 @@ re-read on 2026-08-18. Linear milestone: M1 Data Plane (FRE-8, FRE-9, FRE-10).
   42 backend tests, TypeScript, ESLint, 1 Vitest test, and Next.js production build passed.
 - Fixture data is synthetic and explicitly licensed/provenanced; it is not live market data or
   investment advice. No provider credentials or live-broker surface was added.
+
+### Task 5 — complete; awaiting human review
+
+- RED: `uv run pytest backend/tests/unit/market_data/test_fallback_policy.py
+  backend/tests/contract/providers/test_live_adapter_contracts.py -q` — exit 2; expected import
+  failures because the fallback policy and SEC/Alpaca/FMP adapters did not exist.
+- Fallback GREEN: `uv run pytest backend/tests/unit/market_data/test_fallback_policy.py -q`
+  — exit 0; 6 passed. Covered primary success, timeout fallback, stale fallback rejection,
+  deterministic circuit opening, SEC-preferred conflict marking, and distinct not-found /
+  not-supported / unavailable semantics.
+- Provider contracts: `uv run pytest backend/tests/contract/providers -q` — exit 0;
+  17 passed and 3 skipped. Mocked SEC/Alpaca/FMP contracts cover fixed read-only endpoints,
+  bounded timeout/concurrency configuration, SEC User-Agent, conditional requests, raw-first
+  persistence, exponential backoff with injected jitter, normalization failure, and adapter-to-
+  fallback timeout flow. Three opt-in live tests skipped because `LIVE_PROVIDER_TESTS=1` was not
+  set; each test names its credential/network requirement.
+- Full verification: `make verify` — exit 0; Ruff format/lint, strict Mypy, Alembic drift check,
+  60 backend tests passed, 3 live tests skipped, TypeScript, ESLint, 1 Vitest test, and Next.js
+  production build passed.
+- No live-broker endpoint, order path, trading credential, arbitrary URL, or fabricated zero value
+  was added. Optional credentials are market/research-data-only and default to absent.
