@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.16,<2",
   "fastapi>=0.116,<1",
+  "minio>=7.2,<8",
   "pydantic>=2.11,<3",
   "pydantic-settings>=2.10,<3",
   "psycopg[binary]>=3.2,<4",
@@ -34,4 +35,3 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.12"
 strict = true
 files = ["backend/src", "backend/tests"]
-

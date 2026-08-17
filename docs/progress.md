@@ -100,3 +100,29 @@ read on 2026-08-17. Linear milestone: M0 Foundation (FRE-5, FRE-6, FRE-7).
   production build passed with no failed or skipped tests.
 - Idempotency evidence: protected-table counts remained 6 before and after the second full run;
   leaked `stock_platform_migration_*` databases remained 0.
+
+## M1 Data Plane
+
+Authoritative sources: Notion design baseline v0.2 and Codex executable engineering spec,
+re-read on 2026-08-18. Linear milestone: M1 Data Plane (FRE-8, FRE-9, FRE-10).
+
+### Task 4 — complete; awaiting human review
+
+- RED: `uv run pytest backend/tests/contract/providers backend/tests/integration/market_data -q`
+  — exit 2; expected import failures because the provider contracts and application repository
+  did not exist.
+- Fixture GREEN: `uv run pytest backend/tests/contract/providers/test_fixture_contracts.py -q`
+  — exit 0; 5 passed, covering manifest licensing/provenance, five-symbol/scenario coverage,
+  deterministic SHA-256 hashes, point-in-time fixture access, explicit missingness, and MinIO keys.
+- Integration GREEN: `uv run pytest backend/tests/contract/providers
+  backend/tests/integration/market_data -q` — exit 0; 8 passed. Late NVDA news remains invisible
+  until `available_at`, naive `as_of` is rejected, and raw lineage is preserved.
+- Related integration: `uv run pytest backend/tests/integration/db
+  backend/tests/integration/market_data backend/tests/contract/providers -q` — exit 0; 20 passed.
+- MinIO/PostgreSQL seed: first `make seed` — exit 0; 31 raw objects and 30 normalized records.
+  Second `make seed` — exit 0; the same 31 object keys were written idempotently and 0 new
+  normalized records were inserted.
+- Full verification: `make verify` — exit 0; Ruff format/lint, strict Mypy, Alembic drift check,
+  42 backend tests, TypeScript, ESLint, 1 Vitest test, and Next.js production build passed.
+- Fixture data is synthetic and explicitly licensed/provenanced; it is not live market data or
+  investment advice. No provider credentials or live-broker surface was added.

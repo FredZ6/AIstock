@@ -1,0 +1,15 @@
+{
+  "dataset": "sec",
+  "dataset_version": "m1-v1",
+  "license": "Public-domain U.S. SEC-style synthetic fixtures; no live filing content",
+  "provenance": "Hand-authored deterministic fixtures derived from public SEC field semantics",
+  "records": [
+    {"id":"aapl-facts","symbol":"AAPL","feed_type":"company_facts","event_time":"2026-08-14T20:00:00Z","available_at":"2026-08-14T20:05:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"fiscal_period":"Q3","revenue":"94000000000","currency":"USD"}},
+    {"id":"msft-facts","symbol":"MSFT","feed_type":"company_facts","event_time":"2026-08-14T20:00:00Z","available_at":"2026-08-14T20:05:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"fiscal_period":"Q4","revenue":"76000000000","currency":"USD"}},
+    {"id":"nvda-facts","symbol":"NVDA","feed_type":"company_facts","event_time":"2026-08-14T20:00:00Z","available_at":"2026-08-14T20:05:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"fiscal_period":"Q2","revenue":"46000000000","currency":"USD"}},
+    {"id":"amzn-facts","symbol":"AMZN","feed_type":"company_facts","event_time":"2026-08-14T20:00:00Z","available_at":"2026-08-14T20:05:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"fiscal_period":"Q2","revenue":"170000000000","currency":"USD"}},
+    {"id":"googl-facts","symbol":"GOOGL","feed_type":"company_facts","event_time":"2026-08-14T20:00:00Z","available_at":"2026-08-14T20:05:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"fiscal_period":"Q2","revenue":"98000000000","currency":"USD"}},
+    {"id":"nvda-10q","symbol":"NVDA","feed_type":"filings","event_time":"2026-08-14T20:00:00Z","available_at":"2026-08-14T20:10:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["sec_filing"],"payload":{"accession":"0001045810-26-000001","form":"10-Q","filed_date":"2026-08-14"}},
+    {"id":"nvda-10q-risk","symbol":"NVDA","feed_type":"filing_sections","event_time":"2026-08-14T20:00:00Z","available_at":"2026-08-14T20:10:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["sec_filing"],"payload":{"accession":"0001045810-26-000001","section":"risk_factors","text":"Synthetic fixture: export controls may affect demand."}}
+  ]
+}

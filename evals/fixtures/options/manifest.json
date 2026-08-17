@@ -1,0 +1,13 @@
+{
+  "dataset": "options",
+  "dataset_version": "m1-v1",
+  "license": "Synthetic option aggregate data for offline tests only",
+  "provenance": "Deterministic hand-authored aggregate fixtures; not executable quotes",
+  "records": [
+    {"id":"aapl-options","symbol":"AAPL","feed_type":"option_aggregates","event_time":"2026-08-15T20:00:00Z","available_at":"2026-08-15T20:02:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"put_call_volume_ratio":"0.82","implied_volatility":"0.24"}},
+    {"id":"msft-options","symbol":"MSFT","feed_type":"option_aggregates","event_time":"2026-08-15T20:00:00Z","available_at":"2026-08-15T20:02:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"put_call_volume_ratio":"0.76","implied_volatility":"0.22"}},
+    {"id":"nvda-options","symbol":"NVDA","feed_type":"option_aggregates","event_time":"2026-08-15T20:00:00Z","available_at":"2026-08-15T20:02:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["anomaly_window"],"payload":{"put_call_volume_ratio":"0.51","implied_volatility":"0.48"}},
+    {"id":"amzn-options-missing","symbol":"AMZN","feed_type":"option_aggregates","event_time":"2026-08-15T20:00:00Z","available_at":"2026-08-15T20:02:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["missing"],"status":"unavailable","payload":{"reason":"reliable fixture unavailable"}},
+    {"id":"googl-options","symbol":"GOOGL","feed_type":"option_aggregates","event_time":"2026-08-15T20:00:00Z","available_at":"2026-08-15T20:02:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"put_call_volume_ratio":"0.71","implied_volatility":"0.25"}}
+  ]
+}

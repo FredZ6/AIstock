@@ -1,0 +1,15 @@
+{
+  "dataset": "market",
+  "dataset_version": "m1-v1",
+  "license": "Synthetic market data for offline tests only",
+  "provenance": "Deterministic hand-authored OHLCV-like records; not real quotations",
+  "records": [
+    {"id":"aapl-bar","symbol":"AAPL","feed_type":"price_bars","event_time":"2026-08-15T20:00:00Z","available_at":"2026-08-15T20:01:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"timeframe":"1d","open":"230.00","high":"234.00","low":"229.00","close":"233.00","volume":"51000000"}},
+    {"id":"msft-bar","symbol":"MSFT","feed_type":"price_bars","event_time":"2026-08-15T20:00:00Z","available_at":"2026-08-15T20:01:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"timeframe":"1d","open":"510.00","high":"516.00","low":"508.00","close":"514.00","volume":"22000000"}},
+    {"id":"nvda-bar-base","symbol":"NVDA","feed_type":"price_bars","event_time":"2026-08-14T20:00:00Z","available_at":"2026-08-14T20:01:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["anomaly_window"],"payload":{"timeframe":"1d","open":"176.00","high":"179.00","low":"174.00","close":"178.00","volume":"160000000"}},
+    {"id":"nvda-bar-anomaly","symbol":"NVDA","feed_type":"price_bars","event_time":"2026-08-15T20:00:00Z","available_at":"2026-08-15T20:01:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["anomaly_window"],"payload":{"timeframe":"1d","open":"178.00","high":"198.00","low":"177.00","close":"196.00","volume":"310000000"}},
+    {"id":"nvda-split","symbol":"NVDA","feed_type":"price_bars","event_time":"2026-08-13T20:00:00Z","available_at":"2026-08-13T20:05:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["split"],"payload":{"timeframe":"corporate_action","split_ratio":"10:1","close":"175.00"}},
+    {"id":"amzn-bar","symbol":"AMZN","feed_type":"price_bars","event_time":"2026-08-15T20:00:00Z","available_at":"2026-08-15T20:01:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"timeframe":"1d","open":"222.00","high":"226.00","low":"220.00","close":"225.00","volume":"41000000"}},
+    {"id":"googl-bar","symbol":"GOOGL","feed_type":"price_bars","event_time":"2026-08-15T20:00:00Z","available_at":"2026-08-15T20:01:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"timeframe":"1d","open":"202.00","high":"205.00","low":"201.00","close":"204.00","volume":"29000000"}}
+  ]
+}
