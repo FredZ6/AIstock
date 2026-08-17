@@ -9,9 +9,8 @@ from stock_platform.infrastructure.providers.base import (
     ProviderResponse,
     ProviderStatus,
 )
-
-from mcp_servers.common import McpResearchService
-from mcp_servers.market_research.server import create_server as create_market_server
+from stock_platform.mcp_servers.common import McpResearchService
+from stock_platform.mcp_servers.market_research.server import create_server as create_market_server
 
 AS_OF = datetime(2026, 8, 16, 12, tzinfo=UTC)
 
@@ -29,7 +28,14 @@ class StubRepository:
             ingested_at=AS_OF - timedelta(minutes=4),
             content_hash="a" * 64,
             raw_object_key="m1-v1/fixture/record.json",
-            payload={"value": "123.45", "currency": "USD"},
+            payload={
+                "timeframe": "1d",
+                "open": "120.00",
+                "high": "125.00",
+                "low": "119.00",
+                "close": "123.45",
+                "volume": "1000",
+            },
         )
         return ProviderResponse(
             status=ProviderStatus.OK,
@@ -48,8 +54,9 @@ def test_common_envelope_preserves_lineage_freshness_and_trace() -> None:
     assert result.query_as_of == AS_OF
     assert result.data_as_of == AS_OF - timedelta(minutes=10)
     assert result.available_at == AS_OF - timedelta(minutes=5)
-    assert result.freshness == {"age_seconds": 300}
-    assert result.records == [{"value": "123.45", "currency": "USD"}]
+    assert result.freshness is not None
+    assert result.freshness.age_seconds == 300
+    assert result.records[0].close == "123.45"  # type: ignore[union-attr]
     assert result.source.content_hashes == ["a" * 64]
     assert result.source.raw_object_keys == ["m1-v1/fixture/record.json"]
     assert result.citations[0].content_hash == "a" * 64
@@ -82,4 +89,4 @@ async def test_fastmcp_call_returns_structured_content() -> None:
     assert content
     assert structured["status"] == "ok"
     assert structured["feed"] == "price_bars"
-    assert structured["records"] == [{"value": "123.45", "currency": "USD"}]
+    assert structured["records"][0]["close"] == "123.45"

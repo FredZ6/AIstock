@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-from datetime import datetime, timedelta
+from collections.abc import Callable
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 
 from stock_platform.domain.common.time import require_aware
 from stock_platform.infrastructure.providers.base import (
@@ -12,6 +13,15 @@ from stock_platform.infrastructure.providers.base import (
     ProviderStatus,
     ResearchDataProvider,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderHealthSnapshot:
+    primary: str
+    fallback: str
+    circuit_open: bool
+    failure_count: int
+    checked_at: datetime
 
 
 class FallbackPolicy:
@@ -24,6 +34,7 @@ class FallbackPolicy:
         failure_threshold: int = 2,
         reset_timeout: timedelta = timedelta(minutes=5),
         compare_on_success: bool = False,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._primary = primary
         self._fallback = fallback
@@ -31,14 +42,27 @@ class FallbackPolicy:
         self._failure_threshold = failure_threshold
         self._reset_timeout = reset_timeout
         self._compare_on_success = compare_on_success
+        self._clock = clock or (lambda: datetime.now(UTC))
         self._failures = 0
         self._opened_at: datetime | None = None
 
+    def _circuit_is_open(self, checked_at: datetime) -> bool:
+        return self._opened_at is not None and checked_at - self._opened_at < self._reset_timeout
+
+    def health(self) -> ProviderHealthSnapshot:
+        checked_at = require_aware(self._clock())
+        return ProviderHealthSnapshot(
+            primary=self._primary.name,
+            fallback=self._fallback.name,
+            circuit_open=self._circuit_is_open(checked_at),
+            failure_count=self._failures,
+            checked_at=checked_at,
+        )
+
     def fetch(self, feed_type: FeedType, symbol: str, as_of: datetime) -> ProviderResponse:
         query_as_of = require_aware(as_of)
-        circuit_open = (
-            self._opened_at is not None and query_as_of - self._opened_at < self._reset_timeout
-        )
+        checked_at = require_aware(self._clock())
+        circuit_open = self._circuit_is_open(checked_at)
         if circuit_open:
             return self._fallback_result(
                 feed_type,
@@ -52,6 +76,16 @@ class FallbackPolicy:
 
         primary = self._primary.fetch(feed_type, symbol, query_as_of)
         if primary.status is ProviderStatus.OK:
+            if any(record.available_at > query_as_of for record in primary.records):
+                self._failures += 1
+                if self._failures >= self._failure_threshold:
+                    self._opened_at = checked_at
+                return self._fallback_result(
+                    feed_type,
+                    symbol,
+                    query_as_of,
+                    warning="future_primary_rejected",
+                )
             self._failures = 0
             if self._compare_on_success:
                 return self._compare(primary, feed_type, symbol, query_as_of)
@@ -61,7 +95,7 @@ class FallbackPolicy:
 
         self._failures += 1
         if self._failures >= self._failure_threshold:
-            self._opened_at = query_as_of
+            self._opened_at = checked_at
         return self._fallback_result(
             feed_type,
             symbol,
@@ -107,6 +141,8 @@ class FallbackPolicy:
     ) -> ProviderResponse:
         fallback = self._fallback.fetch(feed_type, symbol, as_of)
         if fallback.status is not ProviderStatus.OK:
+            return primary
+        if any(record.available_at > as_of for record in fallback.records):
             return primary
         primary_payloads = tuple(record.payload for record in primary.records)
         fallback_payloads = tuple(record.payload for record in fallback.records)

@@ -22,7 +22,7 @@ def main() -> None:
         engine.dispose()
     print(
         f"Fixture mode seeded {object_count} raw objects and "
-        f"{inserted_count} new normalized records (version m1-v1)."
+        f"{inserted_count} new normalized records (version fixture-m1-v1)."
     )
 
 

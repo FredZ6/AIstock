@@ -86,6 +86,10 @@ class RawObjectStore(Protocol):
     def put(self, object_key: str, content: bytes, content_type: str) -> None: ...
 
 
+class ProviderRecordStore(Protocol):
+    def persist(self, record: ProviderRecord, normalization_version: str) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class HttpRequest:
     method: str
@@ -182,6 +186,7 @@ class GovernedHttpProvider:
         *,
         transport: HttpTransport = urllib_transport,
         raw_store: RawObjectStore | None = None,
+        record_store: ProviderRecordStore | None = None,
         clock: Callable[[], datetime] | None = None,
         sleep: Callable[[float], None] = time.sleep,
         jitter: Callable[[], float] = random.random,
@@ -197,6 +202,7 @@ class GovernedHttpProvider:
             raise ValueError("provider max_concurrency must be positive")
         self._transport = transport
         self._raw_store = raw_store
+        self._record_store = record_store
         self._clock = clock or (lambda: datetime.now(UTC))
         self._sleep = sleep
         self._jitter = jitter
@@ -210,6 +216,21 @@ class GovernedHttpProvider:
 
     def _headers(self) -> dict[str, str]:
         return {"Accept": "application/json"}
+
+    def _supports_symbol(self, symbol: Symbol) -> bool:
+        return True
+
+    def _normalize_document(
+        self,
+        feed_type: FeedType,
+        document: object,
+        ingested_at: datetime,
+    ) -> tuple[datetime, dict[str, Any], tuple[str, ...]]:
+        event_time, payload = _normalize_json(document)
+        return event_time, payload, ()
+
+    def _normalization_version(self, feed_type: FeedType) -> str:
+        return f"{self.name.lower()}-{feed_type.value}-v1"
 
     def _url(self, feed_type: FeedType, symbol: Symbol, as_of: datetime) -> str:
         raise NotImplementedError
@@ -239,6 +260,15 @@ class GovernedHttpProvider:
                 query_as_of=query_as_of,
                 missingness="UNAVAILABLE",
             )
+        if not self._supports_symbol(normalized_symbol):
+            return ProviderResponse(
+                status=ProviderStatus.NOT_FOUND,
+                provider=self.name,
+                feed_type=feed_type,
+                symbol=normalized_symbol,
+                query_as_of=query_as_of,
+                missingness="MISSING",
+            )
         if not self._configured():
             return self._unavailable(
                 feed_type, normalized_symbol, query_as_of, "missing_credentials"
@@ -246,6 +276,10 @@ class GovernedHttpProvider:
         if self._raw_store is None:
             return self._unavailable(
                 feed_type, normalized_symbol, query_as_of, "raw_store_not_configured"
+            )
+        if self._record_store is None:
+            return self._unavailable(
+                feed_type, normalized_symbol, query_as_of, "record_store_not_configured"
             )
 
         url = self._url(feed_type, normalized_symbol, query_as_of)
@@ -299,7 +333,11 @@ class GovernedHttpProvider:
         raw_object_key = f"live/{self.name}/{feed_type.value}/{content_hash}.json"
         self._raw_store.put(raw_object_key, response.body, "application/json")
         try:
-            event_time, document = _normalize_json(json.loads(response.body))
+            event_time, document, quality_flags = self._normalize_document(
+                feed_type,
+                json.loads(response.body),
+                ingested_at,
+            )
             event_time = require_aware(event_time)
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             return ProviderResponse(
@@ -332,7 +370,27 @@ class GovernedHttpProvider:
             content_hash=content_hash,
             raw_object_key=raw_object_key,
             payload=document,
+            quality_flags=quality_flags,
         )
+        try:
+            self._record_store.persist(record, self._normalization_version(feed_type))
+        except Exception:
+            return ProviderResponse(
+                status=ProviderStatus.ERROR,
+                provider=self.name,
+                feed_type=feed_type,
+                symbol=normalized_symbol,
+                query_as_of=query_as_of,
+                warnings=("persistence_failed",),
+                missingness="UNAVAILABLE",
+            )
+        if record.available_at > query_as_of:
+            return self._unavailable(
+                feed_type,
+                normalized_symbol,
+                query_as_of,
+                "future_data_rejected",
+            )
         return ProviderResponse(
             status=ProviderStatus.OK,
             provider=self.name,

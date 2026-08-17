@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from urllib.parse import urlencode
 
 from stock_platform.domain.common.ids import Symbol
-from stock_platform.infrastructure.providers.base import FeedType, GovernedHttpProvider
+from stock_platform.infrastructure.providers.base import (
+    FeedType,
+    GovernedHttpProvider,
+    _normalize_json,
+)
 
 
 class FmpProvider(GovernedHttpProvider):
@@ -26,6 +31,20 @@ class FmpProvider(GovernedHttpProvider):
 
     def _configured(self) -> bool:
         return bool(self._api_key)
+
+    def _normalize_document(
+        self,
+        feed_type: FeedType,
+        document: object,
+        ingested_at: datetime,
+    ) -> tuple[datetime, dict[str, Any], tuple[str, ...]]:
+        event_time, payload = _normalize_json(document)
+        if (
+            feed_type in {FeedType.ESTIMATES, FeedType.TARGET_CONSENSUS}
+            and event_time > ingested_at
+        ):
+            return ingested_at, payload, ("source_timestamp_unavailable",)
+        return event_time, payload, ()
 
     def _url(self, feed_type: FeedType, symbol: Symbol, as_of: datetime) -> str:
         endpoint = {

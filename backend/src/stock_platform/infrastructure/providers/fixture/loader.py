@@ -225,6 +225,7 @@ class FixtureCatalog:
                     insert(normalized_record).values(
                         raw_data_object_id=raw_id,
                         record_type=entry.feed_type.value,
+                        normalization_version="fixture-m1-v1",
                         payload={"symbol": str(entry.symbol), **entry.payload},
                     )
                 )
@@ -233,7 +234,10 @@ class FixtureCatalog:
                 connection.execute(
                     update(normalized_record)
                     .where(normalized_record.c.id == exists)
-                    .values(payload={"symbol": str(entry.symbol), **entry.payload})
+                    .values(
+                        normalization_version="fixture-m1-v1",
+                        payload={"symbol": str(entry.symbol), **entry.payload},
+                    )
                 )
         return count
 

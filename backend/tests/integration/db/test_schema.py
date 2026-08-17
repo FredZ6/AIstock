@@ -142,6 +142,14 @@ def test_external_data_and_quality_dimensions_are_raw_facts(engine: Engine) -> N
     assert "quality_grade" not in evidence_columns
 
 
+def test_normalized_records_pin_the_normalization_version(engine: Engine) -> None:
+    columns = {
+        column["name"]: column for column in inspect(engine).get_columns("normalized_record")
+    }
+
+    assert columns["normalization_version"]["nullable"] is False
+
+
 def test_external_market_data_has_complete_provenance_and_raw_lineage(engine: Engine) -> None:
     required = {
         "raw_data_object_id",

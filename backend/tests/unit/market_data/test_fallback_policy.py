@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+from stock_platform.application.market_data.fallback import FallbackPolicy
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.infrastructure.providers.base import (
     FeedType,
@@ -7,7 +8,6 @@ from stock_platform.infrastructure.providers.base import (
     ProviderResponse,
     ProviderStatus,
 )
-from stock_platform.infrastructure.providers.fallback import FallbackPolicy
 
 AS_OF = datetime(2026, 8, 16, 12, tzinfo=UTC)
 
@@ -116,6 +116,43 @@ def test_future_fallback_is_rejected_by_point_in_time_boundary() -> None:
     assert "future_fallback_rejected" in result.warnings
 
 
+def test_future_primary_is_rejected_before_success_can_escape() -> None:
+    primary = SequenceProvider(
+        "SEC",
+        response(ProviderStatus.OK, "SEC", available_at=AS_OF + timedelta(seconds=1)),
+    )
+    fallback = SequenceProvider("FMP", response(ProviderStatus.OK, "FMP"))
+
+    result = FallbackPolicy(primary=primary, fallback=fallback).fetch(
+        FeedType.COMPANY_FACTS, "NVDA", AS_OF
+    )
+
+    assert result.provider == "FMP"
+    assert "future_primary_rejected" in result.warnings
+
+
+def test_future_comparison_data_cannot_mark_a_primary_conflict() -> None:
+    primary = SequenceProvider("SEC", response(ProviderStatus.OK, "SEC"))
+    fallback = SequenceProvider(
+        "FMP",
+        response(
+            ProviderStatus.OK,
+            "FMP",
+            available_at=AS_OF + timedelta(seconds=1),
+            payload={"revenue": "11"},
+        ),
+    )
+
+    result = FallbackPolicy(
+        primary=primary,
+        fallback=fallback,
+        compare_on_success=True,
+    ).fetch(FeedType.COMPANY_FACTS, "NVDA", AS_OF)
+
+    assert "provider_conflict=FMP" not in result.warnings
+    assert "conflict" not in result.records[0].quality_flags
+
+
 def test_circuit_opens_after_bounded_failures_and_skips_primary() -> None:
     primary = SequenceProvider("SEC", response(ProviderStatus.UNAVAILABLE, "SEC"))
     fallback = SequenceProvider("FMP", response(ProviderStatus.OK, "FMP"))
@@ -128,6 +165,11 @@ def test_circuit_opens_after_bounded_failures_and_skips_primary() -> None:
     assert primary.calls == 2
     assert fallback.calls == 3
     assert "circuit_open=SEC" in result.warnings
+    health = policy.health()
+    assert health.primary == "SEC"
+    assert health.fallback == "FMP"
+    assert health.circuit_open is True
+    assert health.failure_count == 2
 
 
 def test_conflict_prefers_primary_and_marks_quality() -> None:

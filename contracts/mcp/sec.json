@@ -66,6 +66,229 @@
             "title": "Citation",
             "type": "object"
           },
+          "CompanyFactsRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "currency": {
+                "title": "Currency",
+                "type": "string"
+              },
+              "fiscal_period": {
+                "title": "Fiscal Period",
+                "type": "string"
+              },
+              "revenue": {
+                "title": "Revenue",
+                "type": "string"
+              }
+            },
+            "required": [
+              "fiscal_period",
+              "revenue",
+              "currency"
+            ],
+            "title": "CompanyFactsRecord",
+            "type": "object"
+          },
+          "CompanyNewsRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "headline": {
+                "title": "Headline",
+                "type": "string"
+              },
+              "summary": {
+                "title": "Summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "headline",
+              "summary"
+            ],
+            "title": "CompanyNewsRecord",
+            "type": "object"
+          },
+          "DailyPriceBarRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "close": {
+                "title": "Close",
+                "type": "string"
+              },
+              "high": {
+                "title": "High",
+                "type": "string"
+              },
+              "low": {
+                "title": "Low",
+                "type": "string"
+              },
+              "open": {
+                "title": "Open",
+                "type": "string"
+              },
+              "timeframe": {
+                "const": "1d",
+                "title": "Timeframe",
+                "type": "string"
+              },
+              "volume": {
+                "title": "Volume",
+                "type": "string"
+              }
+            },
+            "required": [
+              "timeframe",
+              "open",
+              "high",
+              "low",
+              "close",
+              "volume"
+            ],
+            "title": "DailyPriceBarRecord",
+            "type": "object"
+          },
+          "EstimateRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "currency": {
+                "title": "Currency",
+                "type": "string"
+              },
+              "period": {
+                "title": "Period",
+                "type": "string"
+              },
+              "revenue_estimate": {
+                "title": "Revenue Estimate",
+                "type": "string"
+              }
+            },
+            "required": [
+              "period",
+              "revenue_estimate",
+              "currency"
+            ],
+            "title": "EstimateRecord",
+            "type": "object"
+          },
+          "FeedType": {
+            "enum": [
+              "company_facts",
+              "filings",
+              "filing_sections",
+              "price_bars",
+              "company_news",
+              "option_aggregates",
+              "estimates",
+              "target_consensus"
+            ],
+            "title": "FeedType",
+            "type": "string"
+          },
+          "FilingRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "accession": {
+                "title": "Accession",
+                "type": "string"
+              },
+              "filed_date": {
+                "title": "Filed Date",
+                "type": "string"
+              },
+              "form": {
+                "title": "Form",
+                "type": "string"
+              }
+            },
+            "required": [
+              "accession",
+              "form",
+              "filed_date"
+            ],
+            "title": "FilingRecord",
+            "type": "object"
+          },
+          "FilingSectionRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "accession": {
+                "title": "Accession",
+                "type": "string"
+              },
+              "section": {
+                "title": "Section",
+                "type": "string"
+              },
+              "text": {
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "accession",
+              "section",
+              "text"
+            ],
+            "title": "FilingSectionRecord",
+            "type": "object"
+          },
+          "Freshness": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "title": "Age Seconds",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "age_seconds"
+            ],
+            "title": "Freshness",
+            "type": "object"
+          },
+          "OptionAggregateRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "implied_volatility": {
+                "title": "Implied Volatility",
+                "type": "string"
+              },
+              "put_call_volume_ratio": {
+                "title": "Put Call Volume Ratio",
+                "type": "string"
+              }
+            },
+            "required": [
+              "put_call_volume_ratio",
+              "implied_volatility"
+            ],
+            "title": "OptionAggregateRecord",
+            "type": "object"
+          },
+          "Pagination": {
+            "additionalProperties": false,
+            "properties": {
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Next Cursor"
+              }
+            },
+            "required": [
+              "next_cursor"
+            ],
+            "title": "Pagination",
+            "type": "object"
+          },
           "SourceMetadata": {
             "additionalProperties": false,
             "properties": {
@@ -94,6 +317,55 @@
               "content_hashes"
             ],
             "title": "SourceMetadata",
+            "type": "object"
+          },
+          "SplitActionRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "close": {
+                "title": "Close",
+                "type": "string"
+              },
+              "split_ratio": {
+                "title": "Split Ratio",
+                "type": "string"
+              },
+              "timeframe": {
+                "const": "corporate_action",
+                "title": "Timeframe",
+                "type": "string"
+              }
+            },
+            "required": [
+              "timeframe",
+              "split_ratio",
+              "close"
+            ],
+            "title": "SplitActionRecord",
+            "type": "object"
+          },
+          "TargetConsensusRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "currency": {
+                "title": "Currency",
+                "type": "string"
+              },
+              "median_target": {
+                "title": "Median Target",
+                "type": "string"
+              },
+              "source_provider": {
+                "title": "Source Provider",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_provider",
+              "median_target",
+              "currency"
+            ],
+            "title": "TargetConsensusRecord",
             "type": "object"
           }
         },
@@ -131,22 +403,17 @@
             "title": "Data As Of"
           },
           "feed": {
-            "title": "Feed",
-            "type": "string"
+            "$ref": "#/$defs/FeedType"
           },
           "freshness": {
             "anyOf": [
               {
-                "additionalProperties": {
-                  "type": "integer"
-                },
-                "type": "object"
+                "$ref": "#/$defs/Freshness"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Freshness"
+            ]
           },
           "is_delayed": {
             "title": "Is Delayed",
@@ -155,6 +422,12 @@
           "missingness": {
             "anyOf": [
               {
+                "enum": [
+                  "UNKNOWN",
+                  "MISSING",
+                  "UNAVAILABLE",
+                  "CONFLICTED"
+                ],
                 "type": "string"
               },
               {
@@ -164,18 +437,7 @@
             "title": "Missingness"
           },
           "pagination": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "title": "Pagination",
-            "type": "object"
+            "$ref": "#/$defs/Pagination"
           },
           "provider": {
             "title": "Provider",
@@ -195,8 +457,35 @@
           },
           "records": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CompanyFactsRecord"
+                },
+                {
+                  "$ref": "#/$defs/FilingRecord"
+                },
+                {
+                  "$ref": "#/$defs/FilingSectionRecord"
+                },
+                {
+                  "$ref": "#/$defs/DailyPriceBarRecord"
+                },
+                {
+                  "$ref": "#/$defs/SplitActionRecord"
+                },
+                {
+                  "$ref": "#/$defs/CompanyNewsRecord"
+                },
+                {
+                  "$ref": "#/$defs/OptionAggregateRecord"
+                },
+                {
+                  "$ref": "#/$defs/EstimateRecord"
+                },
+                {
+                  "$ref": "#/$defs/TargetConsensusRecord"
+                }
+              ]
             },
             "title": "Records",
             "type": "array"
@@ -315,6 +604,229 @@
             "title": "Citation",
             "type": "object"
           },
+          "CompanyFactsRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "currency": {
+                "title": "Currency",
+                "type": "string"
+              },
+              "fiscal_period": {
+                "title": "Fiscal Period",
+                "type": "string"
+              },
+              "revenue": {
+                "title": "Revenue",
+                "type": "string"
+              }
+            },
+            "required": [
+              "fiscal_period",
+              "revenue",
+              "currency"
+            ],
+            "title": "CompanyFactsRecord",
+            "type": "object"
+          },
+          "CompanyNewsRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "headline": {
+                "title": "Headline",
+                "type": "string"
+              },
+              "summary": {
+                "title": "Summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "headline",
+              "summary"
+            ],
+            "title": "CompanyNewsRecord",
+            "type": "object"
+          },
+          "DailyPriceBarRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "close": {
+                "title": "Close",
+                "type": "string"
+              },
+              "high": {
+                "title": "High",
+                "type": "string"
+              },
+              "low": {
+                "title": "Low",
+                "type": "string"
+              },
+              "open": {
+                "title": "Open",
+                "type": "string"
+              },
+              "timeframe": {
+                "const": "1d",
+                "title": "Timeframe",
+                "type": "string"
+              },
+              "volume": {
+                "title": "Volume",
+                "type": "string"
+              }
+            },
+            "required": [
+              "timeframe",
+              "open",
+              "high",
+              "low",
+              "close",
+              "volume"
+            ],
+            "title": "DailyPriceBarRecord",
+            "type": "object"
+          },
+          "EstimateRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "currency": {
+                "title": "Currency",
+                "type": "string"
+              },
+              "period": {
+                "title": "Period",
+                "type": "string"
+              },
+              "revenue_estimate": {
+                "title": "Revenue Estimate",
+                "type": "string"
+              }
+            },
+            "required": [
+              "period",
+              "revenue_estimate",
+              "currency"
+            ],
+            "title": "EstimateRecord",
+            "type": "object"
+          },
+          "FeedType": {
+            "enum": [
+              "company_facts",
+              "filings",
+              "filing_sections",
+              "price_bars",
+              "company_news",
+              "option_aggregates",
+              "estimates",
+              "target_consensus"
+            ],
+            "title": "FeedType",
+            "type": "string"
+          },
+          "FilingRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "accession": {
+                "title": "Accession",
+                "type": "string"
+              },
+              "filed_date": {
+                "title": "Filed Date",
+                "type": "string"
+              },
+              "form": {
+                "title": "Form",
+                "type": "string"
+              }
+            },
+            "required": [
+              "accession",
+              "form",
+              "filed_date"
+            ],
+            "title": "FilingRecord",
+            "type": "object"
+          },
+          "FilingSectionRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "accession": {
+                "title": "Accession",
+                "type": "string"
+              },
+              "section": {
+                "title": "Section",
+                "type": "string"
+              },
+              "text": {
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "accession",
+              "section",
+              "text"
+            ],
+            "title": "FilingSectionRecord",
+            "type": "object"
+          },
+          "Freshness": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "title": "Age Seconds",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "age_seconds"
+            ],
+            "title": "Freshness",
+            "type": "object"
+          },
+          "OptionAggregateRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "implied_volatility": {
+                "title": "Implied Volatility",
+                "type": "string"
+              },
+              "put_call_volume_ratio": {
+                "title": "Put Call Volume Ratio",
+                "type": "string"
+              }
+            },
+            "required": [
+              "put_call_volume_ratio",
+              "implied_volatility"
+            ],
+            "title": "OptionAggregateRecord",
+            "type": "object"
+          },
+          "Pagination": {
+            "additionalProperties": false,
+            "properties": {
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Next Cursor"
+              }
+            },
+            "required": [
+              "next_cursor"
+            ],
+            "title": "Pagination",
+            "type": "object"
+          },
           "SourceMetadata": {
             "additionalProperties": false,
             "properties": {
@@ -343,6 +855,55 @@
               "content_hashes"
             ],
             "title": "SourceMetadata",
+            "type": "object"
+          },
+          "SplitActionRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "close": {
+                "title": "Close",
+                "type": "string"
+              },
+              "split_ratio": {
+                "title": "Split Ratio",
+                "type": "string"
+              },
+              "timeframe": {
+                "const": "corporate_action",
+                "title": "Timeframe",
+                "type": "string"
+              }
+            },
+            "required": [
+              "timeframe",
+              "split_ratio",
+              "close"
+            ],
+            "title": "SplitActionRecord",
+            "type": "object"
+          },
+          "TargetConsensusRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "currency": {
+                "title": "Currency",
+                "type": "string"
+              },
+              "median_target": {
+                "title": "Median Target",
+                "type": "string"
+              },
+              "source_provider": {
+                "title": "Source Provider",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_provider",
+              "median_target",
+              "currency"
+            ],
+            "title": "TargetConsensusRecord",
             "type": "object"
           }
         },
@@ -380,22 +941,17 @@
             "title": "Data As Of"
           },
           "feed": {
-            "title": "Feed",
-            "type": "string"
+            "$ref": "#/$defs/FeedType"
           },
           "freshness": {
             "anyOf": [
               {
-                "additionalProperties": {
-                  "type": "integer"
-                },
-                "type": "object"
+                "$ref": "#/$defs/Freshness"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Freshness"
+            ]
           },
           "is_delayed": {
             "title": "Is Delayed",
@@ -404,6 +960,12 @@
           "missingness": {
             "anyOf": [
               {
+                "enum": [
+                  "UNKNOWN",
+                  "MISSING",
+                  "UNAVAILABLE",
+                  "CONFLICTED"
+                ],
                 "type": "string"
               },
               {
@@ -413,18 +975,7 @@
             "title": "Missingness"
           },
           "pagination": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "title": "Pagination",
-            "type": "object"
+            "$ref": "#/$defs/Pagination"
           },
           "provider": {
             "title": "Provider",
@@ -444,8 +995,35 @@
           },
           "records": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CompanyFactsRecord"
+                },
+                {
+                  "$ref": "#/$defs/FilingRecord"
+                },
+                {
+                  "$ref": "#/$defs/FilingSectionRecord"
+                },
+                {
+                  "$ref": "#/$defs/DailyPriceBarRecord"
+                },
+                {
+                  "$ref": "#/$defs/SplitActionRecord"
+                },
+                {
+                  "$ref": "#/$defs/CompanyNewsRecord"
+                },
+                {
+                  "$ref": "#/$defs/OptionAggregateRecord"
+                },
+                {
+                  "$ref": "#/$defs/EstimateRecord"
+                },
+                {
+                  "$ref": "#/$defs/TargetConsensusRecord"
+                }
+              ]
             },
             "title": "Records",
             "type": "array"
@@ -564,6 +1142,229 @@
             "title": "Citation",
             "type": "object"
           },
+          "CompanyFactsRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "currency": {
+                "title": "Currency",
+                "type": "string"
+              },
+              "fiscal_period": {
+                "title": "Fiscal Period",
+                "type": "string"
+              },
+              "revenue": {
+                "title": "Revenue",
+                "type": "string"
+              }
+            },
+            "required": [
+              "fiscal_period",
+              "revenue",
+              "currency"
+            ],
+            "title": "CompanyFactsRecord",
+            "type": "object"
+          },
+          "CompanyNewsRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "headline": {
+                "title": "Headline",
+                "type": "string"
+              },
+              "summary": {
+                "title": "Summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "headline",
+              "summary"
+            ],
+            "title": "CompanyNewsRecord",
+            "type": "object"
+          },
+          "DailyPriceBarRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "close": {
+                "title": "Close",
+                "type": "string"
+              },
+              "high": {
+                "title": "High",
+                "type": "string"
+              },
+              "low": {
+                "title": "Low",
+                "type": "string"
+              },
+              "open": {
+                "title": "Open",
+                "type": "string"
+              },
+              "timeframe": {
+                "const": "1d",
+                "title": "Timeframe",
+                "type": "string"
+              },
+              "volume": {
+                "title": "Volume",
+                "type": "string"
+              }
+            },
+            "required": [
+              "timeframe",
+              "open",
+              "high",
+              "low",
+              "close",
+              "volume"
+            ],
+            "title": "DailyPriceBarRecord",
+            "type": "object"
+          },
+          "EstimateRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "currency": {
+                "title": "Currency",
+                "type": "string"
+              },
+              "period": {
+                "title": "Period",
+                "type": "string"
+              },
+              "revenue_estimate": {
+                "title": "Revenue Estimate",
+                "type": "string"
+              }
+            },
+            "required": [
+              "period",
+              "revenue_estimate",
+              "currency"
+            ],
+            "title": "EstimateRecord",
+            "type": "object"
+          },
+          "FeedType": {
+            "enum": [
+              "company_facts",
+              "filings",
+              "filing_sections",
+              "price_bars",
+              "company_news",
+              "option_aggregates",
+              "estimates",
+              "target_consensus"
+            ],
+            "title": "FeedType",
+            "type": "string"
+          },
+          "FilingRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "accession": {
+                "title": "Accession",
+                "type": "string"
+              },
+              "filed_date": {
+                "title": "Filed Date",
+                "type": "string"
+              },
+              "form": {
+                "title": "Form",
+                "type": "string"
+              }
+            },
+            "required": [
+              "accession",
+              "form",
+              "filed_date"
+            ],
+            "title": "FilingRecord",
+            "type": "object"
+          },
+          "FilingSectionRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "accession": {
+                "title": "Accession",
+                "type": "string"
+              },
+              "section": {
+                "title": "Section",
+                "type": "string"
+              },
+              "text": {
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "accession",
+              "section",
+              "text"
+            ],
+            "title": "FilingSectionRecord",
+            "type": "object"
+          },
+          "Freshness": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "title": "Age Seconds",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "age_seconds"
+            ],
+            "title": "Freshness",
+            "type": "object"
+          },
+          "OptionAggregateRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "implied_volatility": {
+                "title": "Implied Volatility",
+                "type": "string"
+              },
+              "put_call_volume_ratio": {
+                "title": "Put Call Volume Ratio",
+                "type": "string"
+              }
+            },
+            "required": [
+              "put_call_volume_ratio",
+              "implied_volatility"
+            ],
+            "title": "OptionAggregateRecord",
+            "type": "object"
+          },
+          "Pagination": {
+            "additionalProperties": false,
+            "properties": {
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Next Cursor"
+              }
+            },
+            "required": [
+              "next_cursor"
+            ],
+            "title": "Pagination",
+            "type": "object"
+          },
           "SourceMetadata": {
             "additionalProperties": false,
             "properties": {
@@ -592,6 +1393,55 @@
               "content_hashes"
             ],
             "title": "SourceMetadata",
+            "type": "object"
+          },
+          "SplitActionRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "close": {
+                "title": "Close",
+                "type": "string"
+              },
+              "split_ratio": {
+                "title": "Split Ratio",
+                "type": "string"
+              },
+              "timeframe": {
+                "const": "corporate_action",
+                "title": "Timeframe",
+                "type": "string"
+              }
+            },
+            "required": [
+              "timeframe",
+              "split_ratio",
+              "close"
+            ],
+            "title": "SplitActionRecord",
+            "type": "object"
+          },
+          "TargetConsensusRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "currency": {
+                "title": "Currency",
+                "type": "string"
+              },
+              "median_target": {
+                "title": "Median Target",
+                "type": "string"
+              },
+              "source_provider": {
+                "title": "Source Provider",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_provider",
+              "median_target",
+              "currency"
+            ],
+            "title": "TargetConsensusRecord",
             "type": "object"
           }
         },
@@ -629,22 +1479,17 @@
             "title": "Data As Of"
           },
           "feed": {
-            "title": "Feed",
-            "type": "string"
+            "$ref": "#/$defs/FeedType"
           },
           "freshness": {
             "anyOf": [
               {
-                "additionalProperties": {
-                  "type": "integer"
-                },
-                "type": "object"
+                "$ref": "#/$defs/Freshness"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Freshness"
+            ]
           },
           "is_delayed": {
             "title": "Is Delayed",
@@ -653,6 +1498,12 @@
           "missingness": {
             "anyOf": [
               {
+                "enum": [
+                  "UNKNOWN",
+                  "MISSING",
+                  "UNAVAILABLE",
+                  "CONFLICTED"
+                ],
                 "type": "string"
               },
               {
@@ -662,18 +1513,7 @@
             "title": "Missingness"
           },
           "pagination": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "title": "Pagination",
-            "type": "object"
+            "$ref": "#/$defs/Pagination"
           },
           "provider": {
             "title": "Provider",
@@ -693,8 +1533,35 @@
           },
           "records": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CompanyFactsRecord"
+                },
+                {
+                  "$ref": "#/$defs/FilingRecord"
+                },
+                {
+                  "$ref": "#/$defs/FilingSectionRecord"
+                },
+                {
+                  "$ref": "#/$defs/DailyPriceBarRecord"
+                },
+                {
+                  "$ref": "#/$defs/SplitActionRecord"
+                },
+                {
+                  "$ref": "#/$defs/CompanyNewsRecord"
+                },
+                {
+                  "$ref": "#/$defs/OptionAggregateRecord"
+                },
+                {
+                  "$ref": "#/$defs/EstimateRecord"
+                },
+                {
+                  "$ref": "#/$defs/TargetConsensusRecord"
+                }
+              ]
             },
             "title": "Records",
             "type": "array"

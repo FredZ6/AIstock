@@ -10,10 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
-
-from mcp_servers.analyst_research.server import create_server as create_analyst_server
-from mcp_servers.market_research.server import create_server as create_market_server
-from mcp_servers.sec_research.server import create_server as create_sec_server
+from stock_platform.mcp_servers.analyst_research.server import (
+    create_server as create_analyst_server,
+)
+from stock_platform.mcp_servers.market_research.server import create_server as create_market_server
+from stock_platform.mcp_servers.sec_research.server import create_server as create_sec_server
 
 ROOT = Path(__file__).resolve().parents[1] / "contracts" / "mcp"
 FACTORIES: dict[str, Callable[[], FastMCP]] = {

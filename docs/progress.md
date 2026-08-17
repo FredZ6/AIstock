@@ -201,3 +201,44 @@ re-read on 2026-08-18. Linear milestone: M1 Data Plane (FRE-8, FRE-9, FRE-10).
 - Final idempotency: two consecutive `make verify` runs — exit 0 each; Ruff format/lint, strict
   Mypy, Alembic and MCP contract drift checks, 73 backend tests passed, 3 opt-in live tests skipped,
   TypeScript, ESLint, 1 Vitest test, and Next.js production build passed.
+
+### M1 independent-review remediation — 2026-08-18
+
+- Point-in-time/provider RED: focused tests reproduced live records with `available_at` after the
+  requested cutoff, future comparison leakage, FMP future estimate timestamps, SEC unknown-symbol
+  exceptions, and the unsupported synthetic filing-section URL. GREEN: future primary/comparison
+  records are rejected, FMP records use ingestion time plus `source_timestamp_unavailable`, SEC
+  unknown symbols return typed `NOT_FOUND`, and live filing sections return `NOT_SUPPORTED`.
+- Durable lineage RED: live adapters only wrote raw MinIO bytes. GREEN: every successful live
+  response requires both raw-object and normalized-record persistence; migration
+  `0004_normalization_version` adds the non-null normalization version and a versioned uniqueness
+  constraint. Focused provider/schema/persistence suite — exit 0; 34 passed, 3 opt-in live skipped.
+- MCP RED: `records` allowed arbitrary object properties and denied calls had no durable audit.
+  GREEN: the envelope uses a closed union of nine strict record schemas, all nested objects reject
+  extras, and completed/denied calls write append-only ToolCall/AgentEvent entries containing only
+  tool name, outcome, and a SHA-256 request fingerprint. Focused MCP suite — exit 0; 12 passed.
+- Locked layout/packaging: MCP servers now live under `backend/src/stock_platform/mcp_servers` and
+  fallback policy under `application/market_data`. `uv build --wheel --out-dir
+  /tmp/aistock-m1-remediation-dist` — exit 0; the wheel contains both locked package paths.
+- Provider health: deterministic fallback/circuit snapshots are available from
+  `FallbackPolicy.health()`. The HTTP route remains explicitly deferred to Task 14, so M1 does not
+  start the control-plane/API scope early.
+- Empty database: isolated PostgreSQL database upgraded through 0001→0004 — exit 0; repeated
+  `upgrade head` — exit 0; `alembic check` — exit 0 with no migration drift. The isolated database
+  was then dropped.
+- Seed idempotency: two consecutive `make seed` runs — exit 0 each; PostgreSQL contains 31
+  RawDataObject and 31 NormalizedRecord rows with one pinned version, `fixture-m1-v1`.
+- Authority commands: Task 4 — exit 0, 26 passed/3 skipped; Task 5 — exit 0, 24 passed/3 skipped;
+  Task 6 — exit 0, 11 passed. The exact optional-live command now exits 0 with 3 credential-gated
+  skips and 15 deselected tests instead of pytest exit 5.
+- Official Inspector 2.2.0: SEC/Market/Analyst `tools/list` each exited 0 with only the approved
+  3/3/2 tools; every input and output object is strict. Market `get_price_bars` exited 0 with three
+  cutoff-safe records. A request with a forbidden `sql` field was rejected (Inspector exit 5) and
+  produced `mcp.tool.denied`; the stored audit leaked none of `symbol`, `as_of`, or `sql`.
+- First complete verification after remediation: `make verify` — exit 0; Ruff format/lint, strict
+  Mypy (56 source files), Alembic and MCP contract drift checks, 81 backend tests passed, 3
+  credential-gated live tests skipped, TypeScript, ESLint, 1 Vitest test, and Next.js production
+  build passed.
+- Second consecutive `make verify` after recording evidence — exit 0 with the same 81 passed / 3
+  skipped backend result and all Web checks/build passing, confirming the final verification loop is
+  repeatable.

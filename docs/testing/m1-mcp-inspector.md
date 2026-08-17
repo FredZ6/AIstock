@@ -19,7 +19,8 @@ Every discovered tool reported:
 
 - required inputs `symbol` and `as_of`;
 - `additionalProperties: false`;
-- a strict structured output schema;
+- a strict structured output schema whose envelope and every concrete record object reject
+  additional properties;
 - `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, and
   `openWorldHint: true`.
 
@@ -42,3 +43,10 @@ Result: exit 0 and `isError: false`. `structuredContent` contained `status: ok`,
 quality/missingness, three point-in-time records, citations, raw object keys, SHA-256 content
 hashes, pagination, warnings, and a 32-character trace ID. The newest returned record had
 `available_at=2026-08-15T20:01:00Z`, which is before the requested cutoff.
+
+## Denial audit
+
+Inspector called `get_price_bars` with an extra `sql` argument. The call was rejected with
+`isError: true` and the Inspector exited 5. PostgreSQL recorded an append-only
+`mcp.tool.denied` event with the tool name and a 64-character SHA-256 request fingerprint. The
+event payload contained none of the raw `symbol`, `as_of`, or `sql` arguments.

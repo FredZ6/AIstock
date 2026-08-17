@@ -3,10 +3,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-from mcp_servers.analyst_research.server import create_server as create_analyst_server
-from mcp_servers.market_research.server import create_server as create_market_server
-from mcp_servers.sec_research.server import create_server as create_sec_server
+from stock_platform.mcp_servers.analyst_research.server import (
+    create_server as create_analyst_server,
+)
+from stock_platform.mcp_servers.market_research.server import create_server as create_market_server
+from stock_platform.mcp_servers.sec_research.server import create_server as create_sec_server
 
 CONTRACT_ROOT = Path(__file__).parents[4] / "contracts" / "mcp"
 EXPECTED_TOOLS = {
@@ -74,6 +75,11 @@ async def test_tools_have_strict_inputs_structured_outputs_and_read_only_annotat
         assert tool.inputSchema["properties"]["symbol"]["pattern"] == r"^[A-Z.]{1,10}$"
         assert set(tool.outputSchema["required"]) == REQUIRED_OUTPUT
         assert tool.outputSchema["additionalProperties"] is False
+        record_items = tool.outputSchema["properties"]["records"]["items"]
+        assert record_items.get("additionalProperties") is not True
+        for candidate in record_items["anyOf"]:
+            model_name = candidate["$ref"].rsplit("/", maxsplit=1)[-1]
+            assert tool.outputSchema["$defs"][model_name]["additionalProperties"] is False
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
