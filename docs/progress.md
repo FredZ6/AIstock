@@ -82,3 +82,21 @@ read on 2026-08-17. Linear milestone: M0 Foundation (FRE-5, FRE-6, FRE-7).
   tables are append-only.
 - Installation and fixtures: `make bootstrap`, two consecutive `make seed`, and `make smoke` —
   exit 0 for every command; no provider credentials or live-broker configuration were used.
+
+#### M0 second review remediation — 2026-08-18
+
+- Non-empty migration RED: a real isolated database upgraded to 0002, inserted existing
+  `market_bar` and `option_snapshot` fixture rows, then failed upgrading to head with
+  `NotNullViolation` — exit 1.
+- Non-empty migration GREEN: 0003 now adds nullable provenance columns, requires exactly one
+  timestamp/feed-type-matched `RawDataObject`, copies its real provenance, and only then applies
+  foreign keys and `NOT NULL`. The automated 0002→head regression test exits 0 with 1 passed and
+  deletes its randomly named temporary database.
+- DecisionDiff RED: explicit-null addition/removal tests failed because missing keys and `None`
+  both used `Mapping.get()` — 3 failed. GREEN: each change now records `before_present` and
+  `after_present`; 3 passed, including add-null and remove-null cases.
+- Final validation: two consecutive `make verify` runs — exit 0 each; Ruff format/lint, strict
+  Mypy, Alembic drift check, 34 backend tests, TypeScript, ESLint, 1 Vitest test, and Next.js
+  production build passed with no failed or skipped tests.
+- Idempotency evidence: protected-table counts remained 6 before and after the second full run;
+  leaked `stock_platform_migration_*` databases remained 0.
