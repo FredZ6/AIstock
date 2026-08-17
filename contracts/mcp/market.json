@@ -1,0 +1,748 @@
+{
+  "tools": {
+    "get_company_news": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "as_of"
+        ],
+        "title": "queryArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "$defs": {
+          "Citation": {
+            "additionalProperties": false,
+            "properties": {
+              "available_at": {
+                "format": "date-time",
+                "title": "Available At",
+                "type": "string"
+              },
+              "content_hash": {
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "event_time": {
+                "format": "date-time",
+                "title": "Event Time",
+                "type": "string"
+              },
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              },
+              "raw_object_key": {
+                "title": "Raw Object Key",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "raw_object_key",
+              "content_hash",
+              "event_time",
+              "available_at"
+            ],
+            "title": "Citation",
+            "type": "object"
+          },
+          "SourceMetadata": {
+            "additionalProperties": false,
+            "properties": {
+              "content_hashes": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Content Hashes",
+                "type": "array"
+              },
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              },
+              "raw_object_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Raw Object Keys",
+                "type": "array"
+              }
+            },
+            "required": [
+              "provider",
+              "raw_object_keys",
+              "content_hashes"
+            ],
+            "title": "SourceMetadata",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "available_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available At"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/$defs/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "data_as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "feed": {
+            "title": "Feed",
+            "type": "string"
+          },
+          "freshness": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness"
+          },
+          "is_delayed": {
+            "title": "Is Delayed",
+            "type": "boolean"
+          },
+          "missingness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missingness"
+          },
+          "pagination": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Pagination",
+            "type": "object"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "quality_flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Quality Flags",
+            "type": "array"
+          },
+          "query_as_of": {
+            "format": "date-time",
+            "title": "Query As Of",
+            "type": "string"
+          },
+          "records": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/$defs/SourceMetadata"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "not_found",
+              "not_supported",
+              "unavailable",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "provider",
+          "query_as_of",
+          "data_as_of",
+          "available_at",
+          "feed",
+          "is_delayed",
+          "freshness",
+          "quality_flags",
+          "missingness",
+          "records",
+          "source",
+          "citations",
+          "warnings",
+          "pagination",
+          "trace_id"
+        ],
+        "title": "ResearchToolEnvelope",
+        "type": "object"
+      }
+    },
+    "get_option_aggregates": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "as_of"
+        ],
+        "title": "queryArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "$defs": {
+          "Citation": {
+            "additionalProperties": false,
+            "properties": {
+              "available_at": {
+                "format": "date-time",
+                "title": "Available At",
+                "type": "string"
+              },
+              "content_hash": {
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "event_time": {
+                "format": "date-time",
+                "title": "Event Time",
+                "type": "string"
+              },
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              },
+              "raw_object_key": {
+                "title": "Raw Object Key",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "raw_object_key",
+              "content_hash",
+              "event_time",
+              "available_at"
+            ],
+            "title": "Citation",
+            "type": "object"
+          },
+          "SourceMetadata": {
+            "additionalProperties": false,
+            "properties": {
+              "content_hashes": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Content Hashes",
+                "type": "array"
+              },
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              },
+              "raw_object_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Raw Object Keys",
+                "type": "array"
+              }
+            },
+            "required": [
+              "provider",
+              "raw_object_keys",
+              "content_hashes"
+            ],
+            "title": "SourceMetadata",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "available_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available At"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/$defs/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "data_as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "feed": {
+            "title": "Feed",
+            "type": "string"
+          },
+          "freshness": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness"
+          },
+          "is_delayed": {
+            "title": "Is Delayed",
+            "type": "boolean"
+          },
+          "missingness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missingness"
+          },
+          "pagination": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Pagination",
+            "type": "object"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "quality_flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Quality Flags",
+            "type": "array"
+          },
+          "query_as_of": {
+            "format": "date-time",
+            "title": "Query As Of",
+            "type": "string"
+          },
+          "records": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/$defs/SourceMetadata"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "not_found",
+              "not_supported",
+              "unavailable",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "provider",
+          "query_as_of",
+          "data_as_of",
+          "available_at",
+          "feed",
+          "is_delayed",
+          "freshness",
+          "quality_flags",
+          "missingness",
+          "records",
+          "source",
+          "citations",
+          "warnings",
+          "pagination",
+          "trace_id"
+        ],
+        "title": "ResearchToolEnvelope",
+        "type": "object"
+      }
+    },
+    "get_price_bars": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "as_of"
+        ],
+        "title": "queryArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "$defs": {
+          "Citation": {
+            "additionalProperties": false,
+            "properties": {
+              "available_at": {
+                "format": "date-time",
+                "title": "Available At",
+                "type": "string"
+              },
+              "content_hash": {
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "event_time": {
+                "format": "date-time",
+                "title": "Event Time",
+                "type": "string"
+              },
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              },
+              "raw_object_key": {
+                "title": "Raw Object Key",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "raw_object_key",
+              "content_hash",
+              "event_time",
+              "available_at"
+            ],
+            "title": "Citation",
+            "type": "object"
+          },
+          "SourceMetadata": {
+            "additionalProperties": false,
+            "properties": {
+              "content_hashes": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Content Hashes",
+                "type": "array"
+              },
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              },
+              "raw_object_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Raw Object Keys",
+                "type": "array"
+              }
+            },
+            "required": [
+              "provider",
+              "raw_object_keys",
+              "content_hashes"
+            ],
+            "title": "SourceMetadata",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "available_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available At"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/$defs/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "data_as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "feed": {
+            "title": "Feed",
+            "type": "string"
+          },
+          "freshness": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness"
+          },
+          "is_delayed": {
+            "title": "Is Delayed",
+            "type": "boolean"
+          },
+          "missingness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missingness"
+          },
+          "pagination": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Pagination",
+            "type": "object"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "quality_flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Quality Flags",
+            "type": "array"
+          },
+          "query_as_of": {
+            "format": "date-time",
+            "title": "Query As Of",
+            "type": "string"
+          },
+          "records": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/$defs/SourceMetadata"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "not_found",
+              "not_supported",
+              "unavailable",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "provider",
+          "query_as_of",
+          "data_as_of",
+          "available_at",
+          "feed",
+          "is_delayed",
+          "freshness",
+          "quality_flags",
+          "missingness",
+          "records",
+          "source",
+          "citations",
+          "warnings",
+          "pagination",
+          "trace_id"
+        ],
+        "title": "ResearchToolEnvelope",
+        "type": "object"
+      }
+    }
+  }
+}

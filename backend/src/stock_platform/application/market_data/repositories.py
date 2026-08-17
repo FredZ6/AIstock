@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Protocol
 
-from sqlalchemy import Connection, and_, select
+from sqlalchemy import Connection, Engine, and_, select
 
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
@@ -15,6 +16,12 @@ from stock_platform.infrastructure.providers.base import (
     ProviderResponse,
     ProviderStatus,
 )
+
+
+class PointInTimeRepository(Protocol):
+    def as_of(
+        self, *, symbol: str, feed_type: FeedType, decision_time: datetime
+    ) -> ProviderResponse: ...
 
 
 class PostgresMarketDataRepository:
@@ -78,3 +85,20 @@ class PostgresMarketDataRepository:
             records=records,
             missingness=None if records else "MISSING",
         )
+
+
+class EngineMarketDataRepository:
+    """Open a short-lived connection for each MCP/application query."""
+
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+
+    def as_of(
+        self, *, symbol: str, feed_type: FeedType, decision_time: datetime
+    ) -> ProviderResponse:
+        with self._engine.connect() as connection:
+            return PostgresMarketDataRepository(connection).as_of(
+                symbol=symbol,
+                feed_type=feed_type,
+                decision_time=decision_time,
+            )

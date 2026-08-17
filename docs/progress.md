@@ -147,3 +147,28 @@ re-read on 2026-08-18. Linear milestone: M1 Data Plane (FRE-8, FRE-9, FRE-10).
   production build passed.
 - No live-broker endpoint, order path, trading credential, arbitrary URL, or fabricated zero value
   was added. Optional credentials are market/research-data-only and default to absent.
+
+### Task 6 — complete; awaiting human review
+
+- RED: `uv run pytest backend/tests/contract/mcp
+  backend/tests/security/test_mcp_permissions.py -q` — exit 2; expected import failures because
+  the MCP server packages did not exist.
+- GREEN: the same command with `PYTHONWARNINGS=error` — exit 0; 11 passed. Tests cover the exact
+  3/3/2 tool allowlists, required `symbol`/`as_of`, rejection of extra inputs, strict output
+  schemas, read-only annotations, common structured envelope, lineage/citations, trace IDs,
+  redacted repository errors, and denial of mutation/URL/SQL/shell capabilities.
+- Contract drift: `python scripts/export_mcp_contracts.py --check` — exit 0. Frozen snapshots are
+  stored in `contracts/mcp/{sec,market,analyst}.json` and checked by `make verify`.
+- Official MCP Inspector 2.2.0 over Streamable HTTP:
+  - SEC `tools/list` — exit 0 — only `get_company_facts`, `get_filings`,
+    `get_filing_sections`.
+  - Market `tools/list` — exit 0 — only `get_price_bars`, `get_company_news`,
+    `get_option_aggregates`.
+  - Analyst `tools/list` — exit 0 — only `get_estimates`, `get_target_consensus`.
+  - Market `tools/call get_price_bars` for NVDA at `2026-08-16T00:00:00Z` — exit 0,
+    `isError=false`; structured output returned three records whose newest `available_at` was
+    before the cutoff, plus raw keys, hashes, citations, freshness, and trace ID.
+  - Full evidence: `docs/testing/m1-mcp-inspector.md`.
+- Full verification: `make verify` — exit 0; Ruff format/lint (including MCP servers), strict
+  Mypy, MCP contract drift, Alembic drift, 71 backend tests passed, 3 opt-in live tests skipped,
+  TypeScript, ESLint, 1 Vitest test, and Next.js production build passed.

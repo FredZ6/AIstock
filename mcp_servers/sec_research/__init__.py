@@ -1,0 +1,1 @@
+"""SEC research MCP server."""

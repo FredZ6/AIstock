@@ -1,0 +1,1 @@
+"""Analyst research MCP server."""

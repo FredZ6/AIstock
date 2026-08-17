@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.16,<2",
   "fastapi>=0.116,<1",
+  "mcp[cli]>=1.13,<2",
   "minio>=7.2,<8",
   "pydantic>=2.11,<3",
   "pydantic-settings>=2.10,<3",
@@ -21,7 +22,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["backend/src"]
+pythonpath = [".", "backend/src"]
 testpaths = ["backend/tests"]
 markers = ["live: requires LIVE_PROVIDER_TESTS=1, credentials, and provider network access"]
 
@@ -35,4 +36,4 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["backend/src", "backend/tests"]
+files = ["backend/src", "backend/tests", "mcp_servers"]
