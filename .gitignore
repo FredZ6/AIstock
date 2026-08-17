@@ -1,0 +1,15 @@
+.env
+.DS_Store
+.next/
+.pnpm-store/
+.uv-cache/
+.venv/
+__pycache__/
+*.py[cod]
+*.tsbuildinfo
+node_modules/
+test-results/
+playwright-report/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

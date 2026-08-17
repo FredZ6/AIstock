@@ -1,0 +1,9 @@
+{
+  "name": "ai-stock-research-platform",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "test": "pnpm --dir web test",
+    "build": "pnpm --dir web build"
+  }
+}
