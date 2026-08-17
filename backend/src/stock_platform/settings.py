@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     environment: Literal["fixture", "paper", "test"] = "fixture"
     database_url: str = Field(
-        default="postgresql+psycopg://postgres:postgres@localhost:5432/stock_platform",
+        default="postgresql+psycopg://postgres:postgres@localhost:55432/stock_platform",
         min_length=1,
     )
 

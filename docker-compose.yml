@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "5432:5432"
+      - "55432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-stock_platform}"]
       interval: 2s
@@ -27,4 +27,3 @@ services:
 volumes:
   stock_platform_postgres:
     name: ai_stock_m0_postgres
-
