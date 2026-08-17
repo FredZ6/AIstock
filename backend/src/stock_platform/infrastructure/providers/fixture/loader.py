@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Connection, and_, select
+from sqlalchemy import Connection, and_, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from stock_platform.domain.common.ids import Symbol
@@ -60,8 +60,16 @@ class FixtureEntry:
     payload: dict[str, Any]
 
     @property
+    def raw_payload(self) -> dict[str, Any]:
+        return {
+            "symbol": str(self.symbol),
+            "feed_type": self.feed_type.value,
+            "payload": self.payload,
+        }
+
+    @property
     def content_hash(self) -> str:
-        return payload_hash(self.payload)
+        return payload_hash(self.raw_payload)
 
     @property
     def raw_object_key(self) -> str:
@@ -154,7 +162,7 @@ class FixtureCatalog:
         for entry in self.entries:
             if entry.status is not ProviderStatus.OK:
                 continue
-            store.put(entry.raw_object_key, canonical_json(entry.payload), "application/json")
+            store.put(entry.raw_object_key, canonical_json(entry.raw_payload), "application/json")
             count += 1
         return count
 
@@ -163,33 +171,47 @@ class FixtureCatalog:
         for entry in self.entries:
             if entry.status is not ProviderStatus.OK:
                 continue
-            statement = (
-                insert(raw_data_object)
-                .values(
-                    provider="FIXTURE",
-                    feed_type=entry.feed_type.value,
-                    event_time=entry.event_time,
-                    available_at=entry.available_at,
-                    ingested_at=entry.ingested_at,
-                    content_hash=entry.content_hash,
-                    raw_object_key=entry.raw_object_key,
-                )
-                .on_conflict_do_nothing(
-                    constraint="uq_raw_data_provider_content",
-                )
-                .returning(raw_data_object.c.id)
-            )
-            raw_id = connection.execute(statement).scalar_one_or_none()
-            if raw_id is None:
-                raw_id = connection.execute(
-                    select(raw_data_object.c.id).where(
-                        and_(
-                            raw_data_object.c.provider == "FIXTURE",
-                            raw_data_object.c.feed_type == entry.feed_type.value,
-                            raw_data_object.c.content_hash == entry.content_hash,
-                        )
+            raw_values = {
+                "provider": "FIXTURE",
+                "feed_type": entry.feed_type.value,
+                "event_time": entry.event_time,
+                "available_at": entry.available_at,
+                "ingested_at": entry.ingested_at,
+                "content_hash": entry.content_hash,
+                "raw_object_key": entry.raw_object_key,
+            }
+            raw_id = connection.execute(
+                select(raw_data_object.c.id).where(
+                    and_(
+                        raw_data_object.c.provider == "FIXTURE",
+                        raw_data_object.c.feed_type == entry.feed_type.value,
+                        raw_data_object.c.raw_object_key == entry.raw_object_key,
                     )
-                ).scalar_one()
+                )
+            ).scalar_one_or_none()
+            if raw_id is not None:
+                connection.execute(
+                    update(raw_data_object)
+                    .where(raw_data_object.c.id == raw_id)
+                    .values(**raw_values)
+                )
+            else:
+                raw_id = connection.execute(
+                    insert(raw_data_object)
+                    .values(**raw_values)
+                    .on_conflict_do_nothing(constraint="uq_raw_data_provider_content")
+                    .returning(raw_data_object.c.id)
+                ).scalar_one_or_none()
+                if raw_id is None:
+                    raw_id = connection.execute(
+                        select(raw_data_object.c.id).where(
+                            and_(
+                                raw_data_object.c.provider == "FIXTURE",
+                                raw_data_object.c.feed_type == entry.feed_type.value,
+                                raw_data_object.c.content_hash == entry.content_hash,
+                            )
+                        )
+                    ).scalar_one()
             exists = connection.execute(
                 select(normalized_record.c.id).where(
                     and_(
@@ -207,6 +229,12 @@ class FixtureCatalog:
                     )
                 )
                 count += 1
+            else:
+                connection.execute(
+                    update(normalized_record)
+                    .where(normalized_record.c.id == exists)
+                    .values(payload={"symbol": str(entry.symbol), **entry.payload})
+                )
         return count
 
 

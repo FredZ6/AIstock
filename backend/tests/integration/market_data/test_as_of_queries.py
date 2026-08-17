@@ -2,8 +2,10 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import delete, func, select
 from sqlalchemy.engine import Engine
 from stock_platform.application.market_data.repositories import PostgresMarketDataRepository
+from stock_platform.infrastructure.db.models.tables import normalized_record, raw_data_object
 from stock_platform.infrastructure.providers.base import FeedType
 from stock_platform.infrastructure.providers.fixture.loader import FixtureCatalog
 
@@ -63,3 +65,34 @@ def test_repository_rejects_naive_decision_time(
             feed_type=FeedType.PRICE_BARS,
             decision_time=datetime(2026, 8, 16),
         )
+
+
+def test_seed_is_collision_free_and_idempotent_from_empty_fixture_partition(
+    engine: Engine,
+) -> None:
+    catalog = FixtureCatalog.load_default()
+    fixture_raw_ids = select(raw_data_object.c.id).where(
+        raw_data_object.c.raw_object_key.like("m1-v1/%")
+    )
+    with engine.connect() as connection:
+        transaction = connection.begin()
+        connection.execute(
+            delete(normalized_record).where(
+                normalized_record.c.raw_data_object_id.in_(fixture_raw_ids)
+            )
+        )
+        connection.execute(
+            delete(raw_data_object).where(raw_data_object.c.raw_object_key.like("m1-v1/%"))
+        )
+
+        assert catalog.seed_database(connection) == 31
+        assert catalog.seed_database(connection) == 0
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(raw_data_object)
+                .where(raw_data_object.c.raw_object_key.like("m1-v1/%"))
+            ).scalar_one()
+            == 31
+        )
+        transaction.rollback()

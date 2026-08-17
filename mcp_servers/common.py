@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import uuid4
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.server import Settings as FastMcpSettings
 from mcp.types import ToolAnnotations
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator
 from sqlalchemy import create_engine
 from stock_platform.application.market_data.repositories import (
     EngineMarketDataRepository,
@@ -23,6 +23,7 @@ from stock_platform.infrastructure.providers.base import FeedType, ProviderRespo
 from stock_platform.settings import Settings
 
 FastMcpSettings.model_rebuild()
+SymbolInput = Annotated[str, StringConstraints(pattern=r"^[A-Z.]{1,10}$")]
 
 
 class StrictModel(BaseModel):
@@ -158,8 +159,8 @@ def create_read_only_server(
     )
     service = McpResearchService(repository or default_repository())
 
-    def handler(feed_type: FeedType) -> Callable[[str, datetime], ResearchToolEnvelope]:
-        def query(symbol: str, as_of: datetime) -> ResearchToolEnvelope:
+    def handler(feed_type: FeedType) -> Callable[[SymbolInput, datetime], ResearchToolEnvelope]:
+        def query(symbol: SymbolInput, as_of: datetime) -> ResearchToolEnvelope:
             """Read normalized research data visible at the requested point in time."""
 
             return service.query(feed_type, symbol, as_of)

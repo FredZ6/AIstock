@@ -71,6 +71,7 @@ async def test_tools_have_strict_inputs_structured_outputs_and_read_only_annotat
         assert tool.inputSchema["required"] == ["symbol", "as_of"]
         assert tool.inputSchema["additionalProperties"] is False
         assert set(tool.inputSchema["properties"]) == {"symbol", "as_of"}
+        assert tool.inputSchema["properties"]["symbol"]["pattern"] == r"^[A-Z.]{1,10}$"
         assert set(tool.outputSchema["required"]) == REQUIRED_OUTPUT
         assert tool.outputSchema["additionalProperties"] is False
         assert tool.annotations.readOnlyHint is True

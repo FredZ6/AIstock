@@ -28,7 +28,7 @@ def response(
                 provider=provider,
                 event_time=available_at - timedelta(minutes=1),
                 available_at=available_at,
-                ingested_at=AS_OF,
+                ingested_at=max(AS_OF, available_at),
                 content_hash=(provider.lower() + "0" * 64)[:64],
                 raw_object_key=f"live/{provider.lower()}/fixture.json",
                 payload=payload or {"revenue": "10"},
@@ -98,6 +98,22 @@ def test_stale_fallback_is_rejected() -> None:
     assert result.status is ProviderStatus.UNAVAILABLE
     assert result.records == ()
     assert "stale_fallback_rejected" in result.warnings
+
+
+def test_future_fallback_is_rejected_by_point_in_time_boundary() -> None:
+    primary = SequenceProvider("SEC", response(ProviderStatus.UNAVAILABLE, "SEC"))
+    fallback = SequenceProvider(
+        "FMP",
+        response(ProviderStatus.OK, "FMP", available_at=AS_OF + timedelta(seconds=1)),
+    )
+
+    result = FallbackPolicy(primary=primary, fallback=fallback).fetch(
+        FeedType.COMPANY_FACTS, "NVDA", AS_OF
+    )
+
+    assert result.status is ProviderStatus.UNAVAILABLE
+    assert result.records == ()
+    assert "future_fallback_rejected" in result.warnings
 
 
 def test_circuit_opens_after_bounded_failures_and_skips_primary() -> None:

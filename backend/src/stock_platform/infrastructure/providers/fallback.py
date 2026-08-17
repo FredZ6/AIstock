@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+from stock_platform.domain.common.time import require_aware
 from stock_platform.infrastructure.providers.base import (
     FeedType,
     ProviderResponse,
@@ -34,34 +35,37 @@ class FallbackPolicy:
         self._opened_at: datetime | None = None
 
     def fetch(self, feed_type: FeedType, symbol: str, as_of: datetime) -> ProviderResponse:
-        circuit_open = self._opened_at is not None and as_of - self._opened_at < self._reset_timeout
+        query_as_of = require_aware(as_of)
+        circuit_open = (
+            self._opened_at is not None and query_as_of - self._opened_at < self._reset_timeout
+        )
         if circuit_open:
             return self._fallback_result(
                 feed_type,
                 symbol,
-                as_of,
+                query_as_of,
                 warning=f"circuit_open={self._primary.name}",
             )
         if self._opened_at is not None:
             self._opened_at = None
             self._failures = 0
 
-        primary = self._primary.fetch(feed_type, symbol, as_of)
+        primary = self._primary.fetch(feed_type, symbol, query_as_of)
         if primary.status is ProviderStatus.OK:
             self._failures = 0
             if self._compare_on_success:
-                return self._compare(primary, feed_type, symbol, as_of)
+                return self._compare(primary, feed_type, symbol, query_as_of)
             return primary
         if primary.status in {ProviderStatus.NOT_FOUND, ProviderStatus.NOT_SUPPORTED}:
             return primary
 
         self._failures += 1
         if self._failures >= self._failure_threshold:
-            self._opened_at = as_of
+            self._opened_at = query_as_of
         return self._fallback_result(
             feed_type,
             symbol,
-            as_of,
+            query_as_of,
             warning=f"fallback_from={self._primary.name}",
         )
 
@@ -75,6 +79,14 @@ class FallbackPolicy:
     ) -> ProviderResponse:
         fallback = self._fallback.fetch(feed_type, symbol, as_of)
         if fallback.status is ProviderStatus.OK and fallback.records:
+            if any(record.available_at > as_of for record in fallback.records):
+                return replace(
+                    fallback,
+                    status=ProviderStatus.UNAVAILABLE,
+                    records=(),
+                    warnings=fallback.warnings + (warning, "future_fallback_rejected"),
+                    missingness="UNAVAILABLE",
+                )
             freshest = max(record.available_at for record in fallback.records)
             if as_of - freshest > self._max_staleness:
                 return replace(

@@ -16,6 +16,7 @@
             "type": "string"
           },
           "symbol": {
+            "pattern": "^[A-Z.]{1,10}$",
             "title": "Symbol",
             "type": "string"
           }
@@ -264,6 +265,7 @@
             "type": "string"
           },
           "symbol": {
+            "pattern": "^[A-Z.]{1,10}$",
             "title": "Symbol",
             "type": "string"
           }

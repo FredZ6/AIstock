@@ -172,3 +172,32 @@ re-read on 2026-08-18. Linear milestone: M1 Data Plane (FRE-8, FRE-9, FRE-10).
 - Full verification: `make verify` — exit 0; Ruff format/lint (including MCP servers), strict
   Mypy, MCP contract drift, Alembic drift, 71 backend tests passed, 3 opt-in live tests skipped,
   TypeScript, ESLint, 1 Vitest test, and Next.js production build passed.
+
+### M1 final acceptance remediation — 2026-08-18
+
+- Fixture collision RED: two valid analyst targets (AAPL and AMZN) shared the same payload-only
+  hash, so MinIO held 31 objects while PostgreSQL held only 30 RawDataObject/NormalizedRecord
+  rows. New tests failed with 2 failures and proved the raw objects omitted symbol/feed context.
+- Fixture collision GREEN: fixture raw bytes and SHA-256 now cover `symbol`, `feed_type`, and
+  payload. Seed reconciliation safely updated existing mutable raw/normalized fixture rows and
+  inserted the missing AMZN record. First remediation seed — exit 0, 1 new normalized record;
+  second seed — exit 0, 0 new records. Read-only counts now agree: MinIO 31, RawDataObject 31,
+  NormalizedRecord 31. An empty-fixture-partition transaction proves first seed 31, second 0.
+- Point-in-time fallback RED: a provider fallback whose `available_at` was one second after the
+  decision cutoff was accepted. GREEN: it is now rejected as `future_fallback_rejected`; focused
+  fallback tests exit 0 with 7 passed.
+- MCP strictness RED: generated symbol schemas lacked the domain pattern. GREEN: every tool now
+  publishes `^[A-Z.]{1,10}$`, still rejects extra properties, and contract snapshots were
+  regenerated. Unused Python `mcp[cli]` extras were removed; core MCP runtime/HTTP behavior is
+  unchanged.
+- Focused final acceptance:
+  - Task 4 command — exit 0; 21 passed, 3 opt-in live skipped.
+  - Task 5 command — exit 0; 24 passed, 3 opt-in live skipped.
+  - Task 6 command with warnings-as-errors — exit 0; 11 passed.
+  - MCP contract drift check — exit 0.
+- Official Inspector 2.2.0 was rerun after remediation: `get_price_bars` — exit 0,
+  `isError=false`, status `ok`, 3 records, 3 hashes, latest `available_at` before cutoff, and a
+  32-character trace ID.
+- Final idempotency: two consecutive `make verify` runs — exit 0 each; Ruff format/lint, strict
+  Mypy, Alembic and MCP contract drift checks, 73 backend tests passed, 3 opt-in live tests skipped,
+  TypeScript, ESLint, 1 Vitest test, and Next.js production build passed.

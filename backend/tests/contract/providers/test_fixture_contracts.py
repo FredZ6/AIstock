@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -40,6 +41,8 @@ def test_fixture_hashes_are_reproducible_and_verified() -> None:
 
     assert first.content_hashes == second.content_hashes
     assert all(len(value) == 64 for value in first.content_hashes)
+    persisted = [entry for entry in first.entries if entry.status.value == "ok"]
+    assert len({(entry.feed_type, entry.content_hash) for entry in persisted}) == len(persisted)
 
 
 def test_fixture_provider_is_point_in_time_and_rejects_naive_as_of() -> None:
@@ -98,3 +101,7 @@ def test_fixture_raw_payloads_are_written_to_versioned_object_keys() -> None:
     assert written == len(client.objects)
     assert written > 0
     assert all(key.startswith("m1-v1/") for key in client.objects)
+    raw = json.loads(client.objects["m1-v1/analyst/aapl-target.json"])
+    assert raw["symbol"] == "AAPL"
+    assert raw["feed_type"] == "target_consensus"
+    assert raw["payload"]["median_target"] == "250.00"
