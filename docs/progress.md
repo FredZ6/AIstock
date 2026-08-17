@@ -22,6 +22,16 @@ read on 2026-08-17. Linear milestone: M0 Foundation (FRE-5, FRE-6, FRE-7).
 - Risks: Docker/database verification is intentionally deferred to Task 3; no provider or live
   brokerage integration exists.
 
-### Task 2 — pending
+### Task 2 — complete; awaiting human review
+
+- RED: `uv run pytest backend/tests/unit/domain/common -q` — exit 2; two expected import
+  errors because the common domain package did not exist.
+- GREEN: `uv run pytest backend/tests/unit/domain/common -q` — exit 0; 15 passed, including
+  Hypothesis timezone/visibility and Decimal arithmetic properties.
+- Integration: `make verify` — exit 0; Ruff format/lint, Mypy, 18 backend tests, TypeScript,
+  ESLint, 1 Vitest test, and Next.js production build passed.
+- Report: this file (`docs/progress.md`).
+- Risks: monetary scale/rounding belongs to later instrument and ledger policies; the M0 value
+  object preserves arbitrary exact Decimal values and rejects float input.
 
 ### Task 3 — pending
