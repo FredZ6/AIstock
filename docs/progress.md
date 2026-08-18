@@ -275,3 +275,34 @@ isolated worktree.
 - The Harness exposes only policy-controlled research tools. Retrieved text remains untrusted and
   cannot add order, notification, SQL, shell, URL, or credential capabilities. Task 7 adds no
   business graph and no live-trading path.
+
+### Task 8 — complete; awaiting human review
+
+- RED: `UV_CACHE_DIR=$PWD/.uv-cache uv run pytest backend/tests/unit/agents/research
+  backend/tests/integration/research/test_daily_research.py -q` — exit 2; 4 expected collection
+  errors because the Research Graph, research domain models, and persistence service did not exist.
+- Implementation: added a compiled LangGraph 1.2.11 route for `Preflight → Planner → Parallel
+  Collection → Normalize/Freshness/Lineage → Parallel Analysts → Evidence Judge → Reflect once →
+  Deterministic Score & Confidence → InvestmentThesis → ResearchOpinion/ABSTAIN → Writer →
+  CitationVerifier → DecisionDiff → Persist`. State reducers append Evidence, Claims, Gaps,
+  Conflicts, Warnings, and route events without mutating prior state.
+- First GREEN attempt — exit 1; 5 passed / 3 failed because the persistence-node delta overwrote
+  the accumulated route in the stored result. Correcting the snapshot merge order produced 8
+  passed.
+- Persistence integration writes version-pinned Thesis, normalized ThesisEvidenceLink rows,
+  ResearchOpinion, deterministic DecisionDiff, DecisionSnapshot, Claims, Gaps, and AgentEvents.
+  The PostgreSQL integration join proves `Decision → Thesis → Claim → Evidence → DerivedMetric →
+  NormalizedRecord → RawDataObject`, with every source record cutoff-safe.
+- Stable-evidence idempotency RED: a second distinct Research Run over the same fixture failed with
+  `UniqueViolation` on the deterministic Evidence ID. GREEN: existing immutable Evidence/Claim
+  facts are reused without UPDATE or duplicate DerivedMetric rows; the focused regression exited 0
+  with 1 passed.
+- Final focused verification: the authority command above — exit 0; 9 passed, including exact-one
+  Reflection, provider fallback, missing-data ABSTAIN, cancellation, same-run recovery, full DB
+  lineage, AgentEvent sequencing, and cross-run Evidence reuse.
+- Full verification initially stopped at formatter/lint/type gates while new files were normalized;
+  after precise fixes, final `make verify` — exit 0: Ruff format/lint, strict Mypy over 87 source
+  files, Alembic drift check, 106 backend tests passed, 3 credential-gated live tests skipped, 1
+  Vitest test passed, and the Next.js production build passed.
+- The research layer emits only ResearchOpinion and never PortfolioAction, OrderIntent, notification,
+  or execution calls. Numeric scoring/confidence and DecisionDiff are deterministic and versioned.
