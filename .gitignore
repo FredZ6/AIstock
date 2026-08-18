@@ -6,6 +6,7 @@
 .venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
 *.tsbuildinfo
 node_modules/
 test-results/

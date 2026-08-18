@@ -242,3 +242,36 @@ re-read on 2026-08-18. Linear milestone: M1 Data Plane (FRE-8, FRE-9, FRE-10).
 - Second consecutive `make verify` after recording evidence — exit 0 with the same 81 passed / 3
   skipped backend result and all Web checks/build passing, confirming the final verification loop is
   repeatable.
+
+## M2 Agent Core
+
+Authoritative sources: Notion design baseline v0.2 and Codex executable engineering spec,
+re-read on 2026-08-18. Linear milestone: M2 Agent Core (FRE-11, FRE-12, FRE-13). Branch:
+`feature/m2-agent-core`, created from `main@42a4eee53c0249074cf8cedf8112d3e1a139b095` in an
+isolated worktree.
+
+### Task 7 — complete; awaiting human review
+
+- Baseline: `make bootstrap` and `make verify` — exit 0 after rerunning with the required sandbox
+  network/localhost permissions; baseline verification passed 81 backend tests with 3 explicit
+  credential-gated skips, 1 Vitest test, and the Next.js production build.
+- RED: `UV_CACHE_DIR=$PWD/.uv-cache uv run pytest backend/tests/unit/agents/harness
+  backend/tests/security/test_prompt_injection.py -q` — exit 2; 6 expected collection errors
+  because `stock_platform.agents` did not exist. An earlier invocation without the local cache
+  override exited 2 before collection due sandbox denial of the global uv cache and is not counted
+  as behavioral RED evidence.
+- GREEN: the same focused command — exit 0; 16 passed. Coverage includes immutable task scope and
+  six pinned versions, aware cutoffs, tool/LLM/token/time/reflection budgets, repeated-action and
+  no-progress termination, checkpoint recovery, monotonic/redacted event contracts, failure
+  classification, human-only approval, completion verification, and prompt-injection quarantine.
+- Related security integration: `UV_CACHE_DIR=$PWD/.uv-cache uv run pytest
+  backend/tests/unit/agents/harness backend/tests/security -q` — exit 0; 18 passed.
+- Full verification initially stopped at formatting (exit 2), then import sorting (exit 2), then a
+  missing `jsonschema` typing stub (exit 2). Ruff formatting/import fixes and one precise
+  `import-untyped` test-only annotation resolved those gate failures without changing behavior.
+- Final verification: `make verify` — exit 0; Ruff format/lint, strict Mypy over 73 source files,
+  Alembic drift check, 97 backend tests passed, 3 credential-gated live tests skipped, 1 Vitest
+  test passed, and the Next.js production build passed.
+- The Harness exposes only policy-controlled research tools. Retrieved text remains untrusted and
+  cannot add order, notification, SQL, shell, URL, or credential capabilities. Task 7 adds no
+  business graph and no live-trading path.

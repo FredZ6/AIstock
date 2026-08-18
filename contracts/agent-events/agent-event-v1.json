@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aistock.local/contracts/agent-event-v1.json",
+  "title": "AgentEvent v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "run_id",
+    "sequence",
+    "event_time",
+    "type",
+    "schema_version",
+    "payload"
+  ],
+  "properties": {
+    "event_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "sequence": {"type": "integer", "minimum": 1},
+    "event_time": {"type": "string", "format": "date-time"},
+    "type": {"type": "string", "minLength": 1},
+    "schema_version": {"const": "1.0"},
+    "payload": {"type": "object"}
+  }
+}
