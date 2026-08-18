@@ -10,7 +10,7 @@ down:
 	docker compose down
 
 seed:
-	UV_CACHE_DIR="$(CURDIR)/.uv-cache" uv run python scripts/seed_demo.py
+	PYTHONPATH="$(CURDIR)/backend/src" UV_CACHE_DIR="$(CURDIR)/.uv-cache" uv run python scripts/seed_demo.py
 
 clean-fixtures:
 	docker compose down --volumes --remove-orphans
@@ -20,4 +20,3 @@ verify:
 
 smoke:
 	./scripts/smoke.sh
-

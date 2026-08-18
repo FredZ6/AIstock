@@ -6,10 +6,11 @@ export UV_CACHE_DIR="${repo_root}/.uv-cache"
 export NEXT_TELEMETRY_DISABLED=1
 
 cd "${repo_root}"
-uv run ruff format --check backend
-uv run ruff check backend
+uv run ruff format --check backend scripts/export_mcp_contracts.py
+uv run ruff check backend scripts/export_mcp_contracts.py
 uv run mypy
 uv run alembic -c backend/alembic.ini check
+PYTHONPATH="${repo_root}/backend/src" uv run python scripts/export_mcp_contracts.py --check
 uv run pytest -q
 CI=true pnpm --dir web typecheck
 CI=true pnpm --dir web lint

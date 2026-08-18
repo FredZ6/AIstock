@@ -83,8 +83,20 @@ normalized_record = Table(
         "raw_data_object_id", UUID(as_uuid=True), ForeignKey("raw_data_object.id"), nullable=False
     ),
     Column("record_type", Text),
+    Column(
+        "normalization_version",
+        Text,
+        nullable=False,
+        server_default=text("'legacy-v0'"),
+    ),
     Column("payload", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     created_at(),
+    UniqueConstraint(
+        "raw_data_object_id",
+        "record_type",
+        "normalization_version",
+        name="uq_normalized_record_version",
+    ),
 )
 derived_metric = Table(
     "derived_metric",

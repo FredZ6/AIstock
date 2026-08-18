@@ -1,0 +1,14 @@
+{
+  "dataset": "news",
+  "dataset_version": "m1-v1",
+  "license": "Synthetic news metadata and text for offline tests only",
+  "provenance": "Hand-authored fixtures; no third-party copyrighted articles",
+  "records": [
+    {"id":"aapl-news","symbol":"AAPL","feed_type":"company_news","event_time":"2026-08-15T11:00:00Z","available_at":"2026-08-15T11:01:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"headline":"AAPL fixture product update","summary":"Synthetic research fixture."}},
+    {"id":"msft-news","symbol":"MSFT","feed_type":"company_news","event_time":"2026-08-15T11:00:00Z","available_at":"2026-08-15T11:01:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"headline":"MSFT fixture cloud update","summary":"Synthetic research fixture."}},
+    {"id":"nvda-news","symbol":"NVDA","feed_type":"company_news","event_time":"2026-08-15T11:00:00Z","available_at":"2026-08-15T12:00:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"headline":"NVDA fixture demand update","summary":"Synthetic research fixture."}},
+    {"id":"nvda-news-late","symbol":"NVDA","feed_type":"company_news","event_time":"2026-08-15T11:30:00Z","available_at":"2026-08-15T14:00:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["delayed"],"payload":{"headline":"NVDA late fixture update","summary":"Visible only after its delayed available_at."}},
+    {"id":"amzn-news","symbol":"AMZN","feed_type":"company_news","event_time":"2026-08-15T11:00:00Z","available_at":"2026-08-15T11:01:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"headline":"AMZN fixture logistics update","summary":"Synthetic research fixture."}},
+    {"id":"googl-news","symbol":"GOOGL","feed_type":"company_news","event_time":"2026-08-15T11:00:00Z","available_at":"2026-08-15T11:01:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"headline":"GOOGL fixture model update","summary":"Synthetic research fixture."}}
+  ]
+}

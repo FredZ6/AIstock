@@ -1,0 +1,15 @@
+{
+  "dataset": "analyst",
+  "dataset_version": "m1-v1",
+  "license": "Synthetic analyst estimates and targets for offline tests only",
+  "provenance": "Hand-authored consensus fixtures; not investment advice",
+  "records": [
+    {"id":"aapl-target","symbol":"AAPL","feed_type":"target_consensus","event_time":"2026-08-15T12:00:00Z","available_at":"2026-08-15T12:05:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"source_provider":"FMP_FIXTURE","median_target":"250.00","currency":"USD"}},
+    {"id":"msft-target","symbol":"MSFT","feed_type":"target_consensus","event_time":"2026-08-15T12:00:00Z","available_at":"2026-08-15T12:05:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"source_provider":"FMP_FIXTURE","median_target":"560.00","currency":"USD"}},
+    {"id":"nvda-target-high","symbol":"NVDA","feed_type":"target_consensus","event_time":"2026-08-15T12:00:00Z","available_at":"2026-08-15T12:05:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["conflicting_targets"],"payload":{"source_provider":"FMP_FIXTURE_A","median_target":"240.00","currency":"USD"}},
+    {"id":"nvda-target-low","symbol":"NVDA","feed_type":"target_consensus","event_time":"2026-08-15T12:00:00Z","available_at":"2026-08-15T12:06:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["conflicting_targets"],"payload":{"source_provider":"FMP_FIXTURE_B","median_target":"170.00","currency":"USD"}},
+    {"id":"amzn-target","symbol":"AMZN","feed_type":"target_consensus","event_time":"2026-08-15T12:00:00Z","available_at":"2026-08-15T12:05:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"source_provider":"FMP_FIXTURE","median_target":"250.00","currency":"USD"}},
+    {"id":"googl-target","symbol":"GOOGL","feed_type":"target_consensus","event_time":"2026-08-15T12:00:00Z","available_at":"2026-08-15T12:05:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"source_provider":"FMP_FIXTURE","median_target":"225.00","currency":"USD"}},
+    {"id":"nvda-estimate","symbol":"NVDA","feed_type":"estimates","event_time":"2026-08-15T12:00:00Z","available_at":"2026-08-15T12:05:00Z","ingested_at":"2026-08-16T00:00:00Z","scenarios":["normal"],"payload":{"period":"FY2027","revenue_estimate":"250000000000","currency":"USD"}}
+  ]
+}

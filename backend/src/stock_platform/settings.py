@@ -18,6 +18,15 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://postgres:postgres@localhost:55432/stock_platform",
         min_length=1,
     )
+    minio_endpoint: str = "localhost:59000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin"
+    minio_bucket: str = "fixture-raw"
+    minio_secure: bool = False
+    sec_user_agent: str | None = None
+    alpaca_data_key: str | None = None
+    alpaca_data_secret: str | None = None
+    fmp_api_key: str | None = None
 
     @property
     def fixture_mode(self) -> bool:
