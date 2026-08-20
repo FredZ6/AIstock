@@ -25,6 +25,11 @@ CORE_TABLES = frozenset(
         "agent_event",
         "paper_fill",
         "cash_ledger",
+        "alert_event",
+        "alert_thesis_link",
+        "alert_explanation",
+        "notification_outbox",
+        "alert_metric",
     }
 )
 

@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "fixture-raw"
     minio_secure: bool = False
+    redis_url: str = "redis://localhost:56379/0"
     sec_user_agent: str | None = None
     alpaca_data_key: str | None = None
     alpaca_data_secret: str | None = None
