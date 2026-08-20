@@ -476,3 +476,68 @@ worktree.
   contract drift checks passed, 148 backend tests passed with 3 explicit credential-gated provider
   tests skipped, TypeScript and ESLint passed, 1 Vitest test passed, and the Next.js production build
   completed successfully.
+
+## M4 Portfolio
+
+Authoritative sources: Notion design baseline v0.2 and Codex executable engineering spec,
+re-read on 2026-08-21. Linear milestone: M4 Portfolio (FRE-15, FRE-16). Branch:
+`codex/m4-portfolio`, created from synchronized `main@aae517091aa1052559154cb46d5481ce8660f7dd`
+in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not started.
+
+### Task 11 — complete; awaiting human review
+
+- M3 closure: FRE-14 was marked Done, Linear M3 Alerts reached 100%, and Notion received PR #2 / final
+  merge commit `aae5170` / final verification evidence before M4 began.
+- Bootstrap: the first `make bootstrap` exited 2 after creating `.venv` because the restricted sandbox
+  could not resolve `files.pythonhosted.org`; the unchanged command with dependency-network permission
+  exited 0 and installed the pinned Python and pnpm lockfiles.
+- Baseline: `make verify` — exit 0; 148 backend tests passed with 3 explicit credential-gated provider
+  skips, and all Python, database, contract, Web, and production-build gates passed.
+- Unit RED: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest backend/tests/unit/portfolio -q`
+  — exit 2 with two expected collection errors because the portfolio application/domain packages did
+  not exist. Minimal domain implementation then made the same command exit 0 with 9 passed, including
+  Hypothesis ledger and fill-timing properties.
+- Integration RED: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest
+  backend/tests/integration/portfolio -q` — exit 2 with two expected collection errors because the
+  Corporate Action service and PostgreSQL accounting store did not exist. After migration/service
+  implementation, the first run had 3 passed / 1 fixture failure: the fixture omitted `ingested_at`
+  and correctly violated `available_at <= ingested_at`. Explicit UTC ingestion time produced 4 passed.
+- Paper execution: a pinned `ExecutionPolicyVersion` deterministically controls half-spread, slippage,
+  per-share/minimum fees, next-eligible-bar timing, and available-volume participation. Replays sort and
+  deduplicate bars, generate stable UUIDv5 fills, reject unapproved orders, and only fill bars strictly
+  later than the aware UTC decision time. All quantities, prices, fees, ratios, and NAV values use
+  `Decimal`; binary float and naive time are rejected.
+- Accounting: each funding, fill, dividend, and correction produces balanced debit/credit journal
+  entries. Application persistence rejects an unbalanced journal before any write, duplicate fills and
+  entries are idempotent, buys cannot make cash negative, and positions/NAV rebuild only from immutable
+  PaperFill and CashLedger facts. Corrections append an inverse Fill and inverse entries without updating
+  history.
+- Reversal RED/GREEN: the PostgreSQL test initially exited 1 because the normal fill trigger rejected a
+  valid opposite-side reversal. Migration `0008_paper_fill_reversals` validates the original immutable
+  fill, exact inverse identity, zero reversal fee, and later timestamp; the focused test then exited 0
+  with 1 passed. A separate store-boundary RED proved unbalanced entries were accepted; the minimal
+  pre-write balance check made the same focused test pass.
+- Corporate Actions: `corporate_action` stores raw-object lineage and provider/feed/time/hash/key facts.
+  Queries require `effective_at <= as_of` and `available_at <= as_of`; split ratios adjust derived
+  positions and cash dividends append idempotent balanced entries. Naive cutoffs are rejected.
+- Database migrations: `0007_paper_execution_ledger` adds OrderIntent, PaperOrder, hardened PaperFill,
+  double-entry CashLedger fields, CorporateAction lineage, constraints, and a database trigger rejecting
+  unapproved or non-future fills. It safely backfills legacy append-only rows. `0008` adds strictly
+  validated reversal fills. Two consecutive `alembic upgrade head` calls and `alembic check` exited 0
+  with no drift.
+- Migration regression: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest
+  backend/tests/integration/db/test_migrations.py -q` — exit 0; 2 passed. It covers isolated empty/legacy
+  upgrade paths, 0006→head backfill, repeated head, and retained append-only rejection. The combined Task
+  11 command over unit, portfolio integration, and migration tests exited 0 with 15 passed.
+- Full verification remediation: the first `make verify` exited 2 on one Ruff formatting difference.
+  The second passed format/lint, strict Mypy over 124 source files, and Alembic drift, then exited 2 with
+  160 passed / 3 skipped / 2 failed because the M0 append-only test still inserted newly hardened facts
+  with `DEFAULT VALUES`. Replacing that obsolete setup with valid approved-order and balanced-ledger
+  fixtures made the focused append-only suite exit 0 with 3 passed.
+- Complete acceptance: `make verify` — exit 0; 134 files formatted, Ruff lint passed, strict Mypy passed
+  over 124 source files, Alembic and MCP contract drift checks passed, 162 backend tests passed with 3
+  explicit credential-gated provider tests skipped, TypeScript and ESLint passed, 1 Vitest test passed,
+  and the Next.js production build completed successfully.
+- Safety boundary: this is deterministic local paper simulation only. No live-broker endpoint,
+  credential, switch, real order, real funds, LLM execution, or Task 12 portfolio-decision path was
+  introduced. Real research-provider credentials remain optional and unrelated to Task 11 acceptance.

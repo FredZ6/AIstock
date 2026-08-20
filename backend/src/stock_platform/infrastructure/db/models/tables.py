@@ -300,16 +300,84 @@ agent_event = Table(
     created_at(),
     UniqueConstraint("run_id", "sequence", name="agent_event_run_id_sequence_key"),
 )
+order_intent = Table(
+    "order_intent",
+    metadata,
+    uuid_pk(),
+    Column("portfolio_id", UUID(as_uuid=True), nullable=False),
+    Column("symbol", Text, nullable=False),
+    Column("side", Text, nullable=False),
+    Column("quantity", Numeric, nullable=False),
+    Column("decision_time", DateTime(timezone=True), nullable=False),
+    Column(
+        "execution_policy_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("execution_policy_version.id"),
+        nullable=False,
+    ),
+    Column("risk_approved", Boolean, nullable=False),
+    created_at(),
+    CheckConstraint("side IN ('BUY', 'SELL')", name=conv("ck_order_intent_side")),
+    CheckConstraint("quantity > 0", name=conv("ck_order_intent_quantity")),
+)
+paper_order = Table(
+    "paper_order",
+    metadata,
+    uuid_pk(),
+    Column("order_intent_id", UUID(as_uuid=True), ForeignKey("order_intent.id"), nullable=False),
+    Column("portfolio_id", UUID(as_uuid=True), nullable=False),
+    Column("symbol", Text, nullable=False),
+    Column("side", Text, nullable=False),
+    Column("quantity", Numeric, nullable=False),
+    Column("decision_time", DateTime(timezone=True), nullable=False),
+    Column(
+        "execution_policy_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("execution_policy_version.id"),
+        nullable=False,
+    ),
+    Column("risk_approved", Boolean, nullable=False),
+    Column("status", Text, nullable=False),
+    created_at(),
+    UniqueConstraint("order_intent_id", name="paper_order_order_intent_id_key"),
+    CheckConstraint("side IN ('BUY', 'SELL')", name=conv("ck_paper_order_side")),
+    CheckConstraint("quantity > 0", name=conv("ck_paper_order_quantity")),
+    CheckConstraint(
+        "status IN ('REJECTED', 'PENDING', 'PARTIALLY_FILLED', 'FILLED')",
+        name=conv("ck_paper_order_status"),
+    ),
+)
 paper_fill = Table(
     "paper_fill",
     metadata,
     uuid_pk(),
-    Column("order_id", UUID(as_uuid=True)),
-    Column("quantity", Numeric),
-    Column("price", Numeric),
+    Column("order_id", UUID(as_uuid=True), ForeignKey("paper_order.id"), nullable=False),
+    Column("portfolio_id", UUID(as_uuid=True), nullable=False),
+    Column("symbol", Text, nullable=False),
+    Column("side", Text, nullable=False),
+    Column("quantity", Numeric, nullable=False),
+    Column("price", Numeric, nullable=False),
+    Column("fee", Numeric, nullable=False, server_default=text("0")),
     Column("currency", Text, nullable=False, server_default=text("'USD'")),
     Column("filled_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    Column("source_bar_time", DateTime(timezone=True), nullable=False),
+    Column(
+        "execution_policy_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("execution_policy_version.id"),
+        nullable=False,
+    ),
+    Column("idempotency_key", Text, nullable=False),
+    Column("reversal_of_id", UUID(as_uuid=True), ForeignKey("paper_fill.id")),
     created_at(),
+    UniqueConstraint("idempotency_key", name="paper_fill_idempotency_key_key"),
+    CheckConstraint("side IN ('BUY', 'SELL')", name=conv("ck_paper_fill_side")),
+    CheckConstraint(
+        "(quantity > 0 AND price > 0) OR symbol = 'FIXTURE'",
+        name=conv("ck_paper_fill_values"),
+    ),
+    CheckConstraint("fee >= 0", name=conv("ck_paper_fill_fee")),
+    CheckConstraint("filled_at >= source_bar_time", name=conv("ck_paper_fill_bar_time")),
 )
 cash_ledger = Table(
     "cash_ledger",
@@ -320,7 +388,58 @@ cash_ledger = Table(
     Column("currency", Text, nullable=False, server_default=text("'USD'")),
     Column("entry_type", Text, nullable=False, server_default=text("'FIXTURE'")),
     Column("occurred_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    Column("transaction_id", UUID(as_uuid=True), nullable=False),
+    Column("source_id", UUID(as_uuid=True), nullable=False),
+    Column("account", Text, nullable=False),
+    Column("debit", Numeric, nullable=False),
+    Column("credit", Numeric, nullable=False),
+    Column("idempotency_key", Text, nullable=False),
+    Column("reversal_of_id", UUID(as_uuid=True), ForeignKey("cash_ledger.id")),
     created_at(),
+    UniqueConstraint("idempotency_key", name="cash_ledger_idempotency_key_key"),
+    CheckConstraint(
+        "debit >= 0 AND credit >= 0 AND NOT (debit > 0 AND credit > 0) "
+        "AND (debit > 0 OR credit > 0 OR account = 'LEGACY:CASH')",
+        name=conv("ck_cash_ledger_double_entry"),
+    ),
+)
+
+corporate_action = Table(
+    "corporate_action",
+    metadata,
+    uuid_pk(),
+    Column(
+        "raw_data_object_id", UUID(as_uuid=True), ForeignKey("raw_data_object.id"), nullable=False
+    ),
+    Column("symbol", Text, nullable=False),
+    Column("action_type", Text, nullable=False),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("ingested_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    Column("provider", Text, nullable=False),
+    Column("feed_type", Text, nullable=False),
+    Column("content_hash", Text, nullable=False),
+    Column("raw_object_key", Text, nullable=False),
+    Column("split_ratio", Numeric),
+    Column("cash_per_share", Numeric),
+    Column("currency", Text, nullable=False, server_default=text("'USD'")),
+    created_at(),
+    CheckConstraint(
+        "action_type IN ('SPLIT', 'CASH_DIVIDEND')",
+        name=conv("ck_corporate_action_type"),
+    ),
+    CheckConstraint(
+        "(action_type = 'SPLIT' AND split_ratio > 0 AND cash_per_share IS NULL) OR "
+        "(action_type = 'CASH_DIVIDEND' AND cash_per_share >= 0 AND split_ratio IS NULL)",
+        name=conv("ck_corporate_action_value"),
+    ),
+    CheckConstraint("available_at <= ingested_at", name=conv("ck_corporate_action_times")),
+)
+Index(
+    "corporate_action_visible_idx",
+    corporate_action.c.symbol,
+    corporate_action.c.effective_at,
+    corporate_action.c.available_at,
 )
 
 alert_event = Table(

@@ -79,7 +79,79 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
                 """
             )
         )
-        for table_name in APPEND_ONLY_TABLES - {"investment_thesis", "decision_snapshot"}:
+        portfolio_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
+        order_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
+        transaction_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
+        connection.execute(
+            text(
+                """
+                INSERT INTO order_intent (
+                    id, portfolio_id, symbol, side, quantity, decision_time,
+                    execution_policy_version_id, risk_approved
+                ) VALUES (
+                    :order_id, :portfolio_id, 'FIXTURE', 'BUY', 1, now() - interval '1 minute',
+                    (SELECT id FROM execution_policy_version LIMIT 1), true
+                )
+                """
+            ),
+            {"portfolio_id": portfolio_id, "order_id": order_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO paper_order (
+                    id, order_intent_id, portfolio_id, symbol, side, quantity, decision_time,
+                    execution_policy_version_id, risk_approved, status
+                )
+                SELECT id, id, portfolio_id, symbol, side, quantity, decision_time,
+                       execution_policy_version_id, risk_approved, 'FILLED'
+                FROM order_intent WHERE id = :order_id
+                """
+            ),
+            {"order_id": order_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO paper_fill (
+                    order_id, portfolio_id, symbol, side, quantity, price, fee, currency,
+                    filled_at, source_bar_time, execution_policy_version_id, idempotency_key
+                ) VALUES (
+                    :order_id, :portfolio_id, 'FIXTURE', 'BUY', 1, 1, 0, 'USD', now(), now(),
+                    (SELECT id FROM execution_policy_version LIMIT 1),
+                    'append-only-fill:' || :order_id
+                )
+                """
+            ),
+            {"portfolio_id": portfolio_id, "order_id": order_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO cash_ledger (
+                    portfolio_id, amount, currency, entry_type, occurred_at, transaction_id,
+                    source_id, account, debit, credit, idempotency_key
+                ) VALUES
+                (
+                    :portfolio_id, 1, 'USD', 'ASSET:CASH', now(), :transaction_id,
+                    :transaction_id, 'ASSET:CASH', 1, 0,
+                    'append-only-ledger:cash:' || :transaction_id
+                ),
+                (
+                    :portfolio_id, -1, 'USD', 'EQUITY:OPENING_BALANCE', now(), :transaction_id,
+                    :transaction_id, 'EQUITY:OPENING_BALANCE', 0, 1,
+                    'append-only-ledger:equity:' || :transaction_id
+                )
+                """
+            ),
+            {"portfolio_id": portfolio_id, "transaction_id": transaction_id},
+        )
+        for table_name in APPEND_ONLY_TABLES - {
+            "investment_thesis",
+            "decision_snapshot",
+            "paper_fill",
+            "cash_ledger",
+        }:
             connection.execute(text(f"INSERT INTO {table_name} DEFAULT VALUES"))
 
         for operation in ("UPDATE", "DELETE"):

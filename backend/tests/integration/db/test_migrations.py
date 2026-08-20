@@ -10,6 +10,7 @@ from alembic.config import Config
 from psycopg import sql
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import DBAPIError
 
 
 @pytest.fixture
@@ -143,3 +144,58 @@ def test_0003_backfills_existing_market_data_from_unique_raw_objects(
         "option-hash",
         "fixture/option",
     )
+
+
+def test_0007_preserves_and_hardens_existing_append_only_facts(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "0006_alert_market_bar_hardening")
+    engine = create_engine(migration_database_url)
+    with engine.begin() as connection:
+        fill_id = connection.execute(
+            text("INSERT INTO paper_fill DEFAULT VALUES RETURNING id")
+        ).scalar_one()
+        ledger_id = connection.execute(
+            text("INSERT INTO cash_ledger DEFAULT VALUES RETURNING id")
+        ).scalar_one()
+    engine.dispose()
+
+    command.upgrade(config, "head")
+    command.upgrade(config, "head")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        fill = connection.execute(
+            text(
+                """
+                SELECT order_id, symbol, execution_policy_version_id, idempotency_key
+                FROM paper_fill WHERE id = :id
+                """
+            ),
+            {"id": fill_id},
+        ).one()
+        ledger = connection.execute(
+            text(
+                """
+                SELECT transaction_id, source_id, account, debit, credit, idempotency_key
+                FROM cash_ledger WHERE id = :id
+                """
+            ),
+            {"id": ledger_id},
+        ).one()
+        assert fill[0] == fill_id
+        assert fill[1] == "FIXTURE"
+        assert fill[2] is not None
+        assert fill[3] == f"legacy:{fill_id}"
+        assert ledger == (
+            ledger_id,
+            ledger_id,
+            "LEGACY:CASH",
+            0,
+            0,
+            f"legacy:{ledger_id}",
+        )
+        with pytest.raises(DBAPIError, match="append-only"):
+            connection.execute(text("UPDATE paper_fill SET created_at = created_at"))
+    engine.dispose()
