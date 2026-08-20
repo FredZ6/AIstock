@@ -306,3 +306,34 @@ isolated worktree.
   Vitest test passed, and the Next.js production build passed.
 - The research layer emits only ResearchOpinion and never PortfolioAction, OrderIntent, notification,
   or execution calls. Numeric scoring/confidence and DecisionDiff are deterministic and versioned.
+
+### Task 9 — complete; awaiting human review
+
+- RED: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest backend/tests/unit/research
+  backend/tests/integration/research -q` — exit 2; three expected collection errors because the
+  citation verifier, numeric verifier, and deterministic report renderer did not exist. An earlier
+  online invocation was blocked by sandbox DNS before collection and is not counted as behavioral
+  RED evidence.
+- Implementation: material claims now carry optional Decimal-only numeric source metadata.
+  `CitationVerifier` deterministically rejects unsupported, wrong-symbol, after-cutoff, stale, and
+  conflicted citations. `NumericVerifier` recomputes cited values with explicit units and tolerances,
+  including distinct percent and percentage-point semantics. `ReportRenderer` emits structured
+  evidence relations, gaps, invalidation conditions, source provenance, deterministic DecisionDiff,
+  all six pinned policy/model/prompt versions, and the paper-research product boundary.
+- Safety gate: a report with any material citation or numeric failure is deterministically forced to
+  `ResearchOpinion.ABSTAIN`; the graph persists it as `COMPLETED_WITH_LIMITATIONS`. No
+  `PortfolioAction`, order, notification, live-broker, or policy-activation path was added.
+- Focused GREEN: the authority command above — exit 0; 11 passed. Combined research unit command —
+  exit 0; 14 passed. Full Agent Core unit/integration command — exit 0; 18 passed. Coverage includes
+  freshness/cutoff, evidence conflict, wrong symbol, missing citation, Decimal-only values, explicit
+  tolerance and units, unsupported fluent prose, complete report sections, and graph-level ABSTAIN.
+- The first full verification stopped at Ruff formatting — exit 2; the second stopped at four
+  fixable import-order/location findings — exit 2. Applying only Ruff's target-file formatting and
+  import fixes resolved both non-behavioral failures.
+- Final repeatability: two consecutive `make verify` runs — exit 0 each; 99 files formatted, Ruff
+  lint passed, strict Mypy passed over 93 source files, Alembic reported no drift, 115 backend tests
+  passed with 3 explicit credential-gated live-provider skips, 1 Vitest test passed, and TypeScript,
+  ESLint, and the Next.js production build passed.
+- Residual risk: verifier freshness limits and unit mappings are intentionally small deterministic
+  v0.2 policy tables. Expanding them requires a later versioned-policy change; real-provider
+  credential tests remain opt-in and are not required for Fixture Mode acceptance.

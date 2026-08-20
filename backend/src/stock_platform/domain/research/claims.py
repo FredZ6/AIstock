@@ -28,10 +28,25 @@ class Claim:
     statement: str
     evidence_id: UUID
     material: bool = True
+    numeric_field: str | None = None
+    numeric_value: Decimal | None = None
+    numeric_unit: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.numeric_value is not None and not isinstance(self.numeric_value, Decimal):
+            raise TypeError("numeric_value must use Decimal")
 
     @classmethod
     def create(
-        cls, *, symbol: str, statement: str, evidence_id: UUID, material: bool = True
+        cls,
+        *,
+        symbol: str,
+        statement: str,
+        evidence_id: UUID,
+        material: bool = True,
+        numeric_field: str | None = None,
+        numeric_value: Decimal | None = None,
+        numeric_unit: str | None = None,
     ) -> Claim:
         return cls(
             id=uuid5(_RESEARCH_NAMESPACE, f"{symbol}:{evidence_id}:{statement}"),
@@ -39,6 +54,9 @@ class Claim:
             statement=statement,
             evidence_id=evidence_id,
             material=material,
+            numeric_field=numeric_field,
+            numeric_value=numeric_value,
+            numeric_unit=numeric_unit,
         )
 
 

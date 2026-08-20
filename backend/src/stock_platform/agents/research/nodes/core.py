@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -10,7 +9,10 @@ from typing import Protocol
 from uuid import UUID
 
 from stock_platform.agents.research.state import ResearchResult, ResearchState, ResearchStatus
+from stock_platform.application.research.citation_verifier import CitationVerifier
+from stock_platform.application.research.numeric_verifier import NumericUnit, NumericVerifier
 from stock_platform.application.research.persistence import ResearchStore
+from stock_platform.application.research.report_renderer import ReportRenderer
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.research.claims import (
     Claim,
@@ -51,6 +53,32 @@ _RESEARCH_FEEDS = (
 
 def _route(name: str) -> dict[str, object]:
     return {"route": (name,)}
+
+
+_NUMERIC_FIELDS = {
+    "revenue": NumericUnit.USD,
+    "close": NumericUnit.USD,
+    "median_target": NumericUnit.USD,
+    "implied_volatility": NumericUnit.RATIO,
+}
+
+
+def _claim_for(item: EvidenceItem) -> Claim:
+    numeric_field = next((field for field in _NUMERIC_FIELDS if field in item.payload), None)
+    numeric_value = Decimal(str(item.payload[numeric_field])) if numeric_field is not None else None
+    numeric_unit = _NUMERIC_FIELDS[numeric_field].value if numeric_field is not None else None
+    numeric_text = f"; {numeric_field}={numeric_value}" if numeric_field is not None else ""
+    return Claim.create(
+        symbol=str(item.symbol),
+        statement=(
+            f"{item.feed_type} evidence {item.content_hash[:12]} was available "
+            f"at {item.available_at.isoformat()}{numeric_text}"
+        ),
+        evidence_id=item.id,
+        numeric_field=numeric_field,
+        numeric_value=numeric_value,
+        numeric_unit=numeric_unit,
+    )
 
 
 class ResearchNodes:
@@ -123,17 +151,7 @@ class ResearchNodes:
         }
 
     def parallel_analysts(self, state: ResearchState) -> dict[str, object]:
-        claims = tuple(
-            Claim.create(
-                symbol=str(item.symbol),
-                statement=(
-                    f"{item.feed_type} evidence {item.content_hash[:12]} was available "
-                    f"at {item.available_at.isoformat()}"
-                ),
-                evidence_id=item.id,
-            )
-            for item in state["evidence"]
-        )
+        claims = tuple(_claim_for(item) for item in state["evidence"])
         return {**_route("parallel_analysts"), "claims": claims}
 
     def evidence_judge(self, state: ResearchState) -> dict[str, object]:
@@ -251,24 +269,63 @@ class ResearchNodes:
         opinion = state["opinion"]
         if thesis is None or opinion is None:
             raise ValueError("thesis and opinion are required before rendering")
-        report = json.dumps(
-            {
-                "product_boundary": "research signal for a paper portfolio; not investment advice",
-                "symbol": str(thesis.symbol),
-                "thesis": thesis.summary,
-                "opinion": opinion.value.value,
-                "claim_ids": [str(item.id) for item in state["claims"]],
-                "evidence_ids": [str(item.id) for item in state["evidence"]],
-                "gaps": [gap.kind.value for gap in state["gaps"]],
-            },
-            sort_keys=True,
+        citations = CitationVerifier().verify(
+            claims=state["claims"],
+            evidence=state["evidence"],
+            conflicts=state["conflicts"],
+            decision_time=state["specification"].data_cutoff,
         )
-        return {**_route("writer"), "report": report}
+        numeric = NumericVerifier().verify_claims(state["claims"], state["evidence"])
+        rendered = ReportRenderer().render(
+            thesis=thesis,
+            opinion=opinion,
+            claims=state["claims"],
+            evidence=state["evidence"],
+            links=state["evidence_links"],
+            gaps=state["gaps"],
+            citation_verification=citations,
+            numeric_verification=numeric,
+            decision_diff={},
+            policy_versions=state["specification"].policy_versions,
+            data_cutoff=state["specification"].data_cutoff,
+        )
+        return {**_route("writer"), "report": rendered.content}
 
     def citation_verifier(self, state: ResearchState) -> dict[str, object]:
-        evidence_ids = {item.id for item in state["evidence"]}
-        verified = all(item.evidence_id in evidence_ids for item in state["claims"])
-        return {**_route("citation_verifier"), "citations_verified": verified}
+        thesis = state["thesis"]
+        opinion = state["opinion"]
+        if thesis is None or opinion is None:
+            raise ValueError("thesis and opinion are required before verification")
+        citations = CitationVerifier().verify(
+            claims=state["claims"],
+            evidence=state["evidence"],
+            conflicts=state["conflicts"],
+            decision_time=state["specification"].data_cutoff,
+        )
+        numeric = NumericVerifier().verify_claims(state["claims"], state["evidence"])
+        rendered = ReportRenderer().render(
+            thesis=thesis,
+            opinion=opinion,
+            claims=state["claims"],
+            evidence=state["evidence"],
+            links=state["evidence_links"],
+            gaps=state["gaps"],
+            citation_verification=citations,
+            numeric_verification=numeric,
+            decision_diff={},
+            policy_versions=state["specification"].policy_versions,
+            data_cutoff=state["specification"].data_cutoff,
+        )
+        issue_warnings = tuple(
+            f"citation:{issue.code.value}" for issue in citations.issues
+        ) + tuple(f"numeric:{issue.code.value}" for issue in numeric.issues)
+        return {
+            **_route("citation_verifier"),
+            "citations_verified": citations.verified and numeric.verified,
+            "opinion": rendered.opinion,
+            "report": rendered.content,
+            "warnings": issue_warnings,
+        }
 
     def decision_diff(self, state: ResearchState) -> dict[str, object]:
         thesis = state["thesis"]
@@ -281,10 +338,37 @@ class ResearchNodes:
             "gap_kinds": sorted(gap.kind.value for gap in state["gaps"]),
             "invalidation_conditions": list(thesis.invalidation_conditions) if thesis else [],
         }
-        return {
+        diff = build_decision_diff({}, current)
+        update: dict[str, object] = {
             **_route("decision_diff"),
-            "decision_diff": build_decision_diff({}, current),
+            "decision_diff": diff,
         }
+        if thesis is not None and opinion is not None:
+            citations = CitationVerifier().verify(
+                claims=state["claims"],
+                evidence=state["evidence"],
+                conflicts=state["conflicts"],
+                decision_time=state["specification"].data_cutoff,
+            )
+            numeric = NumericVerifier().verify_claims(state["claims"], state["evidence"])
+            update["report"] = (
+                ReportRenderer()
+                .render(
+                    thesis=thesis,
+                    opinion=opinion,
+                    claims=state["claims"],
+                    evidence=state["evidence"],
+                    links=state["evidence_links"],
+                    gaps=state["gaps"],
+                    citation_verification=citations,
+                    numeric_verification=numeric,
+                    decision_diff=diff,
+                    policy_versions=state["specification"].policy_versions,
+                    data_cutoff=state["specification"].data_cutoff,
+                )
+                .content
+            )
+        return update
 
     def persist_decision(self, state: ResearchState) -> dict[str, object]:
         opinion = state["opinion"]

@@ -68,12 +68,13 @@ def test_conflict_fixture_reflects_once_and_persists_typed_decision() -> None:
         specification=specification(),
     )
 
-    assert result.status is ResearchStatus.COMPLETED
+    assert result.status is ResearchStatus.COMPLETED_WITH_LIMITATIONS
     assert result.reflections == 1
     assert result.route.count("reflect") == 1
     assert result.thesis is not None
     assert not hasattr(result.thesis, "evidence_ids")
     assert result.opinion is not None
+    assert result.opinion.value.value == "ABSTAIN"
     assert result.decision_diff is not None
     assert result.evidence_links
     assert any(gap.kind.value == "CONFLICTED" for gap in result.gaps)
