@@ -384,3 +384,38 @@ worktree.
 - Test report: this section is the durable command/exit-code report. Residual risk: real Alpaca
   stream and external Telegram/Feishu/email endpoints are intentionally not exercised without
   credentials; fixture replay and adapter retry contracts are authoritative for M3 acceptance.
+
+### Task 10 independent-review remediation — 2026-08-20
+
+- Durable ACK RED: the focused commit-order test exited 1 because Redis ACK occurred with no
+  outer PostgreSQL commit. GREEN: `AlertWorker` now commits the complete bar/alert/explanation/
+  outbox transaction before ACK and rolls back processing failures; a second database connection
+  verifies the alert is visible before the message is considered complete. Outbox delivery-state
+  RED also exited 1 with no commit event; the dispatcher now commits each saved channel result and
+  rolls back persistence errors.
+- Pending recovery RED: a replacement Redis consumer could only read `>` and the crashed
+  consumer's entry remained pending. GREEN: `RedisMarketStream.read` first uses `XAUTOCLAIM` after
+  the configured idle threshold, and the integration test proves ownership transfer followed by
+  ACK reduces pending count from one to zero.
+- Point-in-time RED: `recent_bars` accepted no evaluation cutoff and could include a record whose
+  `available_at` was later than the decision context. GREEN: callers must supply `available_by`,
+  the SQL applies `market_bar.available_at <= available_by`, and a future-available fixture is
+  excluded.
+- Explanation deadline RED: a blocking explainer held the worker for about 0.25 seconds despite a
+  0.01-second budget. GREEN: the non-authoritative explainer runs behind a hard worker deadline;
+  timeout returns in under 0.1 seconds, records `FAILED/TIMEOUT`, preserves the deterministic alert,
+  commits, and ACKs.
+- Focused remediation suite: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest
+  backend/tests/unit/alerting backend/tests/integration/alerting -q` — exit 0; 19 passed. The same
+  command inside the restricted sandbox first reported 3 localhost-permission setup errors after
+  16 unit tests passed; rerunning unchanged with local PostgreSQL/Redis permission passed all 19.
+- Static gates: Ruff format check, Ruff lint, and strict Mypy — exit 0; 110 source files checked.
+  Alembic `upgrade head` executed twice — exit 0 both times; `alembic check` — exit 0 with no drift.
+- Final acceptance: `make verify` — exit 0; 117 files formatted, Ruff lint passed, strict Mypy
+  passed over 110 source files, Alembic and MCP contract drift checks passed, 134 backend tests
+  passed with 3 explicit credential-gated provider skips, TypeScript and ESLint passed, 1 Vitest
+  test passed, and the Next.js production build passed.
+- Residual risk: real Alpaca streaming and external notification endpoints remain intentionally
+  credential-gated. Python cannot forcibly terminate an arbitrary blocked explainer thread; the
+  worker deadline prevents pipeline blocking, while provider-side cancellation remains the
+  explainer adapter's responsibility.

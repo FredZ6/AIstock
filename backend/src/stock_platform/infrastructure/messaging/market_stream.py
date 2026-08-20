@@ -97,7 +97,26 @@ class RedisMarketStream:
         consumer: str,
         count: int = 10,
         block_ms: int = 1000,
+        reclaim_idle_ms: int | None = 60_000,
     ) -> tuple[StreamMessage, ...]:
+        if reclaim_idle_ms is not None:
+            claimed = cast(
+                list[object],
+                self._client.xautoclaim(
+                    self.stream_name,
+                    group,
+                    consumer,
+                    min_idle_time=reclaim_idle_ms,
+                    start_id="0-0",
+                    count=count,
+                ),
+            )
+            claimed_entries = cast(list[tuple[str, dict[str, str]]], claimed[1])
+            if claimed_entries:
+                return tuple(
+                    StreamMessage(message_id, _decode_bar(fields["bar"]))
+                    for message_id, fields in claimed_entries
+                )
         response = cast(
             list[tuple[str, list[tuple[str, dict[str, str]]]]],
             self._client.xreadgroup(

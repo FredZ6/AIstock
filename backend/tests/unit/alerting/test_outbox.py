@@ -21,6 +21,18 @@ class RecordingAdapter:
             raise TimeoutError("fixture timeout")
 
 
+class TransactionRecordingOutboxStore(InMemoryOutboxStore):
+    def __init__(self, messages: tuple[OutboxMessage, ...]) -> None:
+        super().__init__(messages)
+        self.transaction_events: list[str] = []
+
+    def commit(self) -> None:
+        self.transaction_events.append("commit")
+
+    def rollback(self) -> None:
+        self.transaction_events.append("rollback")
+
+
 def test_one_outbox_message_retries_only_failed_channel_without_duplication() -> None:
     now = datetime(2026, 8, 20, 14, 40, tzinfo=UTC)
     message = OutboxMessage.create(
@@ -75,3 +87,24 @@ def test_missing_channel_adapter_is_a_visible_retry_not_a_dropped_message() -> N
     retried = store.get(message.id)
     assert retried.status is DeliveryStatus.RETRY
     assert retried.channel_states[NotificationChannel.EMAIL].last_error == "ADAPTER_UNAVAILABLE"
+
+
+def test_delivery_state_is_committed_before_dispatch_returns() -> None:
+    now = datetime(2026, 8, 20, 14, 40, tzinfo=UTC)
+    message = OutboxMessage.create(
+        alert_id=uuid4(),
+        alert_key="NVDA:market-anomaly-v1:durable-delivery",
+        payload={"symbol": "NVDA"},
+        channels=(NotificationChannel.EMAIL,),
+        created_at=now,
+    )
+    store = TransactionRecordingOutboxStore((message,))
+    dispatcher = OutboxDispatcher(
+        store=store,
+        adapters={NotificationChannel.EMAIL: RecordingAdapter()},
+        clock=lambda: now,
+    )
+
+    dispatcher.dispatch_due()
+
+    assert store.transaction_events == ["commit"]

@@ -3,11 +3,16 @@ import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
+import psycopg
 import pytest
-from sqlalchemy import func, insert, select
-from sqlalchemy.engine import Connection, Engine
+from alembic import command
+from alembic.config import Config
+from psycopg import sql
+from sqlalchemy import create_engine, func, insert, select
+from sqlalchemy.engine import Connection, Engine, make_url
 from stock_platform.application.alerting.outbox import (
     AlertContext,
     NotificationChannel,
@@ -37,12 +42,13 @@ def raw_bar(
     volume: str,
     open_: str = "100",
     suffix: str = "",
+    symbol: str = "NVDA",
 ) -> bytes:
     event_time = START + timedelta(minutes=minute)
     return json.dumps(
         {
             "T": "b",
-            "S": "NVDA",
+            "S": symbol,
             "t": event_time.isoformat().replace("+00:00", "Z"),
             "o": open_,
             "h": str(Decimal(close) + Decimal("0.2")),
@@ -56,8 +62,55 @@ def raw_bar(
     ).encode()
 
 
+@pytest.fixture(scope="module")
+def alert_engine() -> Iterator[Engine]:
+    base_url = make_url(
+        os.getenv(
+            "DATABASE_URL",
+            "postgresql+psycopg://postgres:postgres@localhost:55432/stock_platform",
+        )
+    )
+    database_name = f"stock_platform_alert_{uuid4().hex}"
+    assert base_url.host is not None
+    assert base_url.port is not None
+    assert base_url.username is not None
+    with psycopg.connect(
+        host=base_url.host,
+        port=base_url.port,
+        user=base_url.username,
+        password=base_url.password,
+        dbname="postgres",
+        autocommit=True,
+    ) as admin:
+        admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database_name)))
+
+    database_url = base_url.set(database=database_name).render_as_string(hide_password=False)
+    config = Config(str(Path(__file__).parents[3] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", database_url)
+    command.upgrade(config, "head")
+    instance = create_engine(database_url)
+    try:
+        yield instance
+    finally:
+        instance.dispose()
+        with psycopg.connect(
+            host=base_url.host,
+            port=base_url.port,
+            user=base_url.username,
+            password=base_url.password,
+            dbname="postgres",
+            autocommit=True,
+        ) as admin:
+            admin.execute(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = %s AND pid <> pg_backend_pid()",
+                (database_name,),
+            )
+            admin.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(database_name)))
+
+
 @pytest.fixture
-def alert_runtime(engine: Engine) -> Iterator[tuple[Connection, RedisMarketStream, str]]:
+def alert_runtime(alert_engine: Engine) -> Iterator[tuple[Connection, RedisMarketStream, str]]:
     stream_name = f"market-bars-{uuid4().hex}"
     group = f"alert-workers-{uuid4().hex}"
     stream = RedisMarketStream(
@@ -65,12 +118,10 @@ def alert_runtime(engine: Engine) -> Iterator[tuple[Connection, RedisMarketStrea
         stream_name=stream_name,
     )
     stream.create_consumer_group(group)
-    with engine.connect() as connection:
-        transaction = connection.begin()
+    with alert_engine.connect() as connection:
         try:
             yield connection, stream, group
         finally:
-            transaction.rollback()
             stream.delete()
             stream.close()
 
@@ -89,6 +140,7 @@ class RecordingAdapter:
 
 def test_market_replay_is_deterministic_idempotent_and_delivers_without_llm(
     alert_runtime: tuple[Connection, RedisMarketStream, str],
+    alert_engine: Engine,
 ) -> None:
     connection, stream, group = alert_runtime
     thesis_id = uuid4()
@@ -198,6 +250,13 @@ def test_market_replay_is_deterministic_idempotent_and_delivers_without_llm(
         == "DISABLED"
     )
     assert stream.pending_count(group=group) == 0
+    with alert_engine.connect() as verifier:
+        assert (
+            verifier.execute(
+                select(func.count()).select_from(alert_event).where(alert_event.c.id == alert_id)
+            ).scalar_one()
+            == 1
+        )
 
     repeated = normalizer.normalize(
         payloads[-1], received_at=START + timedelta(minutes=5, seconds=2)
@@ -268,3 +327,57 @@ def test_market_replay_is_deterministic_idempotent_and_delivers_without_llm(
     assert telegram.calls == 1
     assert feishu.calls == 2
     assert email.calls == 1
+
+
+def test_pending_stream_entry_is_claimed_by_replacement_consumer(
+    alert_runtime: tuple[Connection, RedisMarketStream, str],
+) -> None:
+    _connection, stream, group = alert_runtime
+    normalizer = AlpacaStreamNormalizer()
+    item = normalizer.normalize(
+        raw_bar(10, close="101", volume="200", symbol="AMD"),
+        received_at=START + timedelta(minutes=10, seconds=2),
+    )
+    stream.publish(item)
+
+    original = stream.read(group=group, consumer="worker-crashed", count=1, block_ms=10)
+    reclaimed = stream.read(
+        group=group,
+        consumer="worker-replacement",
+        count=1,
+        block_ms=10,
+        reclaim_idle_ms=0,
+    )
+
+    assert reclaimed == original
+    assert stream.pending_count(group=group) == 1
+    stream.acknowledge(group=group, message_id=reclaimed[0].id)
+    assert stream.pending_count(group=group) == 0
+
+
+def test_recent_bars_enforces_available_at_cutoff(
+    alert_runtime: tuple[Connection, RedisMarketStream, str],
+) -> None:
+    connection, _stream, _group = alert_runtime
+    normalizer = AlpacaStreamNormalizer()
+    store = PostgresAlertStore(connection)
+    visible = normalizer.normalize(
+        raw_bar(20, close="100", volume="100", symbol="CUT"),
+        received_at=START + timedelta(minutes=20, seconds=2),
+    )
+    future_available = normalizer.normalize(
+        raw_bar(21, close="105", volume="500", symbol="CUT"),
+        received_at=START + timedelta(minutes=30),
+    )
+    store.persist_bar(visible)
+    store.persist_bar(future_available)
+    store.commit()
+
+    records = store.recent_bars(
+        symbol="CUT",
+        through=future_available.event_time,
+        available_by=START + timedelta(minutes=25),
+        limit=10,
+    )
+
+    assert records == (visible,)

@@ -117,6 +117,10 @@ class DeliveryStore(Protocol):
 
     def save_delivery(self, message: OutboxMessage) -> None: ...
 
+    def commit(self) -> None: ...
+
+    def rollback(self) -> None: ...
+
 
 class InMemoryOutboxStore:
     def __init__(self, messages: Sequence[OutboxMessage] = ()) -> None:
@@ -132,6 +136,12 @@ class InMemoryOutboxStore:
 
     def save_delivery(self, message: OutboxMessage) -> None:
         self._messages[message.id] = message
+
+    def commit(self) -> None:
+        pass
+
+    def rollback(self) -> None:
+        pass
 
     def get(self, message_id: UUID) -> OutboxMessage:
         return self._messages[message_id]
@@ -206,7 +216,12 @@ class OutboxDispatcher:
                 last_error=errors[0] if errors else None,
                 delivered_at=now if complete else None,
             )
-            self._store.save_delivery(updated)
+            try:
+                self._store.save_delivery(updated)
+                self._store.commit()
+            except Exception:
+                self._store.rollback()
+                raise
             delivered += int(complete)
         return delivered
 
@@ -228,6 +243,12 @@ def _json_safe(value: object) -> object:
 class PostgresAlertStore:
     def __init__(self, connection: Connection) -> None:
         self.connection = connection
+
+    def commit(self) -> None:
+        self.connection.commit()
+
+    def rollback(self) -> None:
+        self.connection.rollback()
 
     def persist_bar(self, item: MinuteBar) -> BarPersistence:
         existing = self.connection.execute(
@@ -312,8 +333,10 @@ class PostgresAlertStore:
         *,
         symbol: str,
         through: datetime,
+        available_by: datetime,
         limit: int,
     ) -> tuple[MinuteBar, ...]:
+        cutoff = require_aware(available_by)
         rows = self.connection.execute(
             select(market_bar)
             .where(
@@ -321,6 +344,7 @@ class PostgresAlertStore:
                     market_bar.c.symbol == symbol,
                     market_bar.c.feed_type == "minute_bars_stream",
                     market_bar.c.event_time <= require_aware(through),
+                    market_bar.c.available_at <= cutoff,
                 )
             )
             .order_by(market_bar.c.event_time.desc())

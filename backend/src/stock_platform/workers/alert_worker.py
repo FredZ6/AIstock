@@ -6,6 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
+from queue import Empty, Queue
+from threading import Thread
 from typing import Protocol
 from uuid import UUID
 
@@ -38,7 +40,7 @@ class AlertStore(Protocol):
     def persist_bar(self, item: MinuteBar) -> BarPersistence | bool: ...
 
     def recent_bars(
-        self, *, symbol: str, through: datetime, limit: int
+        self, *, symbol: str, through: datetime, available_by: datetime, limit: int
     ) -> tuple[MinuteBar, ...]: ...
 
     def persist_alert(
@@ -61,6 +63,10 @@ class AlertStore(Protocol):
         content: str | None,
         error_code: str | None,
     ) -> None: ...
+
+    def commit(self) -> None: ...
+
+    def rollback(self) -> None: ...
 
 
 class AlertExplainer(Protocol):
@@ -85,8 +91,10 @@ class AlertWorker:
         explainer: AlertExplainer | None,
         channels: tuple[NotificationChannel, ...],
         cooldown: timedelta = timedelta(minutes=15),
-        explanation_timeout_seconds: int = 20,
+        explanation_timeout_seconds: float = 20,
     ) -> None:
+        if explanation_timeout_seconds <= 0:
+            raise ValueError("explanation_timeout_seconds must be positive")
         self._stream = stream
         self._store = store
         self._rule = rule
@@ -98,22 +106,30 @@ class AlertWorker:
         self._calculator = FeatureCalculator(lookback=5)
 
     def process(self, message: StreamMessage, *, group: str) -> ProcessResult:
+        try:
+            result = self._process(message)
+        except Exception:
+            self._store.rollback()
+            raise
+        self._store.commit()
+        self._stream.acknowledge(group=group, message_id=message.id)
+        return result
+
+    def _process(self, message: StreamMessage) -> ProcessResult:
         persistence = self._store.persist_bar(message.bar)
         if persistence is BarPersistence.OUT_OF_ORDER:
-            self._stream.acknowledge(group=group, message_id=message.id)
             return ProcessResult("OUT_OF_ORDER", None, None)
         history = self._store.recent_bars(
             symbol=str(message.bar.symbol),
             through=message.bar.event_time,
+            available_by=message.bar.ingested_at,
             limit=6,
         )
         if len(history) < 6:
-            self._stream.acknowledge(group=group, message_id=message.id)
             return ProcessResult("INSUFFICIENT_HISTORY", None, None)
         features = self._calculator.calculate(history, evaluated_at=message.bar.ingested_at)
         evaluation = self._rule.evaluate(features)
         if not evaluation.triggered:
-            self._stream.acknowledge(group=group, message_id=message.id)
             return ProcessResult("NO_ALERT", None, features)
         identity = AlertIdentity.for_trigger(
             symbol=str(features.symbol),
@@ -145,12 +161,7 @@ class AlertWorker:
             )
         else:
             try:
-                explanation = self._explainer.explain(
-                    features=features,
-                    evaluation=evaluation,
-                    context=context,
-                    timeout_seconds=self._explanation_timeout_seconds,
-                )
+                explanation = self._explain_with_deadline(features, evaluation, context)
             except TimeoutError:
                 self._store.record_explanation(
                     alert_id=identity.id,
@@ -172,5 +183,37 @@ class AlertWorker:
                     content=explanation,
                     error_code=None,
                 )
-        self._stream.acknowledge(group=group, message_id=message.id)
         return ProcessResult("ALERT", identity.id, features)
+
+    def _explain_with_deadline(
+        self,
+        features: AnomalyFeatures,
+        evaluation: RuleEvaluation,
+        context: AlertContext,
+    ) -> str:
+        assert self._explainer is not None
+        explainer = self._explainer
+        result: Queue[tuple[str | None, Exception | None]] = Queue(maxsize=1)
+
+        def invoke() -> None:
+            try:
+                explanation = explainer.explain(
+                    features=features,
+                    evaluation=evaluation,
+                    context=context,
+                    timeout_seconds=self._explanation_timeout_seconds,
+                )
+            except Exception as error:  # noqa: BLE001 - forwarded to the worker boundary
+                result.put((None, error))
+            else:
+                result.put((explanation, None))
+
+        Thread(target=invoke, name="alert-explanation", daemon=True).start()
+        try:
+            explanation, error = result.get(timeout=self._explanation_timeout_seconds)
+        except Empty as timeout:
+            raise TimeoutError("explanation exceeded budget") from timeout
+        if error is not None:
+            raise error
+        assert explanation is not None
+        return explanation
