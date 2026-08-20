@@ -4,17 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from typing import Protocol, cast
 from uuid import UUID, uuid5
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import Connection, and_, func, select, update
+from sqlalchemy import Connection, and_, case, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import RowMapping
 
-from stock_platform.application.alerting.features import AnomalyFeatures, MinuteBar
+from stock_platform.application.alerting.features import AnomalyFeatures, GapContext, MinuteBar
 from stock_platform.application.alerting.rules import RuleEvaluation
 from stock_platform.domain.common.time import require_aware
 from stock_platform.infrastructure.db.models.tables import (
@@ -22,13 +23,18 @@ from stock_platform.infrastructure.db.models.tables import (
     alert_explanation,
     alert_metric,
     alert_thesis_link,
+    derived_metric,
+    evidence_item,
+    investment_thesis,
     market_bar,
     normalized_record,
     notification_outbox,
     raw_data_object,
+    thesis_evidence_link,
 )
 
 _OUTBOX_NAMESPACE = UUID("4458e60a-ad59-420c-a71b-c2ca80e34a41")
+_NEW_YORK = ZoneInfo("America/New_York")
 
 
 class NotificationChannel(StrEnum):
@@ -54,6 +60,85 @@ class AlertContext:
     thesis_id: UUID
     invalidation_condition: str | None
     evidence_id: UUID | None
+
+
+class PostgresAlertContextResolver:
+    def __init__(self, connection: Connection) -> None:
+        self._connection = connection
+
+    def __call__(self, symbol: str, decision_time: datetime) -> AlertContext:
+        cutoff = require_aware(decision_time).astimezone(UTC)
+        row = (
+            self._connection.execute(
+                select(
+                    investment_thesis.c.id.label("thesis_id"),
+                    investment_thesis.c.invalidation_conditions,
+                    evidence_item.c.id.label("evidence_id"),
+                )
+                .select_from(
+                    investment_thesis.join(
+                        thesis_evidence_link,
+                        thesis_evidence_link.c.thesis_id == investment_thesis.c.id,
+                    )
+                    .join(
+                        evidence_item,
+                        evidence_item.c.id == thesis_evidence_link.c.evidence_id,
+                    )
+                    .join(
+                        derived_metric,
+                        derived_metric.c.id == evidence_item.c.derived_metric_id,
+                    )
+                    .join(
+                        normalized_record,
+                        normalized_record.c.id == derived_metric.c.normalized_record_id,
+                    )
+                    .join(
+                        raw_data_object,
+                        raw_data_object.c.id == normalized_record.c.raw_data_object_id,
+                    )
+                )
+                .where(
+                    and_(
+                        investment_thesis.c.symbol == symbol,
+                        investment_thesis.c.as_of <= cutoff,
+                        investment_thesis.c.created_at <= cutoff,
+                        thesis_evidence_link.c.created_at <= cutoff,
+                        evidence_item.c.created_at <= cutoff,
+                        derived_metric.c.created_at <= cutoff,
+                        normalized_record.c.created_at <= cutoff,
+                        raw_data_object.c.available_at <= cutoff,
+                        raw_data_object.c.created_at <= cutoff,
+                    )
+                )
+                .order_by(
+                    investment_thesis.c.as_of.desc(),
+                    investment_thesis.c.created_at.desc(),
+                    investment_thesis.c.id,
+                    case(
+                        (thesis_evidence_link.c.relation == "SUPPORTS", 0),
+                        (thesis_evidence_link.c.relation == "CONTRADICTS", 1),
+                        else_=2,
+                    ),
+                    thesis_evidence_link.c.weight.desc(),
+                    evidence_item.c.id,
+                )
+                .limit(1)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise LookupError(f"no cutoff-safe thesis evidence for {symbol}")
+        invalidation_conditions = cast(list[object], row["invalidation_conditions"])
+        invalidation = next(
+            (str(item) for item in invalidation_conditions if str(item).strip()),
+            None,
+        )
+        return AlertContext(
+            thesis_id=cast(UUID, row["thesis_id"]),
+            invalidation_condition=invalidation,
+            evidence_id=cast(UUID, row["evidence_id"]),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -270,8 +355,7 @@ class PostgresAlertStore:
                 )
             )
         ).scalar_one_or_none()
-        if latest is not None and item.event_time < latest:
-            return BarPersistence.OUT_OF_ORDER
+        out_of_order = latest is not None and item.event_time < latest
         with self.connection.begin_nested():
             raw_id = cast(
                 UUID,
@@ -322,11 +406,12 @@ class PostgresAlertStore:
                     close=item.close,
                     volume=item.volume,
                     previous_close=item.previous_close,
+                    conflict=item.conflict,
                     payload=_json_safe(item.raw_payload),
                 )
                 .on_conflict_do_nothing()
             )
-        return BarPersistence.NEW
+        return BarPersistence.OUT_OF_ORDER if out_of_order else BarPersistence.NEW
 
     def recent_bars(
         self,
@@ -337,8 +422,24 @@ class PostgresAlertStore:
         limit: int,
     ) -> tuple[MinuteBar, ...]:
         cutoff = require_aware(available_by)
-        rows = self.connection.execute(
-            select(market_bar)
+        ranked = (
+            select(
+                *market_bar.c,
+                func.row_number()
+                .over(
+                    partition_by=(
+                        market_bar.c.symbol,
+                        market_bar.c.feed_type,
+                        market_bar.c.event_time,
+                    ),
+                    order_by=(
+                        market_bar.c.available_at.desc(),
+                        market_bar.c.ingested_at.desc(),
+                        market_bar.c.content_hash.desc(),
+                    ),
+                )
+                .label("revision_rank"),
+            )
             .where(
                 and_(
                     market_bar.c.symbol == symbol,
@@ -347,7 +448,12 @@ class PostgresAlertStore:
                     market_bar.c.available_at <= cutoff,
                 )
             )
-            .order_by(market_bar.c.event_time.desc())
+            .subquery()
+        )
+        rows = self.connection.execute(
+            select(ranked)
+            .where(ranked.c.revision_rank == 1)
+            .order_by(ranked.c.event_time.desc())
             .limit(limit)
         ).mappings()
         result = [
@@ -366,10 +472,71 @@ class PostgresAlertStore:
                 content_hash=row["content_hash"],
                 raw_object_key=row["raw_object_key"],
                 raw_payload=row["payload"],
+                conflict=row["conflict"],
             )
             for row in rows
         ]
         return tuple(reversed(result))
+
+    def gap_context(
+        self,
+        *,
+        symbol: str,
+        through: datetime,
+        available_by: datetime,
+    ) -> GapContext | None:
+        event_cutoff = require_aware(through).astimezone(UTC)
+        availability_cutoff = require_aware(available_by).astimezone(UTC)
+        session_date = event_cutoff.astimezone(_NEW_YORK).date()
+        session_open = datetime.combine(session_date, time(9, 30), _NEW_YORK).astimezone(UTC)
+        if event_cutoff < session_open:
+            return None
+        open_row = self.connection.execute(
+            select(market_bar.c.open)
+            .where(
+                and_(
+                    market_bar.c.symbol == symbol,
+                    market_bar.c.feed_type == "minute_bars_stream",
+                    market_bar.c.event_time == session_open,
+                    market_bar.c.available_at <= availability_cutoff,
+                )
+            )
+            .order_by(
+                market_bar.c.available_at.desc(),
+                market_bar.c.ingested_at.desc(),
+                market_bar.c.content_hash.desc(),
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if open_row is None:
+            return None
+        prior_closes = tuple(
+            datetime.combine(
+                session_date - timedelta(days=days), time(15, 59), _NEW_YORK
+            ).astimezone(UTC)
+            for days in range(1, 8)
+        )
+        previous_close = self.connection.execute(
+            select(market_bar.c.close)
+            .where(
+                and_(
+                    market_bar.c.symbol == symbol,
+                    market_bar.c.feed_type == "minute_bars_stream",
+                    market_bar.c.event_time.in_(prior_closes),
+                    market_bar.c.available_at <= availability_cutoff,
+                )
+            )
+            .order_by(
+                market_bar.c.event_time.desc(),
+                market_bar.c.available_at.desc(),
+                market_bar.c.ingested_at.desc(),
+                market_bar.c.content_hash.desc(),
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if previous_close is None:
+            return None
+        return GapContext(session_open=open_row, previous_close=previous_close)
 
     def persist_alert(
         self,
@@ -524,6 +691,7 @@ class PostgresAlertStore:
                 )
             )
             .order_by(notification_outbox.c.created_at)
+            .with_for_update(skip_locked=True)
         ).mappings()
         return tuple(self._message_from_row(row) for row in rows)
 

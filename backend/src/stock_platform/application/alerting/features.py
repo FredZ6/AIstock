@@ -64,6 +64,16 @@ class DataQuality:
 
 
 @dataclass(frozen=True, slots=True)
+class GapContext:
+    session_open: Decimal
+    previous_close: Decimal
+
+    def __post_init__(self) -> None:
+        _require_decimal("session_open", self.session_open)
+        _require_decimal("previous_close", self.previous_close)
+
+
+@dataclass(frozen=True, slots=True)
 class AnomalyFeatures:
     symbol: Symbol
     event_time: datetime
@@ -128,6 +138,7 @@ class FeatureCalculator:
         bars: Sequence[MinuteBar],
         *,
         evaluated_at: datetime,
+        gap_context: GapContext | None = None,
     ) -> AnomalyFeatures:
         cutoff = require_aware(evaluated_at).astimezone(UTC)
         ordered = tuple(sorted(bars, key=lambda item: item.event_time))
@@ -169,12 +180,10 @@ class FeatureCalculator:
             if current_return is not None
             else None
         )
-        session_bar = ordered[0]
-        previous_close = session_bar.previous_close
         gap = (
             None
-            if previous_close is None or previous_close == _ZERO
-            else session_bar.open / previous_close - _ONE
+            if gap_context is None or gap_context.previous_close == _ZERO
+            else gap_context.session_open / gap_context.previous_close - _ONE
         )
         breakout = None
         if prior:

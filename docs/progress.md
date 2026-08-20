@@ -419,3 +419,60 @@ worktree.
   credential-gated. Python cannot forcibly terminate an arbitrary blocked explainer thread; the
   worker deadline prevents pipeline blocking, while provider-side cancellation remains the
   explainer adapter's responsibility.
+
+### Task 10 final P1 merge-gate remediation — 2026-08-21
+
+- Raw-first Alpaca ingestion RED: the focused normalizer suite exited 1 with 3 failures because
+  the normalizer had no required object-store boundary and rejected Alpaca updated-bar messages
+  (`T=u`). GREEN: `AlpacaStreamNormalizer` now requires a `RawObjectStore`, writes the exact source
+  bytes before returning a publishable bar, and accepts only bar/update messages; 3 tests passed.
+- Corrected-market-data RED: the real PostgreSQL/MinIO probe exited 1 with 2 failures / 1 pass:
+  same-event-time revisions both appeared in the feature window, `conflict=True` returned as false,
+  and an out-of-order record had no database lineage. GREEN: migration
+  `0006_alert_market_bar_hardening` adds the non-null conflict fact and canonical-revision index;
+  cutoff-safe SQL selects one deterministic latest-available revision per event time, while every
+  distinct raw/update/out-of-order payload persists RawDataObject → NormalizedRecord → MarketBar.
+  The corrected-bar, lineage, and exact MinIO-byte tests then passed 3/3.
+- Session gap RED: the PostgreSQL test exited 1 because the store exposed no gap context. GREEN:
+  gap is calculated only from the actual 09:30 America/New_York minute open and the latest available
+  prior regular-session 15:59 close; a truncated six-bar intraday window cannot invent a gap. The
+  focused database test and four Decimal feature tests passed.
+- Thesis/Evidence RED: the focused test exited 4 at collection because no concrete resolver
+  existed. GREEN: `PostgresAlertContextResolver` chooses the latest matching Thesis with linked
+  Evidence whose complete RawDataObject → NormalizedRecord → DerivedMetric → Evidence chain is
+  available and created by the decision cutoff. Future and wrong-symbol contexts are excluded; the
+  focused PostgreSQL test passed. A worker RED test also proved it previously resolved at event time;
+  GREEN resolves at the ingestion/decision cutoff and the worker suite passed 4/4.
+- Concurrent delivery RED: two dispatchers on separate PostgreSQL connections both sent the same
+  pending outbox row (2 calls; focused test exit 1). GREEN: due rows are transactionally claimed with
+  `FOR UPDATE SKIP LOCKED`; the same two-connection test exits 0 with one delivered result and one
+  adapter call. The stable alert key remains in the payload for downstream idempotency.
+- Combined alerting regression: `UV_CACHE_DIR=$PWD/.uv-cache uv run pytest -q
+  backend/tests/unit/alerting backend/tests/integration/alerting/test_market_replay.py` — exit 0;
+  27 passed against real PostgreSQL, Redis, and MinIO.
+- Migration repeatability: `uv run alembic -c backend/alembic.ini upgrade head` from 0005 — exit 0;
+  the identical command at head — exit 0. `alembic check` inside verification reported no drift.
+- Complete acceptance: `make verify` — exit 0; 118 files formatted, Ruff lint passed, strict Mypy
+  passed over 110 source files, Alembic and MCP contract drift checks passed, 142 backend tests
+  passed with 3 explicit credential-gated provider tests skipped, TypeScript and ESLint passed,
+  1 Vitest test passed, and the Next.js production build completed successfully.
+- Remaining external boundary: real Alpaca and Telegram/Feishu/email credential tests remain
+  intentionally opt-in. Fixture Mode, the real local PostgreSQL/Redis/MinIO pipeline, deterministic
+  alert generation, point-in-time lineage, and concurrent outbox claiming satisfy the M3 merge gate;
+  no live-broker or real-money path exists.
+
+### Task 10 P2 explainer-output remediation — 2026-08-21
+
+- Runtime-validation RED: the focused worker command exited 1 with 6 failures. `None` produced a
+  generic explanation error, while a non-string, empty text, whitespace-only text, over-4000-character
+  text, and untrimmed valid text could cross the explainer boundary without the required validation.
+- GREEN: the explainer boundary now requires a real string, trims surrounding whitespace, rejects
+  empty output, and enforces a 4000-character normalized limit. Invalid output is durably classified
+  as `FAILED/INVALID_OUTPUT`; it cannot suppress the deterministic alert, transaction commit, or
+  stream ACK. Focused output tests — exit 0; 6 passed / 4 deselected.
+- Alerting regression: strict Mypy and Ruff — exit 0; full alerting unit plus real
+  PostgreSQL/Redis/MinIO integration command — exit 0; 33 passed.
+- Complete acceptance: `make verify` — exit 0; Ruff format/lint, strict Mypy, Alembic and MCP
+  contract drift checks passed, 148 backend tests passed with 3 explicit credential-gated provider
+  tests skipped, TypeScript and ESLint passed, 1 Vitest test passed, and the Next.js production build
+  completed successfully.

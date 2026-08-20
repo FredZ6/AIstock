@@ -11,6 +11,7 @@ from typing import cast
 from stock_platform.application.alerting.features import MinuteBar
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
+from stock_platform.infrastructure.providers.base import RawObjectStore
 
 
 def _decimal(payload: dict[str, object], key: str) -> Decimal:
@@ -21,13 +22,16 @@ def _decimal(payload: dict[str, object], key: str) -> Decimal:
 
 
 class AlpacaStreamNormalizer:
+    def __init__(self, *, raw_store: RawObjectStore) -> None:
+        self._raw_store = raw_store
+
     def normalize(self, raw: bytes, *, received_at: datetime) -> MinuteBar:
         received = require_aware(received_at).astimezone(UTC)
         try:
             decoded = json.loads(raw, parse_float=Decimal, parse_int=Decimal)
         except (json.JSONDecodeError, UnicodeDecodeError) as error:
             raise ValueError("Alpaca stream payload is invalid JSON") from error
-        if not isinstance(decoded, dict) or decoded.get("T") != "b":
+        if not isinstance(decoded, dict) or decoded.get("T") not in {"b", "u"}:
             raise ValueError("Alpaca stream payload must be a minute bar")
         payload = cast(dict[str, object], decoded)
         try:
@@ -41,6 +45,7 @@ class AlpacaStreamNormalizer:
         content_hash = hashlib.sha256(raw).hexdigest()
         date_path = event_time.strftime("%Y/%m/%d")
         object_key = f"alpaca-stream/{symbol.lower()}/{date_path}/{content_hash}.json"
+        self._raw_store.put(object_key, raw, "application/json")
         previous_close = _decimal(payload, "pc") if "pc" in payload else None
         return MinuteBar(
             symbol=Symbol(symbol),

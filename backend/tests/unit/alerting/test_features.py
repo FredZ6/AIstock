@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
-from stock_platform.application.alerting.features import FeatureCalculator, MinuteBar
+from stock_platform.application.alerting.features import FeatureCalculator, GapContext, MinuteBar
 from stock_platform.domain.common.ids import Symbol
 
 START = datetime(2026, 8, 20, 14, 30, tzinfo=UTC)
@@ -50,6 +50,10 @@ def test_anomaly_features_are_decimal_deterministic_and_point_in_time_safe() -> 
     features = FeatureCalculator(lookback=5).calculate(
         bars,
         evaluated_at=bars[-1].ingested_at,
+        gap_context=GapContext(
+            session_open=Decimal("100"),
+            previous_close=Decimal("99"),
+        ),
     )
 
     assert features.five_minute_return == Decimal("0.06")
@@ -67,8 +71,23 @@ def test_anomaly_features_are_decimal_deterministic_and_point_in_time_safe() -> 
     repeated = FeatureCalculator(lookback=5).calculate(
         tuple(reversed(tuple(reversed(bars)))),
         evaluated_at=bars[-1].ingested_at,
+        gap_context=GapContext(
+            session_open=Decimal("100"),
+            previous_close=Decimal("99"),
+        ),
     )
     assert repeated == features
+
+
+def test_gap_is_not_invented_from_a_truncated_intraday_window() -> None:
+    bars = tuple(bar(index, close="100", volume="100") for index in range(6))
+
+    features = FeatureCalculator(lookback=5).calculate(
+        bars,
+        evaluated_at=bars[-1].ingested_at,
+    )
+
+    assert features.gap is None
 
 
 def test_feature_calculation_rejects_future_or_naive_market_data() -> None:

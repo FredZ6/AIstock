@@ -432,6 +432,7 @@ market_bar = time_series_table(
     Column("close", Numeric),
     Column("volume", Numeric),
     Column("previous_close", Numeric),
+    Column("conflict", Boolean, nullable=False, server_default=text("false")),
     Column("payload", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     CheckConstraint(
         "event_time <= available_at AND available_at <= ingested_at",
@@ -445,6 +446,14 @@ Index(
     market_bar.c.content_hash,
     market_bar.c.event_time,
     unique=True,
+)
+Index(
+    "market_bar_canonical_revision_idx",
+    market_bar.c.symbol,
+    market_bar.c.feed_type,
+    market_bar.c.event_time.desc(),
+    market_bar.c.available_at.desc(),
+    market_bar.c.ingested_at.desc(),
 )
 option_snapshot = time_series_table(
     "option_snapshot",

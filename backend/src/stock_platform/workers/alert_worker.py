@@ -15,6 +15,7 @@ from stock_platform.application.alerting.dedup import AlertIdentity
 from stock_platform.application.alerting.features import (
     AnomalyFeatures,
     FeatureCalculator,
+    GapContext,
     MinuteBar,
 )
 from stock_platform.application.alerting.outbox import (
@@ -24,6 +25,23 @@ from stock_platform.application.alerting.outbox import (
 )
 from stock_platform.application.alerting.rules import AlertRule, RuleEvaluation
 from stock_platform.infrastructure.messaging.market_stream import StreamMessage
+
+_MAX_EXPLANATION_LENGTH = 4000
+
+
+class InvalidExplanationOutput(ValueError):
+    pass
+
+
+def _validate_explanation_output(value: object) -> str:
+    if not isinstance(value, str):
+        raise InvalidExplanationOutput("explanation must be a string")
+    normalized = value.strip()
+    if not normalized:
+        raise InvalidExplanationOutput("explanation cannot be empty")
+    if len(normalized) > _MAX_EXPLANATION_LENGTH:
+        raise InvalidExplanationOutput("explanation exceeds maximum length")
+    return normalized
 
 
 class ExplanationStatus(StrEnum):
@@ -42,6 +60,10 @@ class AlertStore(Protocol):
     def recent_bars(
         self, *, symbol: str, through: datetime, available_by: datetime, limit: int
     ) -> tuple[MinuteBar, ...]: ...
+
+    def gap_context(
+        self, *, symbol: str, through: datetime, available_by: datetime
+    ) -> GapContext | None: ...
 
     def persist_alert(
         self,
@@ -127,7 +149,16 @@ class AlertWorker:
         )
         if len(history) < 6:
             return ProcessResult("INSUFFICIENT_HISTORY", None, None)
-        features = self._calculator.calculate(history, evaluated_at=message.bar.ingested_at)
+        gap_context = self._store.gap_context(
+            symbol=str(message.bar.symbol),
+            through=message.bar.event_time,
+            available_by=message.bar.ingested_at,
+        )
+        features = self._calculator.calculate(
+            history,
+            evaluated_at=message.bar.ingested_at,
+            gap_context=gap_context,
+        )
         evaluation = self._rule.evaluate(features)
         if not evaluation.triggered:
             return ProcessResult("NO_ALERT", None, features)
@@ -137,7 +168,7 @@ class AlertWorker:
             event_time=features.event_time,
             cooldown=self._cooldown,
         )
-        context = self._context_resolver(str(features.symbol), features.event_time)
+        context = self._context_resolver(str(features.symbol), message.bar.ingested_at)
         review_action = (
             "REVIEW_INVALIDATION_CONDITION"
             if context.invalidation_condition
@@ -169,6 +200,13 @@ class AlertWorker:
                     content=None,
                     error_code="TIMEOUT",
                 )
+            except InvalidExplanationOutput:
+                self._store.record_explanation(
+                    alert_id=identity.id,
+                    status=ExplanationStatus.FAILED,
+                    content=None,
+                    error_code="INVALID_OUTPUT",
+                )
             except Exception:  # noqa: BLE001 - explanation cannot suppress deterministic alert
                 self._store.record_explanation(
                     alert_id=identity.id,
@@ -193,7 +231,7 @@ class AlertWorker:
     ) -> str:
         assert self._explainer is not None
         explainer = self._explainer
-        result: Queue[tuple[str | None, Exception | None]] = Queue(maxsize=1)
+        result: Queue[tuple[object | None, Exception | None]] = Queue(maxsize=1)
 
         def invoke() -> None:
             try:
@@ -215,5 +253,4 @@ class AlertWorker:
             raise TimeoutError("explanation exceeded budget") from timeout
         if error is not None:
             raise error
-        assert explanation is not None
-        return explanation
+        return _validate_explanation_output(explanation)
