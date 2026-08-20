@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Interval,
     Numeric,
     PrimaryKeyConstraint,
@@ -322,6 +323,83 @@ cash_ledger = Table(
     created_at(),
 )
 
+alert_event = Table(
+    "alert_event",
+    metadata,
+    uuid_pk(),
+    Column("alert_key", Text, nullable=False),
+    Column("symbol", Text, nullable=False),
+    Column("event_time", DateTime(timezone=True), nullable=False),
+    Column("rule_id", Text, nullable=False),
+    Column("rule_version", Text, nullable=False),
+    Column("severity", Text, nullable=False),
+    Column("materiality", Numeric, nullable=False),
+    Column("conditions", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("metrics", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    Column("data_quality", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    created_at(),
+    UniqueConstraint("alert_key", name="alert_event_alert_key_key"),
+    CheckConstraint(
+        "severity IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')",
+        name=conv("ck_alert_event_severity"),
+    ),
+    CheckConstraint(
+        "materiality >= 0 AND materiality <= 1",
+        name=conv("ck_alert_event_materiality"),
+    ),
+)
+alert_thesis_link = Table(
+    "alert_thesis_link",
+    metadata,
+    Column("alert_event_id", UUID(as_uuid=True), ForeignKey("alert_event.id"), nullable=False),
+    Column("thesis_id", UUID(as_uuid=True), ForeignKey("investment_thesis.id"), nullable=False),
+    Column("invalidation_condition", Text),
+    Column("severity", Text, nullable=False),
+    Column("materiality", Numeric, nullable=False),
+    Column("evidence_id", UUID(as_uuid=True), ForeignKey("evidence_item.id")),
+    Column("review_action", Text, nullable=False),
+    created_at(),
+    PrimaryKeyConstraint("alert_event_id", "thesis_id"),
+)
+alert_explanation = Table(
+    "alert_explanation",
+    metadata,
+    uuid_pk(),
+    Column("alert_id", UUID(as_uuid=True), ForeignKey("alert_event.id"), nullable=False),
+    Column("status", Text, nullable=False),
+    Column("content", Text),
+    Column("error_code", Text),
+    created_at(),
+    UniqueConstraint("alert_id", name="alert_explanation_alert_id_key"),
+    CheckConstraint(
+        "status IN ('DISABLED', 'SUCCEEDED', 'FAILED')",
+        name=conv("ck_alert_explanation_status"),
+    ),
+)
+notification_outbox = Table(
+    "notification_outbox",
+    metadata,
+    uuid_pk(),
+    Column("alert_id", UUID(as_uuid=True), ForeignKey("alert_event.id"), nullable=False),
+    Column("alert_key", Text, nullable=False),
+    Column("payload", JSONB, nullable=False),
+    Column("channels", JSONB, nullable=False),
+    Column("channel_states", JSONB, nullable=False),
+    Column("status", Text, nullable=False, server_default=text("'PENDING'")),
+    Column("attempts", Integer, nullable=False, server_default=text("0")),
+    Column("next_attempt_at", DateTime(timezone=True), nullable=False),
+    Column("last_error", Text),
+    Column("delivered_at", DateTime(timezone=True)),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    created_at(),
+    UniqueConstraint("alert_id", name="notification_outbox_alert_id_key"),
+    UniqueConstraint("alert_key", name="notification_outbox_alert_key_key"),
+    CheckConstraint(
+        "status IN ('PENDING', 'RETRY', 'DELIVERED')",
+        name=conv("ck_notification_outbox_status"),
+    ),
+)
+
 
 def time_series_table(name: str, *items: Any) -> Table:
     table = Table(
@@ -348,11 +426,25 @@ market_bar = time_series_table(
     Column("raw_object_key", Text, nullable=False),
     Column("available_at", DateTime(timezone=True), nullable=False),
     Column("ingested_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    Column("open", Numeric),
+    Column("high", Numeric),
+    Column("low", Numeric),
     Column("close", Numeric),
+    Column("volume", Numeric),
+    Column("previous_close", Numeric),
+    Column("payload", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     CheckConstraint(
         "event_time <= available_at AND available_at <= ingested_at",
         name=conv("ck_market_bar_times"),
     ),
+)
+Index(
+    "uq_market_bar_stream_content",
+    market_bar.c.provider,
+    market_bar.c.feed_type,
+    market_bar.c.content_hash,
+    market_bar.c.event_time,
+    unique=True,
 )
 option_snapshot = time_series_table(
     "option_snapshot",
@@ -379,7 +471,11 @@ portfolio_nav = time_series_table(
 )
 alert_metric = time_series_table(
     "alert_metric",
+    Column("alert_id", UUID(as_uuid=True), ForeignKey("alert_event.id")),
     Column("symbol", Text, nullable=False),
     Column("metric_name", Text, nullable=False),
     Column("metric_value", Numeric, nullable=False),
+    Column("algorithm_version", Text, nullable=False, server_default=text("'alert-policy-v1'")),
+    Column("data_quality", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
 )
+Index("alert_metric_alert_id_idx", alert_metric.c.alert_id, alert_metric.c.event_time.desc())

@@ -17,7 +17,13 @@ services:
 
   redis:
     image: redis:8-alpine
-    profiles: ["future"]
+    ports:
+      - "56379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
 
   minio:
     image: minio/minio:latest

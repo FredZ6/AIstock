@@ -337,3 +337,50 @@ isolated worktree.
 - Residual risk: verifier freshness limits and unit mappings are intentionally small deterministic
   v0.2 policy tables. Expanding them requires a later versioned-policy change; real-provider
   credential tests remain opt-in and are not required for Fixture Mode acceptance.
+
+## M3 Alerts
+
+Authoritative sources: Notion design baseline v0.2 and Codex executable engineering spec,
+re-read on 2026-08-20. Linear milestone: M3 Alerts (FRE-14). Branch: `codex/m3-alerts`, created
+from the merged and pushed `main@22aafcaf1e412a69ec4f682bc4c4810f88e0d262` in an isolated
+worktree.
+
+### Task 10 — complete; awaiting human review
+
+- Baseline: `make bootstrap` — exit 0. Baseline `make verify` — exit 0 with 115 backend tests
+  passed, 3 explicit credential-gated provider tests skipped, 1 Vitest test passed, and the Next.js
+  production build passed.
+- RED: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest backend/tests/unit/alerting
+  backend/tests/integration/alerting -q` — exit 2 with 7 expected collection errors because the
+  alerting services, stream/provider adapters, worker, and replay test surface did not exist. A
+  prior invocation using the sandbox-denied global uv cache failed before collection and is not
+  counted as behavioral RED evidence.
+- Deterministic pipeline: added Decimal-only five-minute return, relative volume, Return Z,
+  Volume Z, volatility Z, gap, breakout, and raw freshness/coverage/provider/delay/conflict
+  features. A versioned multi-condition rule fires before any LLM use; cooldown-bucket UUIDv5
+  identities keep alert IDs and metrics stable across replay.
+- Durable delivery: Alpaca minute bars normalize into strict UTC/Decimal records, Redis Streams
+  consumer groups carry events, and the worker ACKs only after PostgreSQL persistence. Migration
+  `0005_alerts_and_outbox` adds AlertEvent, AlertThesisLink, AlertExplanation, a transactional
+  NotificationOutbox, alert metrics, stream bar values, constraints, and deduplication indexes.
+  One outbox row exists per alert key, with independent Telegram/Feishu/email retry state.
+- Safety and resilience: duplicate and out-of-order data are idempotent, future-available data is
+  rejected by the feature boundary, an active frozen Thesis/invalidation condition is linked to
+  every alert, and LLM-disabled/timeout/error states remain visible without suppressing alert
+  persistence or notification delivery. No brokerage, real-order, or live-funds surface was added.
+- Systematic-debugging evidence: the first quality-gate inspection found only Ruff formatting,
+  strict-Mypy narrowing/Redis typing, and two missing metadata index declarations. After minimal
+  fixes, Ruff passed, strict Mypy passed over 110 source files, and `alembic check` reported no
+  schema drift.
+- Focused GREEN: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest
+  backend/tests/unit/alerting backend/tests/integration/alerting -q` — exit 0; 14 passed. Coverage
+  includes stable replay IDs/metrics, cooldown/deduplication, out-of-order events, duplicate
+  delivery, Redis pending/ACK behavior, PostgreSQL outbox uniqueness, three-channel retry, and
+  explanation disabled/timeout behavior.
+- Full acceptance: `make verify` — exit 0; 117 files formatted, Ruff lint passed, strict Mypy
+  passed over 110 source files, Alembic reported no drift, 129 backend tests passed with 3 explicit
+  credential-gated provider skips, 1 Vitest test passed, TypeScript and ESLint passed, and the
+  Next.js production build passed.
+- Test report: this section is the durable command/exit-code report. Residual risk: real Alpaca
+  stream and external Telegram/Feishu/email endpoints are intentionally not exercised without
+  credentials; fixture replay and adapter retry contracts are authoritative for M3 acceptance.
