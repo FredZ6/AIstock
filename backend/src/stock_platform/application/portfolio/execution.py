@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID, uuid5
 
+from stock_platform.application.portfolio.risk import RiskDecision
 from stock_platform.domain.portfolio.fill import ExecutionBar, PaperFill
 from stock_platform.domain.portfolio.order import OrderIntent, OrderSide
 
@@ -49,9 +50,21 @@ class PaperExecutionSimulator:
         bars: Sequence[ExecutionBar],
         *,
         prior_fills: Sequence[PaperFill] = (),
+        risk_decision: RiskDecision | None = None,
     ) -> tuple[PaperFill, ...]:
         if not order.risk_approved:
             return ()
+        if (
+            risk_decision is None
+            or order.risk_decision_id != risk_decision.id
+            or not risk_decision.approved
+            or order.symbol != risk_decision.symbol
+            or order.portfolio_id != risk_decision.portfolio_id
+            or order.decision_time != risk_decision.decided_at
+            or order.quantity != risk_decision.max_order_quantity
+            or (order.side is OrderSide.BUY) != (risk_decision.approved_delta > Decimal("0"))
+        ):
+            raise ValueError("order exceeds its deterministic risk authorization")
         if order.execution_policy_version_id != self.policy.id:
             raise ValueError("order and execution policy version do not match")
 

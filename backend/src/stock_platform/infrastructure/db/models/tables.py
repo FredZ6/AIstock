@@ -222,10 +222,12 @@ market_context_snapshot = Table(
     metadata,
     uuid_pk(),
     Column("as_of", DateTime(timezone=True), nullable=False),
+    Column("available_at", DateTime(timezone=True), nullable=False),
     Column("qqq_trend", Numeric),
     Column("qqq_volatility", Numeric),
     Column("soxx_relative_strength", Numeric),
     Column("vix_regime", Text),
+    Column("vix", Numeric),
     Column("regime_label", Text),
     Column("algorithm_version", Text, nullable=False),
     Column("source_lineage", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
@@ -300,6 +302,86 @@ agent_event = Table(
     created_at(),
     UniqueConstraint("run_id", "sequence", name="agent_event_run_id_sequence_key"),
 )
+risk_decision = Table(
+    "risk_decision",
+    metadata,
+    uuid_pk(),
+    Column("proposal_id", UUID(as_uuid=True), nullable=False),
+    Column("research_decision_id", UUID(as_uuid=True), ForeignKey("decision_snapshot.id")),
+    Column("portfolio_id", UUID(as_uuid=True), nullable=False),
+    Column("symbol", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("requested_weight", Numeric, nullable=False),
+    Column("approved_weight", Numeric, nullable=False),
+    Column("current_weight", Numeric, nullable=False, server_default=text("0")),
+    Column("approved_delta", Numeric, nullable=False, server_default=text("0")),
+    Column("reference_nav", Numeric),
+    Column("reference_price", Numeric),
+    Column("max_order_quantity", Numeric, nullable=False, server_default=text("0")),
+    Column(
+        "authorization_source",
+        Text,
+        nullable=False,
+        server_default=text("'DETERMINISTIC'"),
+    ),
+    Column("authorized_side", Text),
+    Column(
+        "market_context_snapshot_id",
+        UUID(as_uuid=True),
+        ForeignKey("market_context_snapshot.id"),
+        nullable=False,
+    ),
+    Column("reason_codes", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column(
+        "risk_policy_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("risk_policy_version.id"),
+        nullable=False,
+    ),
+    Column("decided_at", DateTime(timezone=True), nullable=False),
+    created_at(),
+    CheckConstraint(
+        "status IN ('APPROVED', 'CLIPPED', 'REJECTED')",
+        name=conv("ck_risk_decision_status"),
+    ),
+    CheckConstraint(
+        "requested_weight >= 0 AND approved_weight >= 0",
+        name=conv("ck_risk_decision_weights"),
+    ),
+    CheckConstraint(
+        "status <> 'REJECTED' OR approved_weight = 0",
+        name=conv("ck_risk_decision_rejected_weight"),
+    ),
+    CheckConstraint(
+        "approved_delta = approved_weight - current_weight AND max_order_quantity >= 0",
+        name=conv("ck_risk_decision_order_economics"),
+    ),
+    CheckConstraint(
+        "(status = 'APPROVED' AND approved_weight = requested_weight "
+        "AND (jsonb_array_length(reason_codes) = 0 "
+        "OR reason_codes = '[\"LEGACY_BACKFILL\"]'::jsonb)) "
+        "OR (status = 'CLIPPED' AND approved_weight <> requested_weight "
+        "AND jsonb_array_length(reason_codes) > 0) "
+        "OR (status = 'REJECTED' AND approved_weight = 0 "
+        "AND jsonb_array_length(reason_codes) > 0)",
+        name=conv("ck_risk_decision_status_facts"),
+    ),
+    CheckConstraint(
+        "(authorization_source = 'LEGACY_BACKFILL' AND "
+        " ((status = 'REJECTED' AND max_order_quantity = 0 AND authorized_side IS NULL) "
+        "  OR (status <> 'REJECTED' AND max_order_quantity > 0 "
+        "      AND authorized_side IN ('BUY', 'SELL')))) "
+        "OR (authorization_source = 'DETERMINISTIC' AND "
+        " ((status = 'REJECTED' AND max_order_quantity = 0 AND authorized_side IS NULL) "
+        "  OR (status <> 'REJECTED' AND "
+        "      ((approved_delta = 0 AND max_order_quantity = 0 AND authorized_side IS NULL) "
+        "       OR (approved_delta <> 0 AND reference_nav > 0 AND reference_price > 0 "
+        "           AND max_order_quantity = abs(approved_delta) * reference_nav / reference_price "
+        "           AND authorized_side = CASE WHEN approved_delta > 0 "
+        "               THEN 'BUY' ELSE 'SELL' END)))))",
+        name=conv("ck_risk_decision_authorization_facts"),
+    ),
+)
 order_intent = Table(
     "order_intent",
     metadata,
@@ -310,6 +392,12 @@ order_intent = Table(
     Column("quantity", Numeric, nullable=False),
     Column("decision_time", DateTime(timezone=True), nullable=False),
     Column(
+        "risk_decision_id",
+        UUID(as_uuid=True),
+        ForeignKey("risk_decision.id"),
+        nullable=False,
+    ),
+    Column(
         "execution_policy_version_id",
         UUID(as_uuid=True),
         ForeignKey("execution_policy_version.id"),
@@ -319,6 +407,10 @@ order_intent = Table(
     created_at(),
     CheckConstraint("side IN ('BUY', 'SELL')", name=conv("ck_order_intent_side")),
     CheckConstraint("quantity > 0", name=conv("ck_order_intent_quantity")),
+    UniqueConstraint(
+        "risk_decision_id",
+        name=conv("uq_order_intent_risk_decision_id"),
+    ),
 )
 paper_order = Table(
     "paper_order",

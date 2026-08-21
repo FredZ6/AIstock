@@ -23,6 +23,8 @@ REQUIRED_TABLES = {
     "confidence_policy_version",
     "tool_call",
     "agent_event",
+    "risk_decision",
+    "order_intent",
     "paper_fill",
     "cash_ledger",
 }
@@ -67,9 +69,16 @@ def test_complete_lineage_foreign_keys_exist(engine: Engine) -> None:
         "claim": ("evidence_id", "evidence_item", "id"),
         "thesis_evidence_link": ("evidence_id", "evidence_item", "id"),
         "decision_snapshot": ("thesis_id", "investment_thesis", "id"),
+        "risk_decision": ("research_decision_id", "decision_snapshot", "id"),
+        "order_intent": ("risk_decision_id", "risk_decision", "id"),
     }
     for table_name, foreign_key in expected.items():
         assert foreign_key in _foreign_key_targets(engine, table_name)
+    assert (
+        "market_context_snapshot_id",
+        "market_context_snapshot",
+        "id",
+    ) in _foreign_key_targets(engine, "risk_decision")
 
 
 def test_thesis_uses_normalized_evidence_links(engine: Engine) -> None:

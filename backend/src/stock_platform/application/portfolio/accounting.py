@@ -7,16 +7,20 @@ from sqlalchemy import case, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Connection
 
+from stock_platform.application.portfolio.allocation import MarketContextSnapshot
+from stock_platform.application.portfolio.risk import RiskDecision
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.portfolio.fill import PaperFill
 from stock_platform.domain.portfolio.ledger import LedgerEntry, cash_balance, is_balanced
 from stock_platform.domain.portfolio.order import OrderIntent, OrderSide
 from stock_platform.infrastructure.db.models.tables import (
     cash_ledger,
+    market_context_snapshot,
     order_intent,
     paper_fill,
     paper_order,
 )
+from stock_platform.infrastructure.db.models.tables import risk_decision as risk_decision_table
 
 _LEDGER_NAMESPACE = UUID("1f77598e-274a-4966-8d99-b5fd3fb4af6c")
 _FILL_NAMESPACE = UUID("9d1ac474-0f57-45d9-a942-1f2b1b8743cb")
@@ -225,11 +229,93 @@ class PostgresPaperAccountingStore:
         order: OrderIntent,
         fills: Sequence[PaperFill],
         entries: Sequence[LedgerEntry],
+        *,
+        risk_decision: RiskDecision | None = None,
+        market_context: MarketContextSnapshot | None = None,
     ) -> None:
         if not isinstance(order, OrderIntent):
             raise TypeError("order must be an OrderIntent")
         if not is_balanced(entries):
             raise ValueError("ledger entries must be balanced before persistence")
+        if risk_decision is None or order.risk_decision_id != risk_decision.id:
+            raise ValueError("order must point to its deterministic risk decision")
+        if market_context is None or risk_decision.market_context_snapshot_id != market_context.id:
+            raise ValueError("risk decision must point to its frozen market context")
+        if order.symbol != risk_decision.symbol:
+            raise ValueError("order and risk decision identity do not match")
+        if order.portfolio_id != risk_decision.portfolio_id:
+            raise ValueError("order and risk decision portfolio do not match")
+        if order.risk_approved != risk_decision.approved:
+            raise ValueError("order approval must match deterministic risk decision")
+        if order.quantity != risk_decision.max_order_quantity or (
+            (order.side is OrderSide.BUY) != (risk_decision.approved_delta > ZERO)
+        ):
+            raise ValueError("order exceeds deterministic risk authorization")
+        context_values = {
+            "id": market_context.id,
+            "as_of": market_context.as_of,
+            "available_at": market_context.available_at,
+            "qqq_trend": market_context.qqq_trend,
+            "qqq_volatility": market_context.qqq_volatility,
+            "soxx_relative_strength": market_context.soxx_relative_strength,
+            "vix": market_context.vix,
+            "regime_label": market_context.regime.value,
+            "algorithm_version": market_context.algorithm_version,
+            "source_lineage": [str(item) for item in market_context.source_lineage],
+        }
+        self.connection.execute(
+            insert(market_context_snapshot)
+            .values(**context_values)
+            .on_conflict_do_nothing(index_elements=[market_context_snapshot.c.id])
+        )
+        persisted_context = (
+            self.connection.execute(
+                select(market_context_snapshot).where(
+                    market_context_snapshot.c.id == market_context.id
+                )
+            )
+            .mappings()
+            .one()
+        )
+        if any(persisted_context[key] != value for key, value in context_values.items()):
+            raise ValueError("market context identity was reused with different facts")
+        risk_values = {
+            "id": risk_decision.id,
+            "proposal_id": risk_decision.proposal_id,
+            "research_decision_id": risk_decision.research_decision_id,
+            "portfolio_id": risk_decision.portfolio_id,
+            "symbol": str(risk_decision.symbol),
+            "status": risk_decision.status.value,
+            "requested_weight": risk_decision.requested_weight,
+            "approved_weight": risk_decision.approved_weight,
+            "current_weight": risk_decision.current_weight,
+            "approved_delta": risk_decision.approved_delta,
+            "reference_nav": risk_decision.reference_nav,
+            "reference_price": risk_decision.reference_price,
+            "max_order_quantity": risk_decision.max_order_quantity,
+            "authorization_source": "DETERMINISTIC",
+            "authorized_side": (
+                order.side.value if risk_decision.max_order_quantity > ZERO else None
+            ),
+            "market_context_snapshot_id": risk_decision.market_context_snapshot_id,
+            "reason_codes": [reason.value for reason in risk_decision.reason_codes],
+            "risk_policy_version_id": risk_decision.risk_policy_version_id,
+            "decided_at": risk_decision.decided_at,
+        }
+        self.connection.execute(
+            insert(risk_decision_table)
+            .values(**risk_values)
+            .on_conflict_do_nothing(index_elements=[risk_decision_table.c.id])
+        )
+        persisted_risk = (
+            self.connection.execute(
+                select(risk_decision_table).where(risk_decision_table.c.id == risk_decision.id)
+            )
+            .mappings()
+            .one()
+        )
+        if any(persisted_risk[key] != value for key, value in risk_values.items()):
+            raise ValueError("risk decision identity was reused with different facts")
         self.connection.execute(
             insert(order_intent)
             .values(
@@ -239,6 +325,7 @@ class PostgresPaperAccountingStore:
                 side=order.side.value,
                 quantity=order.quantity,
                 decision_time=order.decision_time,
+                risk_decision_id=order.risk_decision_id,
                 execution_policy_version_id=order.execution_policy_version_id,
                 risk_approved=order.risk_approved,
             )

@@ -10,6 +10,7 @@ APPEND_ONLY_TABLES = {
     "cash_ledger",
     "tool_call",
     "agent_event",
+    "risk_decision",
 }
 
 
@@ -81,20 +82,47 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
         )
         portfolio_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         order_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
+        risk_decision_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         transaction_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
+        connection.execute(
+            text(
+                """
+                INSERT INTO risk_decision (
+                    id, proposal_id, research_decision_id, portfolio_id, symbol, status,
+                    requested_weight, approved_weight, current_weight, approved_delta,
+                    reference_nav, reference_price, max_order_quantity,
+                    risk_policy_version_id, decided_at, market_context_snapshot_id
+                ) VALUES (
+                    :risk_decision_id, :risk_decision_id,
+                    (SELECT id FROM decision_snapshot LIMIT 1),
+                    :portfolio_id, 'FIXTURE', 'APPROVED', 1, 1, 0, 1, 1, 1, 1,
+                    (SELECT id FROM risk_policy_version LIMIT 1),
+                    now() - interval '1 minute',
+                    '00000000-0000-0000-0000-000000000016'::uuid
+                )
+                """
+            ),
+            {"portfolio_id": portfolio_id, "risk_decision_id": risk_decision_id},
+        )
         connection.execute(
             text(
                 """
                 INSERT INTO order_intent (
                     id, portfolio_id, symbol, side, quantity, decision_time,
-                    execution_policy_version_id, risk_approved
+                    execution_policy_version_id, risk_approved, risk_decision_id
                 ) VALUES (
-                    :order_id, :portfolio_id, 'FIXTURE', 'BUY', 1, now() - interval '1 minute',
-                    (SELECT id FROM execution_policy_version LIMIT 1), true
+                    :order_id, :portfolio_id, 'FIXTURE', 'BUY', 1,
+                    (SELECT decided_at FROM risk_decision WHERE id = :risk_decision_id),
+                    (SELECT id FROM execution_policy_version LIMIT 1), true,
+                    :risk_decision_id
                 )
                 """
             ),
-            {"portfolio_id": portfolio_id, "order_id": order_id},
+            {
+                "portfolio_id": portfolio_id,
+                "order_id": order_id,
+                "risk_decision_id": risk_decision_id,
+            },
         )
         connection.execute(
             text(
@@ -151,6 +179,7 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
             "decision_snapshot",
             "paper_fill",
             "cash_ledger",
+            "risk_decision",
         }:
             connection.execute(text(f"INSERT INTO {table_name} DEFAULT VALUES"))
 

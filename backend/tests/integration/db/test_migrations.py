@@ -62,6 +62,77 @@ def _alembic_config(database_url: str) -> Config:
     return config
 
 
+def test_fresh_upgrade_does_not_invent_legacy_market_context(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "head")
+    command.upgrade(config, "head")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        assert (
+            connection.execute(text("SELECT count(*) FROM market_context_snapshot")).scalar_one()
+            == 0
+        )
+    engine.dispose()
+
+
+def test_legacy_order_backfill_preserves_unknown_risk_and_context_facts(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "0012_idempotent_fill_guard")
+    engine = create_engine(migration_database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO order_intent (
+                    id, portfolio_id, symbol, side, quantity, decision_time,
+                    execution_policy_version_id, risk_approved
+                ) VALUES (
+                    '70000000-0000-0000-0000-000000000018',
+                    '71000000-0000-0000-0000-000000000018',
+                    'NVDA', 'SELL', 7, '2026-08-20T14:30:00Z',
+                    '00000000-0000-0000-0000-000000000007', true
+                )
+                """
+            )
+        )
+    engine.dispose()
+
+    command.upgrade(config, "head")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        risk = connection.execute(
+            text(
+                """
+                SELECT requested_weight, approved_weight, current_weight, approved_delta,
+                       reference_nav, reference_price, max_order_quantity,
+                       authorization_source, authorized_side
+                FROM risk_decision
+                WHERE id = '70000000-0000-0000-0000-000000000018'
+                """
+            )
+        ).one()
+        context = connection.execute(
+            text(
+                """
+                SELECT qqq_trend, qqq_volatility, soxx_relative_strength, vix,
+                       regime_label, source_lineage
+                FROM market_context_snapshot
+                WHERE id = '00000000-0000-0000-0000-000000000016'
+                """
+            )
+        ).one()
+    engine.dispose()
+
+    assert risk == (0, 0, 0, 0, None, None, 7, "LEGACY_BACKFILL", "SELL")
+    assert context == (None, None, None, None, "UNKNOWN", ["LEGACY_UNKNOWN"])
+
+
 def test_0003_backfills_existing_market_data_from_unique_raw_objects(
     migration_database_url: str,
 ) -> None:

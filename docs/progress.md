@@ -605,3 +605,88 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
   Mypy passed over 124 source files, Alembic/MCP drift checks passed, backend reported 171 passed / 3
   explicit credential-gated skips, TypeScript/ESLint passed, Vitest reported 1 passed, and the Next.js
   production build completed successfully.
+
+### FRE-15 acceptance and Task 12 portfolio decision graph — 2026-08-21
+
+- FRE-15 independent acceptance: a fresh `make verify` exited 0 with 171 backend tests passed and 3
+  explicit credential-gated provider skips; all Python format/lint/type, Alembic/MCP drift, Web
+  type/lint/Vitest, and Next.js production-build gates passed. Linear FRE-15 was moved to Done with
+  commit `a92824277c180dcb50b3b4bcb42c4dac1eb41deb` and its verification evidence; FRE-16 was then moved
+  to In Progress before Task 12 implementation began.
+- Portfolio module RED: the authoritative Task 12 unit/integration selection initially exited 2 during
+  collection because allocation, benchmarks, metrics, risk, and the portfolio agent graph did not yet
+  exist. The minimal implementation separates ResearchOpinion from PortfolioAction, freezes research
+  inputs, constructs deterministic target proposals, runs a no-tool risk gateway, creates only approved
+  pending paper orders, executes at the next eligible bar, and rebuilds ledger/NAV plus Cash, QQQ,
+  equal-weight, and momentum benchmark returns under the same cost convention.
+- Deterministic risk gateway: policy-version-pinned decisions enforce position, gross exposure, cash
+  reserve, daily turnover, stale research, missing prices, earnings blackout, drawdown, duplicate
+  intents, and incomplete evidence. Model output is only a proposal: it cannot create a Fill unless a
+  deterministic approved/clipped RiskDecision exists. The graph permits zero external tool calls, at
+  most three LLM calls, and at most 60 seconds.
+- Risk-state propagation RED/GREEN: the focused rebalance test first exited 1 because
+  `PortfolioDecisionGraph.run` did not accept `daily_turnover` or `drawdown`. Adding Decimal-validated
+  state fields and passing them to `PortfolioRiskSnapshot` made the unchanged command exit 0 with 1
+  passed. The portfolio suite initially reported 30 passed / 9 infrastructure failures because the
+  restricted sandbox blocked localhost PostgreSQL; the identical database-enabled command exited 0
+  with 39 passed.
+- Risk audit migration: `0013_risk_decision_audit` adds append-only RiskDecision facts, policy/research
+  lineage, reason codes, and a non-null unique OrderIntent foreign key. A database trigger rejects an
+  order whose portfolio, symbol, decision time, or approval does not match its deterministic risk
+  decision. Migration `0014_risk_constraint_names` normalizes generated constraint names so Alembic
+  detects no drift while preserving safe legacy backfill.
+- Metrics and benchmarks: Decimal-only implementations cover return, CAGR, volatility, Sharpe,
+  Sortino, maximum drawdown, Calmar, turnover, beta, and information ratio. Benchmark fixtures cover
+  Cash, QQQ, equal-weight, and momentum with aligned timing and explicit transaction costs; aware UTC
+  timestamps and finite positive price/NAV inputs are required.
+- Local gates: Ruff formatting and lint exited 0; focused strict Mypy exited 0 over 90 source files.
+  Two consecutive `alembic upgrade head` calls and `alembic check` exited 0 with no new operations.
+  The combined migration, schema, append-only, portfolio unit, and portfolio integration selection
+  exited 0 with 53 passed.
+- Initial Task 12 verification: `make verify` exited 0; 151 files passed Ruff formatting, Ruff lint
+  passed, strict Mypy passed over 135 source files, Alembic/MCP drift checks passed, backend reported
+  188 passed / 3 explicit credential-gated provider skips, TypeScript and ESLint passed, Vitest
+  reported 1 passed, and the Next.js production build completed successfully.
+- Pre-commit review found that sequential proposals did not decrement remaining cash, constrained
+  allocations depended on input order, RiskDecision did not bind exact order economics, benchmarks
+  hardcoded zero costs, post-fill NAV reused the decision mark, frozen research/context pins were not
+  enforced end-to-end, and metrics could accept misaligned observations. Focused RED tests reproduced
+  each path before remediation.
+- Review remediation: the Risk Gateway now canonicalizes proposals and decrements cash/gross/turnover;
+  immutable RiskDecision facts bind current/approved weights, signed delta, reference NAV/price,
+  maximum quantity, risk policy, research DecisionSnapshot, and MarketContextSnapshot. Runtime,
+  application persistence, and PostgreSQL triggers all reject unauthorized quantity/side changes.
+  Market context is point-in-time persisted, frozen research verifies all policy/prompt/model/data-cutoff
+  pins, benchmarks apply the execution spread/slippage/fee model on actual strategy turnover, and NAV
+  uses the point-in-time market-bar mark visible at its timestamp while retaining execution costs.
+- Migrations `0015`–`0018` safely backfill legacy orders, add market-context and exact-order lineage,
+  and reject contradictory append-only risk facts. The first `0017` upgrade correctly rolled back with
+  exit 1 because its revision identifier exceeded Alembic's 32-character storage limit; shortening only
+  the identifier made upgrade/check exit 0. The combined portfolio/migration/schema/append-only suite
+  then exited 0 with 60 passed.
+- Final pre-commit verification: `make verify` exited 0; 154 files passed Ruff formatting, Ruff lint
+  passed, strict Mypy passed over 135 source files, Alembic/MCP drift checks passed, backend reported
+  195 passed / 3 explicit credential-gated provider skips, TypeScript and ESLint passed, Vitest
+  reported 1 passed, and the Next.js production build completed successfully.
+- Second independent-review remediation removes caller-supplied cash/weights/prices/turnover from the
+  graph boundary and derives them from immutable Ledger, Fill, and point-in-time Bar facts. Post-fill
+  NAV now exposes spread/slippage loss against the market mark. PostgreSQL additionally pins each order
+  to the execution policy frozen by its DecisionSnapshot. Legacy migrations preserve unknown weights,
+  NAV, prices, and market inputs as explicit `LEGACY_BACKFILL` / `UNKNOWN` facts instead of inventing
+  100% weights or zero-valued observations; an empty database receives no synthetic context row.
+- Final acceptance rerun: two consecutive `alembic upgrade head` commands exited 0; the migration,
+  rebalance, and accounting integration selection exited 0 with 16 passed. Ruff format/check, strict
+  Mypy over 136 source files, and Alembic drift check all exited 0.
+- Final independent review found and the implementation fixed four remaining edge cases: a fully
+  invested zero-cash portfolio now uses reconstructed decision NAV without division; benchmark fees
+  use that same pre-trade NAV; valuation rejects conflicting immutable Bar revision identities in
+  either input order; and daily turnover uses UTC day boundaries. The focused regression command
+  exited 0 with 18 passed / 1 database test deselected, and the full Task 12 unit/database/integration
+  selection exited 0 with 67 passed. The reviewer reported no remaining P1/P2 blockers and returned a
+  ready verdict.
+- Completion-gate `make verify` exited 0: 156 files passed Ruff formatting, Ruff lint passed, strict
+  Mypy passed over 136 source files, Alembic/MCP drift checks passed, backend reported 202 passed / 3
+  explicit credential-gated provider skips, TypeScript/ESLint passed, Vitest reported 1 passed, and
+  the Next.js production build completed successfully.
+- Scope remains Task 12. No Task 13 implementation, live-broker endpoint, real-funds path, provider
+  credential field, external portfolio-graph tool, or LLM execution authority was introduced.
