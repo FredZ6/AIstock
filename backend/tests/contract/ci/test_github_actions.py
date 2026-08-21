@@ -29,6 +29,7 @@ def test_ci_uses_locked_toolchains_and_fixture_services() -> None:
     assert 'node-version: "22"' in content
     assert package["packageManager"] == "pnpm@11.19.0"
     assert 'version: "11"' not in content
+    assert "DATABASE_URL:" not in content
     assert "astral-sh/setup-uv@" in content
     assert "ENVIRONMENT: fixture" in content
     assert "docker compose up -d --wait postgres redis minio" in content

@@ -1029,3 +1029,13 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
   Alembic/MCP/OpenAPI drift checks passed, backend reported 285 passed / 3 explicit credential-gated
   skips / 1 existing upstream warning, Web Vitest reported 1 passed, and TypeScript, ESLint, and the
   Next.js production build passed. The next hosted run must pass before CI configuration is accepted.
+- Second hosted run: GitHub Actions run `32514219465` passed setup, locked dependency installation,
+  PostgreSQL/Redis/MinIO health, and a fresh Alembic upgrade, then reported 37 failed / 248 passed / 3
+  skipped inside `make verify`. Root-cause tracing showed the Job-level `DATABASE_URL` overrode every
+  explicit isolated-database URL inside Alembic `env.py`, so migration fixtures upgraded the shared
+  database while their newly created databases remained empty.
+- Isolation RED/GREEN: the CI contract first exited 1 with 1 failed / 2 passed when it required no
+  Job-level `DATABASE_URL`. Removing that single override lets the repository's identical locked
+  default reach Compose while preserving test-supplied Alembic URLs. Ruff and the focused 3-test suite
+  exited 0. A fresh complete local `make verify` then exited 0 again with 285 passed / 3 skips and all
+  Python/Web/static/build gates green. Hosted verification remains required.
