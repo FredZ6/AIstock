@@ -781,3 +781,209 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
 - Scope remains FRE-17 / Task 13. No Task 14 implementation, online Prompt mutation, automatic Policy
   activation, Live Broker surface, real-funds path, provider credential field, or LLM execution
   authority was added.
+
+### Task 14 control plane, scheduling, and durable SSE — started 2026-08-21
+
+- Authority and scope: reread the complete Notion v0.2 design baseline and executable Task 14
+  specification, then confirmed Linear FRE-18 is the first M6 Product issue and is unblocked by the
+  completed FRE-17. Task 15 remains out of scope.
+- Isolated delivery branch: created `codex/m6-control-plane` in
+  `/private/tmp/aistock-m6-control-plane` from exact base
+  `main@31a27a337a871468406df25101203ea00c72b5a8`. The existing main-worktree stash was preserved.
+- Clean baseline: `make verify` exited 0 before behavior changes; Ruff formatting/lint, strict Mypy,
+  Alembic and MCP contract drift checks passed, backend reported 245 passed / 3 explicit
+  credential-gated provider skips, Web Vitest reported 1 passed, and TypeScript, ESLint, and Next.js
+  production build passed.
+- Environment diagnosis: an attempted worktree-local PostgreSQL start exited 1 because port 55432 was
+  already owned by the healthy main-project PostgreSQL container. Verification reused that existing
+  test service without deleting or changing its data volume.
+- First TDD slice: the health/error-envelope contract command initially exited 2 because
+  `stock_platform.api` did not exist. The minimal FastAPI implementation now reports Fixture Mode and
+  the paper-only boundary and emits the locked structured 404 envelope; the identical command exits 0
+  with 2 passed.
+- Collaboration: FRE-18 moved from Backlog to In Progress with base, branch, baseline counts, scope,
+  and safety boundaries recorded. The Notion engineering specification received a non-destructive
+  Task 14 implementation-start record.
+- REST contract RED/GREEN: the initial full-surface test exited 2 because the API dependency module
+  did not exist. The next run exposed four behavior failures in validation serialization and admission
+  isolation; after fixing the shared sources, the locked REST surface, normalized Watchlist CRUD,
+  provider health, read views, research/portfolio Run creation, cancellation, and structured missing
+  resources pass runtime contract tests.
+- Durable idempotency and admission: migration `0020_api_control_plane` adds `agent_run` with a unique
+  idempotency key, canonical request hash, frozen request payload and cutoff, durable status, and an
+  active-status index; it also adds `watchlist_item` and durable Alert acknowledgement fields. A
+  PostgreSQL transaction advisory lock serializes the existing-key check and active-run count. Equal
+  retries return the same Run, changed payloads return 409, and exceeding the typed default limit of
+  two returns retryable 429. Cancellation changes durable state to `CANCELLED` and releases capacity.
+- Concurrency evidence: an isolated migrated PostgreSQL test races two different requests at a limit
+  of one and observes exactly one 202 plus one 429. Racing the same idempotency key returns two 202
+  responses with one shared Run and exactly one database row.
+- Approval boundary RED/GREEN: a regression first observed self-asserted JSON identity reaching the
+  resource layer and returning 404. The production dependency now rejects all untrusted mutation
+  identities with 403; Alert acknowledgement, Lesson approval/rejection, and Policy
+  activation/rollback require a trusted authentication layer to inject an authenticated `HumanActor`.
+  Actor identity is no longer accepted from the request body.
+- Contract artifact: `scripts/export_openapi.py` uses only the standard library and emits deterministic
+  JSON-compatible YAML at `docs/api/openapi.yaml`; generation followed by `--check` exits 0. The full
+  locked REST list is asserted and any live-broker path is prohibited.
+- Related acceptance: Ruff formatting/lint exited 0; strict Mypy exited 0 over 169 source files;
+  Alembic reported no migration drift; OpenAPI check exited 0; API contract, concurrent admission,
+  migration/schema, and settings regressions exited 0 with 33 passed. The only warning is the installed
+  FastAPI TestClient's upstream Starlette deprecation notice for `httpx` compatibility.
+- Full regression checkpoint: `make verify` exited 0; Ruff, strict Mypy, Alembic drift, MCP/OpenAPI
+  contract checks, TypeScript, ESLint, Vitest, and Next.js production build passed. Backend reported
+  259 passed / 3 explicit credential-gated skips; Web reported 1 passed. Task 14 remains In Progress:
+  Celery/Beat scheduling and durable SSE are intentionally not claimed by this REST checkpoint.
+- Celery/Beat TDD: the first worker tests failed because Celery and the scheduling modules did not
+  exist. Celery 5.6 is now a locked dependency configured for UTC, late acknowledgement,
+  worker-loss rejection, and no result backend. Beat registers daily research, intraday monitoring,
+  portfolio cutoff, weekly review, and queued-run recovery. PostgreSQL admission advisory locks plus
+  stable cutoff/symbol idempotency keys ensure repeated Beat delivery creates one `agent_run` and
+  dispatches it once; queued state remains recoverable after worker or broker restart.
+- Market-time review fix: a completion review found the initial 20:xx UTC cron would run an hour
+  early during New York standard time. A failing DST regression was observed before the fix. Beat
+  now wakes at both 20:xx and 21:xx UTC, while deterministic `America/New_York` 16:15 research and
+  16:30 portfolio cutoff guards admit exactly the valid occurrence; the intraday window includes the
+  winter-time 21:xx UTC hour. The focused worker/scheduling command exited 0 with 5 passed.
+- Durable SSE TDD: the initial integration command returned 404 for both replay cases. The first
+  implementation then passed ordered PostgreSQL replay, recursive secret redaction, cross-run cursor
+  rejection, and `Last-Event-ID` recovery with Redis intentionally unreachable. A second failing
+  regression exposed premature stream closure; the stream now polls PostgreSQL until the run reaches
+  `COMPLETED`, `FAILED`, or `CANCELLED`, then closes after emitting the terminal batch. Redis is not
+  consulted for replay or live tail. Research persistence now emits the locked `node.completed`
+  event name with the node in its payload.
+- Task 14 focused acceptance: `uv run pytest backend/tests/contract/api backend/tests/integration/api
+  -q` exited 0 with 18 passed; `PYTHONPATH=backend/src uv run python scripts/export_openapi.py
+  --check` exited 0; `uv run alembic -c backend/alembic.ini check` exited 0 with no new operations.
+  The final expanded API/worker command exited 0 with 22 passed. The only warning is the installed
+  FastAPI TestClient's upstream Starlette/httpx deprecation notice.
+- Task 14 full acceptance: `make verify` exited 0. Ruff format/lint, strict Mypy over 181 source
+  files, Alembic and MCP/OpenAPI drift checks, TypeScript, ESLint, Vitest, and Next.js production
+  build passed. Backend reported 267 passed / 3 explicit credential-gated provider skips; Web
+  reported 1 passed. No live-broker endpoint, credential, configuration flag, or Task 15 UI was
+  added.
+- Product decision and migration closure: the owner approved one explicitly persisted Paper Portfolio
+  with `100000` USD initial cash. Migration `0021_single_paper_portfolio` creates and seeds the
+  append-only `default-paper` configuration. A completion review then proved that a differently named
+  second row was still insertable; the RED test exited 1, and forward migration
+  `0022_single_portfolio_guard` now fixes the singleton UUID at the database boundary. The first 0022
+  attempt rolled back transactionally because its revision identifier exceeded Alembic's 32-character
+  column; the shortened revision upgraded cleanly. The local database is at
+  `0022_single_portfolio_guard (head)`.
+- Worker TDD and recovery: initial collection runs failed because the execution helpers did not exist.
+  `execute_run` now locks the authoritative `agent_run`, changes `QUEUED` to `RUNNING`, appends ordered
+  lifecycle events, executes graph work and marks `COMPLETED` in one PostgreSQL transaction. A raised
+  exception rolls the entire transaction back to durable `QUEUED`; duplicate Celery delivery observes
+  the terminal status and returns without repeating facts. Late acknowledgement and worker-loss
+  rejection remain enabled at the Celery boundary.
+- Real consumer wiring: Research hydrates the frozen fixture catalog and executes the existing daily
+  LangGraph with complete decision lineage. Portfolio loads the singleton configuration, visible
+  MarketContext, latest frozen Research decisions, policy pins, point-in-time fixture bars and prior
+  ledger/fills before executing the existing Portfolio graph; the initial balanced ledger uses exactly
+  `100000` USD. Weekly Review loads cutoff-visible frozen decisions and price observations, executes the
+  existing bounded review graph, and persists the review history. Intraday monitor records a durable
+  point-in-time scan fact instead of echoing a run ID. Every route emits ordered `node.completed` or
+  `monitor.completed` events for durable SSE.
+- Cross-task Portfolio correction: the first regression correctly failed because Portfolio required a
+  16:15 Research cutoff to equal its 16:30 cutoff and also required Research Prompt/Model pins to equal
+  Portfolio Prompt/Model pins. The graph now requires the four governed policy versions to match,
+  accepts only Research cutoff `<=` Portfolio cutoff, and still rejects a mismatched Risk Policy. The
+  positive and negative regression nodes exited 0 with 2 passed.
+- Persistence hardening: rejected deterministic RiskDecisions can now be stored without manufacturing an
+  OrderIntent, and balanced ledger persistence is independently idempotent. An authoritative Research
+  `ABSTAIN` remains `NO_ACTION`: the Portfolio worker persists its `100000` USD funding and route but does
+  not invent a risk decision, order, or fill.
+- Focused evidence: Worker PostgreSQL integration exited 0 with 7 passed; API/SSE/scheduling plus
+  Research, Portfolio, Weekly and worker regressions exited 0 with 72 passed; migration/schema/
+  append-only/worker integration exited 0 with 23 passed. Strict Mypy exited 0 over 182 source files.
+  The post-singleton test node exited 0 with 1 passed. All commands used real exit codes; failed RED and
+  debugging runs above are intentionally retained.
+- Full acceptance before the final singleton review: `make verify` exited 0; Ruff format/lint, strict
+  Mypy over 182 source files, Alembic and MCP/OpenAPI drift checks, TypeScript, ESLint, Vitest, and
+  Next.js production build passed. Backend reported 275 passed / 3 explicit credential-gated provider
+  skips; Web reported 1 passed.
+- Final acceptance after singleton closure: the first post-0022 `make verify` exited 2 at Alembic drift
+  detection because the naming convention had prefixed and truncated the new check-constraint name.
+  Since 0022 was local and unpublished, only that additive constraint migration was downgraded; the
+  0021 table and `100000` USD row remained intact. Marking the intended name with `op.f(...)`, then
+  upgrading 0022 again made standalone `alembic check` exit 0 with no new operations. The complete
+  `make verify` was then rerun from the start and exited 0: 207 files formatted, Ruff lint passed,
+  strict Mypy passed over 182 source files, Alembic/MCP/OpenAPI drift checks passed, backend reported
+  275 passed / 3 credential-gated skips / 1 upstream deprecation warning, Web Vitest reported 1 passed,
+  and TypeScript, ESLint, and the Next.js production build passed.
+- Residual boundaries: Fixture Mode remains the credential-free authoritative demo path; no Provider
+  credential was fabricated. Portfolio execution intentionally fails and transactionally remains
+  `QUEUED` when no point-in-time MarketContext or frozen Research decision exists. The upstream
+  Starlette/httpx deprecation warning remains non-blocking. No live-broker endpoint, credential,
+  configuration flag, real-funds path, automatic Policy activation, or Task 15 UI was added.
+- Final-review P1 closure (2026-08-22): six merge blockers were reproduced before repair. Migration
+  `0023_run_execution_guards` adds explicit Decision availability, bounded attempts, a 15-minute
+  worker lease, redacted terminal error state, and immutable Run pins for all four Policy versions,
+  Prompt, and Model. The migration temporarily disables only the existing DecisionSnapshot
+  append-only UPDATE trigger while backfilling `available_at = created_at`, immediately re-enables it,
+  and leaves the table append-only after upgrade.
+- Run execution no longer holds the `agent_run` row lock for the graph duration. Claim/start commits
+  first; each Research, Portfolio, and Weekly graph node writes a separately committed durable event
+  and checks cancellation; business facts plus the conditional `RUNNING -> COMPLETED` transition
+  remain atomic. Concurrent cancellation therefore responds without waiting and rolls back unfinished
+  business facts at the next node boundary. Runtime failures are retried only to the persisted maximum
+  of three attempts, then become `FAILED`; permanent validation failures become `FAILED` immediately;
+  expired `RUNNING` leases are returned to `QUEUED` by recovery without resetting the attempt count.
+- Point-in-time and execution-pin closure: Research persists DecisionSnapshot availability from the
+  admitted Run's creation time. Portfolio and Weekly require both `available_at <= data_cutoff` and
+  the existing decision-time/cutoff predicates, preventing a later-created historical decision from
+  leaking into replay. API and Beat admission freeze type-specific Prompt/Model pins plus the four
+  governed Policy versions; a database trigger rejects pin updates. Portfolio now selects the pinned
+  PolicyVersion rows and constructs Risk/Execution policies from their persisted JSON content instead
+  of hard-coded runtime parameters. This remains durable even when ABSTAIN/NO_ACTION creates no order.
+- RED/GREEN evidence: the new execution tests first failed four times because `execute_run` had no
+  RunControl boundary; after the state-machine change they exited 0 with 4 passed. Expired-lease
+  recovery first failed with an unsupported `now` argument, then passed. Pin immutability first failed
+  because UPDATE succeeded, and Portfolio admission first exposed `prompt-v1`/`fixture-v1`; both now
+  pass with database rejection and `portfolio-prompt-v1`/`fixture-proposer-v1`. The first related suite
+  also exposed a Decimal-to-timedelta type error and a legacy direct Decision insert without
+  availability; integer duration hydration and the conservative `now()` availability default fixed
+  those shared sources.
+- Migration debugging evidence: the first persistent 0023 upgrade exited 1 because the existing
+  append-only trigger correctly rejected the backfill UPDATE; PostgreSQL rolled the migration back.
+  The protected disable/backfill/re-enable sequence then upgraded to
+  `0023_run_execution_guards (head)` with exit 0. `alembic check` exited 0 with no new upgrade
+  operations. The focused API/worker/PIT/pin suite exited 0 with 13 passed; the expanded API,
+  scheduling, Research, Portfolio, and Weekly suite exited 0 with 55 passed.
+- Final acceptance after all six P1 fixes: the first `make verify` exited 2 on one Ruff formatting
+  delta, before tests ran. After correcting the exact metadata line, the full command was rerun from
+  the beginning and exited 0: Ruff format checked 208 files, Ruff lint passed, strict Mypy passed over
+  182 source files, Alembic/MCP/OpenAPI drift checks passed, backend reported 279 passed / 3 explicit
+  credential-gated skips / 1 upstream Starlette-httpx deprecation warning, Web Vitest reported 1
+  passed, and TypeScript, ESLint, and the Next.js production build completed successfully.
+- Post-gate incremental review found four further P1s and one P2. RED regressions proved that an
+  exhausted worker lease remained RUNNING, a normal Portfolio input race became terminal, active
+  `policy_control` versions were ignored, legacy placeholder Risk/Execution JSON could not hydrate,
+  type-specific historical Run pins were backfilled incorrectly, and a QUEUED cancellation produced
+  no SSE fact. Recovery now marks an exhausted lease FAILED with a redacted WorkerLost error and
+  durable event; `RunInputUnavailable` retries missing frozen inputs and succeeds after they arrive;
+  admission snapshots any human-activated four-policy pointer; 0023 upgrades placeholder policy JSON
+  and backfills Prompt/Model by Run type before installing the immutability trigger; and API
+  cancellation writes `run.cancelled` in the same transaction. Production Research availability now
+  defaults to actual persistence time; the optional completion clock exists only for deterministic
+  tests, preventing delayed historical work from leaking into point-in-time replay.
+- Post-review evidence: the targeted five-fix suite exited 0 with 25 passed; the expanded Task 14 API,
+  worker, SSE, scheduling, Research, Portfolio, and Weekly suite exited 0 with 69 passed. The final
+  authoritative `make verify` was rerun from the beginning and exited 0: 208 files passed Ruff format,
+  Ruff lint passed, strict Mypy passed over 182 source files, Alembic/MCP/OpenAPI drift checks passed,
+  backend reported 280 passed / 3 explicit credential-gated skips / 1 upstream deprecation warning,
+  Web Vitest reported 1 passed, and TypeScript, ESLint, and Next.js production build passed.
+- Final crash-window review proved that status-only completion was not sufficient fencing: after A's
+  lease expired and B reclaimed the Run, stale A could still observe B's RUNNING status and commit.
+  The A/B interleaving regression first failed with A returning True. Claim now returns a persisted
+  attempt generation; every separately committed node event, completion CAS, and failure transition
+  must match both RUNNING and that exact generation. A generation mismatch is `RunLeaseLost`, rolls
+  back stale business work, does not mutate B, and never writes a false cancellation event. Both stale
+  A-success and stale A-failure interleavings now pass while B remains RUNNING attempt 2 and completes.
+  Retry classification is also explicit: only `RetryableRunError` subclasses such as
+  `RunInputUnavailable` requeue; generic validation/programming failures are terminal.
+- Authoritative post-fencing evidence: the expanded focused suite exited 0 with 71 passed. The complete
+  `make verify` was rerun again from the beginning and exited 0: 208 files passed Ruff format, Ruff
+  lint passed, strict Mypy passed over 182 source files, Alembic/MCP/OpenAPI drift checks passed,
+  backend reported 282 passed / 3 credential-gated skips / 1 upstream deprecation warning, Web Vitest
+  reported 1 passed, and TypeScript, ESLint, and the Next.js production build passed.

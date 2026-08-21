@@ -197,6 +197,34 @@ def test_future_or_stale_research_cannot_create_order_or_fill() -> None:
     assert result.fills == ()
 
 
+def test_portfolio_accepts_visible_research_with_its_own_prompt_model_and_earlier_cutoff() -> None:
+    earlier = DECISION_TIME - timedelta(minutes=15)
+    frozen = replace(
+        research(available_at=earlier),
+        data_cutoff=earlier,
+        policy_versions=PolicyVersions(
+            research_scoring="research-v1",
+            risk="risk-v1",
+            execution="execution-v1",
+            confidence="confidence-v1",
+            prompt="research-prompt-v1",
+            model="research-model-v1",
+        ),
+    )
+
+    result = graph().run(
+        run_id="portfolio-run-cross-task-policy-pins",
+        portfolio_id=PORTFOLIO_ID,
+        specification=specification(),
+        market_context=market_context(),
+        research=(frozen,),
+        bars=(decision_bar(),),
+        ledger=initial_funding(PORTFOLIO_ID, Decimal("1000"), "USD", DECISION_TIME),
+    )
+
+    assert result.actions
+
+
 def test_post_fill_nav_uses_the_fill_price_at_the_nav_timestamp() -> None:
     next_bar_time = DECISION_TIME + timedelta(minutes=1)
     result = graph().run(
@@ -436,7 +464,7 @@ def test_rebalance_rejects_mismatched_research_policy_pins() -> None:
     frozen = research()
     mismatched = replace(
         frozen,
-        policy_versions=replace(frozen.policy_versions, prompt="wrong-prompt"),
+        policy_versions=replace(frozen.policy_versions, risk="wrong-risk"),
     )
 
     with pytest.raises(ValueError, match="policy pins"):

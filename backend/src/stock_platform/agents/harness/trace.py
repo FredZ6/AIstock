@@ -8,25 +8,28 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import cast
+from typing import Any, cast
 
 from stock_platform.domain.common.time import require_aware
 
 _SENSITIVE_FRAGMENTS = ("secret", "token", "key", "password", "authorization")
 
 
-def _redact(payload: Mapping[str, object]) -> dict[str, object]:
-    redacted: dict[str, object] = {}
-    for key, value in payload.items():
-        if any(fragment in key.lower() for fragment in _SENSITIVE_FRAGMENTS):
-            redacted[key] = "[REDACTED]"
-        elif isinstance(value, Mapping):
-            redacted[key] = _redact(cast(Mapping[str, object], value))
-        elif isinstance(value, str) and value.lower().startswith("bearer "):
-            redacted[key] = "[REDACTED]"
-        else:
-            redacted[key] = value
-    return redacted
+def redact_payload(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            key: (
+                "[REDACTED]"
+                if any(fragment in key.lower() for fragment in _SENSITIVE_FRAGMENTS)
+                else redact_payload(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [redact_payload(item) for item in value]
+    if isinstance(value, str) and value.lower().startswith("bearer "):
+        return "[REDACTED]"
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +78,7 @@ class TraceRecorder:
             event_time=require_aware(self._clock()),
             type=event_type,
             schema_version="1.0",
-            payload=MappingProxyType(_redact(payload)),
+            payload=MappingProxyType(redact_payload(payload)),
         )
         self._events.append(event)
         return event

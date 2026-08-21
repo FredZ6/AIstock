@@ -97,6 +97,17 @@ def test_offline_daily_research_persists_decision_and_complete_lineage(
     assert connection.execute(
         select(func.count()).select_from(agent_event).where(agent_event.c.run_id == run_id)
     ).scalar_one() == len(result.route)
+    persisted_events = [
+        tuple(row)
+        for row in connection.execute(
+            select(agent_event.c.event_type, agent_event.c.payload)
+            .where(agent_event.c.run_id == run_id)
+            .order_by(agent_event.c.sequence)
+        )
+    ]
+    assert persisted_events == [
+        ("node.completed", {"node": node, "status": result.status.value}) for node in result.route
+    ]
 
 
 def test_two_runs_reuse_stable_evidence_without_duplicate_facts(
