@@ -34,6 +34,16 @@ CORE_TABLES = frozenset(
         "alert_explanation",
         "notification_outbox",
         "alert_metric",
+        "weekly_review_run",
+        "decision_outcome",
+        "error_attribution",
+        "candidate_lesson",
+        "lesson_attribution_link",
+        "lesson_approval",
+        "policy_control",
+        "policy_candidate",
+        "replay_run",
+        "policy_promotion_audit",
     }
 )
 
@@ -47,5 +57,13 @@ APPEND_ONLY_TABLES = frozenset(
         "tool_call",
         "agent_event",
         "risk_decision",
+        "weekly_review_run",
+        "decision_outcome",
+        "error_attribution",
+        "candidate_lesson",
+        "lesson_attribution_link",
+        "lesson_approval",
+        "replay_run",
+        "policy_promotion_audit",
     }
 )

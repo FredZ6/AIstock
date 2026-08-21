@@ -617,6 +617,186 @@ notification_outbox = Table(
     ),
 )
 
+weekly_review_run = Table(
+    "weekly_review_run",
+    metadata,
+    uuid_pk(),
+    Column("run_key", Text, nullable=False),
+    Column("decision_ids", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("decision_time", DateTime(timezone=True), nullable=False),
+    Column("data_cutoff", DateTime(timezone=True), nullable=False),
+    Column("research_scoring_policy_version", Text, nullable=False),
+    Column("risk_policy_version", Text, nullable=False),
+    Column("execution_policy_version", Text, nullable=False),
+    Column("confidence_policy_version", Text, nullable=False),
+    Column("prompt_version", Text, nullable=False),
+    Column("model_version", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    created_at(),
+    CheckConstraint("data_cutoff <= decision_time", name=conv("ck_weekly_review_cutoff")),
+    CheckConstraint(
+        "status IN ('RUNNING', 'COMPLETED', 'FAILED')",
+        name=conv("ck_weekly_review_status"),
+    ),
+    UniqueConstraint("run_key", name="weekly_review_run_run_key_key"),
+)
+decision_outcome = Table(
+    "decision_outcome",
+    metadata,
+    uuid_pk(),
+    Column(
+        "weekly_review_run_id",
+        UUID(as_uuid=True),
+        ForeignKey("weekly_review_run.id"),
+        nullable=False,
+    ),
+    Column("decision_id", UUID(as_uuid=True), ForeignKey("decision_snapshot.id"), nullable=False),
+    Column("status", Text, nullable=False),
+    Column("returns", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    Column("excess_returns", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    Column("maximum_favorable_excursion", Numeric, nullable=False),
+    Column("maximum_adverse_excursion", Numeric, nullable=False),
+    Column("risk_adjusted_return", Numeric, nullable=False),
+    Column("calibration_error", Numeric, nullable=False),
+    Column("computed_at", DateTime(timezone=True), nullable=False),
+    created_at(),
+    UniqueConstraint("weekly_review_run_id", "decision_id", name="uq_outcome_run_decision"),
+    CheckConstraint("status IN ('PENDING', 'MATURED')", name=conv("ck_outcome_status")),
+)
+error_attribution = Table(
+    "error_attribution",
+    metadata,
+    uuid_pk(),
+    Column("outcome_id", UUID(as_uuid=True), ForeignKey("decision_outcome.id"), nullable=False),
+    Column("category", Text, nullable=False),
+    Column("rationale", Text, nullable=False),
+    Column("controllable", Boolean, nullable=False),
+    created_at(),
+    CheckConstraint(
+        "category IN ('STALE_DATA', 'MISSING_EVIDENCE', 'FACT_ERROR', "
+        "'CONFLICT_IGNORED', 'THESIS_ERROR', 'TIMING_ERROR', "
+        "'POSITION_SIZING_ERROR', 'EXECUTION_ERROR', 'REGIME_CHANGE', "
+        "'RISK_POLICY_FAILURE', 'UNCONTROLLABLE_EVENT')",
+        name=conv("ck_error_attribution_category"),
+    ),
+    UniqueConstraint("outcome_id", "category", name="uq_attribution_outcome_category"),
+)
+candidate_lesson = Table(
+    "candidate_lesson",
+    metadata,
+    uuid_pk(),
+    Column(
+        "attribution_id", UUID(as_uuid=True), ForeignKey("error_attribution.id"), nullable=False
+    ),
+    Column("scope", Text, nullable=False),
+    Column("statement", Text, nullable=False),
+    Column("duplicate_key", Text, nullable=False),
+    Column("evidence", JSONB, nullable=False),
+    Column("counter_evidence", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("confidence", Numeric, nullable=False),
+    Column("replay_delta", Numeric, nullable=False),
+    Column("creator", Text, nullable=False),
+    Column("status", Text, nullable=False, server_default=text("'CANDIDATE'")),
+    created_at(),
+    UniqueConstraint("duplicate_key", name="candidate_lesson_duplicate_key_key"),
+    CheckConstraint("confidence >= 0 AND confidence <= 1", name=conv("ck_lesson_confidence")),
+    CheckConstraint(
+        "status IN ('CANDIDATE', 'APPROVED', 'REJECTED')",
+        name=conv("ck_lesson_status"),
+    ),
+)
+lesson_attribution_link = Table(
+    "lesson_attribution_link",
+    metadata,
+    Column(
+        "lesson_id",
+        UUID(as_uuid=True),
+        ForeignKey("candidate_lesson.id"),
+        primary_key=True,
+    ),
+    Column(
+        "attribution_id",
+        UUID(as_uuid=True),
+        ForeignKey("error_attribution.id"),
+        primary_key=True,
+    ),
+    created_at(),
+)
+replay_run = Table(
+    "replay_run",
+    metadata,
+    uuid_pk(),
+    Column("lesson_id", UUID(as_uuid=True), ForeignKey("candidate_lesson.id"), nullable=False),
+    Column("decision_ids", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("baseline_score", Numeric, nullable=False),
+    Column("candidate_score", Numeric, nullable=False),
+    Column("delta", Numeric, nullable=False),
+    Column("data_cutoff", DateTime(timezone=True), nullable=False),
+    created_at(),
+    UniqueConstraint("lesson_id", "data_cutoff", name="uq_replay_lesson_cutoff"),
+)
+lesson_approval = Table(
+    "lesson_approval",
+    metadata,
+    uuid_pk(),
+    Column("lesson_id", UUID(as_uuid=True), ForeignKey("candidate_lesson.id"), nullable=False),
+    Column("actor_id", Text, nullable=False),
+    Column("action", Text, nullable=False),
+    Column("rationale", Text, nullable=False),
+    created_at(),
+    CheckConstraint("action IN ('APPROVE', 'REJECT')", name=conv("ck_lesson_approval_action")),
+)
+policy_control = Table(
+    "policy_control",
+    metadata,
+    Column("policy_kind", Text, primary_key=True),
+    Column("active_version", Text, nullable=False),
+    Column("revision", BigInteger, nullable=False, server_default=text("0")),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    CheckConstraint("revision >= 0", name=conv("ck_policy_control_revision")),
+)
+policy_candidate = Table(
+    "policy_candidate",
+    metadata,
+    uuid_pk(),
+    Column("policy_kind", Text, nullable=False),
+    Column("version", Text, nullable=False),
+    Column("base_version", Text, nullable=False),
+    Column("lesson_ids", JSONB, nullable=False),
+    Column("status", Text, nullable=False, server_default=text("'CANDIDATE'")),
+    Column("revision", BigInteger, nullable=False, server_default=text("0")),
+    created_at(),
+    UniqueConstraint("policy_kind", "version", name="uq_policy_candidate_kind_version"),
+    CheckConstraint(
+        "status IN ('CANDIDATE', 'APPROVED', 'ACTIVE', 'REJECTED', 'ROLLED_BACK')",
+        name=conv("ck_policy_candidate_status"),
+    ),
+    CheckConstraint("revision >= 0", name=conv("ck_policy_candidate_revision")),
+)
+policy_promotion_audit = Table(
+    "policy_promotion_audit",
+    metadata,
+    uuid_pk(),
+    Column(
+        "policy_candidate_id", UUID(as_uuid=True), ForeignKey("policy_candidate.id"), nullable=False
+    ),
+    Column("actor_id", Text, nullable=False),
+    Column("action", Text, nullable=False),
+    Column("outcome", Text, nullable=False),
+    Column("expected_revision", BigInteger, nullable=False),
+    Column("observed_revision", BigInteger, nullable=False),
+    created_at(),
+    CheckConstraint(
+        "action IN ('APPROVE', 'ACTIVATE', 'REJECT', 'ROLLBACK', "
+        "'DENY_APPROVE', 'DENY_ACTIVATE', 'DENY_REJECT', 'DENY_ROLLBACK')",
+        name=conv("ck_policy_promotion_action"),
+    ),
+    CheckConstraint(
+        "outcome IN ('COMPLETED', 'FORBIDDEN', 'CONFLICT')",
+        name=conv("ck_policy_promotion_outcome"),
+    ),
+)
+
 
 def time_series_table(name: str, *items: Any) -> Table:
     table = Table(

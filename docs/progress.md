@@ -690,3 +690,94 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
   the Next.js production build completed successfully.
 - Scope remains Task 12. No Task 13 implementation, live-broker endpoint, real-funds path, provider
   credential field, external portfolio-graph tool, or LLM execution authority was introduced.
+
+### Task 13 weekly attribution and controlled learning — 2026-08-21
+
+- M4 closure and M5 start: Notion's engineering specification now records PR #3 and merge commit
+  `063835edf9e0ce3ef1e1f81c3df16ab5483dfa66`. Linear FRE-15 received the missing merge evidence,
+  the M4 milestone received a superseding 100%-complete record, and FRE-17 moved from Backlog to
+  In Progress. Local `main` fast-forwarded cleanly from `aae5170` to `063835e`; the isolated
+  `codex/m5-learning` worktree was then created from that exact base.
+- Clean baseline: `make verify` exited 0 before Task 13 edits; 156 Python files were formatted, Ruff
+  and strict Mypy over 136 source files passed, Alembic reported no drift, backend reported 202 passed /
+  3 explicit credential-gated provider skips, Web Vitest reported 1 passed, and the Next.js production
+  build completed.
+- Initial RED: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest backend/tests/unit/learning
+  backend/tests/integration/learning backend/tests/security/test_policy_promotion.py -q` exited 2
+  with seven collection errors, all caused by the intentionally absent learning domain, application,
+  and weekly-review modules.
+- Outcome and attribution GREEN: UTC-aware maturity gates cover 1/5/20/60-day horizons. Decimal-only
+  outcome code computes point-in-time returns, QQQ excess return, MFE, MAE, risk-adjusted return, and
+  calibration error while rejecting unavailable future observations, floats, and naive datetimes.
+  Attribution uses the frozen v0.2 taxonomy and prioritizes missing, stale, and conflicting evidence
+  before thesis-direction errors.
+- Controlled learning: Candidate Lessons retain scope, evidence, counter-evidence, confidence, replay
+  delta, creator, status, and a normalized duplicate key. Historical replay enforces the strict
+  `lesson.created_at < decision.decision_time` boundary, so a lesson cannot affect its own or an earlier
+  decision. The weekly graph processes only matured decisions, exposes immature IDs as pending,
+  checkpoints after Weekly Outcome, and enforces the 8 LLM / 8 tool / 1 reflection / 10 minute bounds.
+- Human policy gate: approval, rejection, activation, and rollback use a locked compare-and-swap
+  revision. Only an authenticated human actor may act; unauthenticated agents and authenticated
+  non-human automation receive a 403-equivalent exception and a denial audit. Illegal reapproval or
+  rejection of an active policy is rejected, rollback restores the pinned base version, and an in-memory
+  two-thread regression permits exactly one concurrent approval winner. PostgreSQL persists the active
+  version pointer and revision in `policy_control`; row locking, the candidate transition, pointer CAS,
+  and append-only audit insert share one transaction, while denial audit uses an independent transaction
+  so a caller's business rollback cannot erase the 403 fact.
+- Persistence and migration: `0019_controlled_learning` adds `weekly_review_run`, `decision_outcome`,
+  `error_attribution`, `candidate_lesson`, normalized `lesson_attribution_link`, `lesson_approval`,
+  `policy_candidate`, `replay_run`, and `policy_promotion_audit`, plus the internal mutable
+  `policy_control` CAS pointer. Weekly runs pin all four policy versions plus Prompt, Model, decision
+  time, and data cutoff. The Postgres store atomically persists the Run → Outcome → Attribution → Lesson
+  → Replay chain, freezes a run key's decision set, and treats semantic retries idempotently. Eight
+  historical learning tables have database-level append-only triggers; policy candidates retain a
+  revision for controlled CAS transitions.
+- Systematic debugging evidence: an attempted worktree-local `docker compose up -d postgres` exited 1
+  because the shared test database already owned port 55432; verification safely reused the existing
+  container without deleting a volume. The first Alembic drift check exited 255 because raw migration
+  constraint names received duplicate naming-convention prefixes; after confirming all new tables
+  contained zero rows, only uncommitted `0019` was replayed using `op.f(...)`, and drift exited 0. A
+  later combined test exited 1 because its append-only fixture omitted the new non-null `run_key`; the
+  corrected fixture then passed. The first final `make verify` exited 2 on one Ruff formatting change;
+  formatting that file and rerunning the entire command passed. During persistent CAS hardening, the
+  first compatibility downgrade exited 1 because the older applied `0019` did not yet contain
+  `policy_control`; PostgreSQL rolled the downgrade back atomically. Making that one internal drop
+  conditional allowed downgrade/upgrade and the persistent promotion regression to exit 0.
+- Pre-delivery independent review found seven P1 gaps and blocked publication. TDD remediation now
+  excludes pre-decision observations from MFE/MAE and uses the latest decision-time benchmark base;
+  consolidates duplicate lessons across decisions; makes freshly recomputed semantic retries reuse and
+  validate Outcome, Attribution, Lesson, and Replay natural keys; preserves forbidden audits outside the
+  rolled-back business transaction; requires every Policy lesson to exist, have an APPROVE fact, and
+  have a ReplayRun; routes real missing/stale/conflicted inputs into attribution; and executes a real
+  reflection node plus a checkpoint write through the existing checkpoint store.
+- A second independent production review found additional replay and governance gaps. Remediation makes
+  new Lessons wait for future eligible decisions; computes replay delta with deterministic abstention
+  counterfactual code instead of trusting a declared delta; persists forward replay only for an existing
+  Lesson; omits QQQ excess return unless both benchmark base and target exist; rejects run-key retries
+  with a changed decision set; requires the latest Lesson disposition to be APPROVE plus a non-empty
+  ReplayRun at approval and activation; rejects rollback after a newer policy version is active; retains
+  every deduplicated Lesson-to-Attribution lineage link; rejects blank audit identities; and proves the
+  PostgreSQL row-lock CAS with two concurrent transactions in an isolated migrated database.
+- The final review pass additionally froze the complete weekly input decision set—including immature
+  pending decisions—in `weekly_review_run.decision_ids`, and made forbidden audit reconstruction read
+  the existing `policy_control` row without requiring callers to repeat bootstrap configuration.
+- Final PR human review found one remaining point-in-time invariant gap: Task 13's `PriceObservation`
+  accepted `available_at < event_time`, unlike the platform's canonical market facts. The regression
+  test first exited 1 because no exception was raised; the minimal UTC time-order guard then made the
+  complete outcome unit module exit 0 with 8 passed. An initial focused rerun was blocked by sandbox
+  localhost policy (`Operation not permitted`, exit 1; 26 passed before database setup failures); the
+  identical command with authorized local PostgreSQL access exited 0.
+- Focused acceptance: the authoritative Task 13 command exited 0 with 43 passed. Two consecutive
+  `alembic upgrade head` commands exited 0, `alembic check` exited 0 with no new operations, and the
+  migration/schema/append-only regression command exited 0 with 16 passed.
+- Completion gate: `make verify` exited 0; 178 files passed Ruff formatting, Ruff lint passed, strict
+  Mypy passed over 157 source files, Alembic/MCP drift checks passed, backend reported 245 passed / 3
+  explicit credential-gated provider skips, TypeScript/ESLint passed, Vitest reported 1 passed, and
+  the Next.js production build completed successfully.
+- Final-gate debugging evidence: pre-success runs exited 2 for Ruff formatting, import order, and strict
+  Mypy test typing findings; after the last two P1 regressions, one independent rerun found one additional
+  Ruff formatting delta. Each issue was corrected at its source and the entire `make verify` command was
+  rerun; the final authoritative run exited 0 with the counts above.
+- Scope remains FRE-17 / Task 13. No Task 14 implementation, online Prompt mutation, automatic Policy
+  activation, Live Broker surface, real-funds path, provider credential field, or LLM execution
+  authority was added.
