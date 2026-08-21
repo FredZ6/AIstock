@@ -10,6 +10,7 @@ from stock_platform.application.portfolio.accounting import (
     initial_funding,
     reverse_fill,
 )
+from stock_platform.application.portfolio.corporate_actions import SplitAction
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.portfolio.fill import PaperFill
 from stock_platform.domain.portfolio.ledger import cash_balance, is_balanced
@@ -86,6 +87,69 @@ def test_reversal_entries_restore_cash_and_position_without_mutation() -> None:
     assert nav.cash == Decimal("1000")
     assert nav.positions_value == Decimal("0")
     assert nav.total == Decimal("1000")
+
+
+def test_same_fill_cannot_be_reversed_twice() -> None:
+    entries = initial_funding(PORTFOLIO_ID, Decimal("1000"), "USD", NOW)
+    purchase = fill(1, quantity=Decimal("2"), price=Decimal("100"), fee=Decimal("1"))
+    posted = apply_fill(entries, purchase)
+    _, reversed_entries = reverse_fill(posted, purchase, occurred_at=NOW + timedelta(days=1))
+
+    with pytest.raises(ValueError, match="already reversed"):
+        reverse_fill(reversed_entries, purchase, occurred_at=NOW + timedelta(days=2))
+
+
+def test_nav_rebuild_applies_visible_split_to_pre_split_holding() -> None:
+    entries = initial_funding(PORTFOLIO_ID, Decimal("2000"), "USD", NOW)
+    purchase = fill(1, quantity=Decimal("10"), price=Decimal("100"), fee=Decimal("0"))
+    posted = apply_fill(entries, purchase)
+    split = SplitAction(
+        id=UUID(int=500),
+        symbol=Symbol("NVDA"),
+        effective_at=NOW + timedelta(seconds=2),
+        available_at=NOW + timedelta(seconds=2),
+        ratio=Decimal("2"),
+    )
+
+    nav = rebuild_nav(
+        posted,
+        (purchase,),
+        prices={Symbol("NVDA"): Decimal("50")},
+        as_of=NOW + timedelta(seconds=3),
+        split_actions=(split,),
+    )
+
+    assert nav.cash == Decimal("1000")
+    assert nav.positions_value == Decimal("1000")
+    assert nav.total == Decimal("2000")
+
+
+def test_nav_rebuild_rejects_fills_from_another_portfolio() -> None:
+    entries = initial_funding(PORTFOLIO_ID, Decimal("2000"), "USD", NOW)
+    purchase = fill(1, quantity=Decimal("1"), price=Decimal("100"), fee=Decimal("0"))
+    posted = apply_fill(entries, purchase)
+    foreign_fill = PaperFill(
+        id=UUID(int=900),
+        order_id=UUID(int=901),
+        portfolio_id=UUID(int=999),
+        symbol=Symbol("AAPL"),
+        side=OrderSide.BUY,
+        quantity=Decimal("100"),
+        price=Decimal("100"),
+        fee=Decimal("0"),
+        currency="USD",
+        filled_at=NOW + timedelta(seconds=2),
+        source_bar_time=NOW + timedelta(seconds=2),
+        execution_policy_version_id=POLICY_ID,
+    )
+
+    with pytest.raises(ValueError, match="one portfolio"):
+        rebuild_nav(
+            posted,
+            (purchase, foreign_fill),
+            prices={Symbol("NVDA"): Decimal("100"), Symbol("AAPL"): Decimal("100")},
+            as_of=NOW + timedelta(seconds=3),
+        )
 
 
 @given(

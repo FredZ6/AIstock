@@ -55,6 +55,7 @@ def bar(
         available_at=event_time + timedelta(seconds=2),
         open=Decimal(open_),
         volume=Decimal(volume),
+        content_hash=f"fixture-{symbol}-{minutes}-{open_}-{volume}",
     )
 
 
@@ -88,6 +89,52 @@ def test_available_volume_cap_creates_deterministic_partial_fills() -> None:
     assert [fill.quantity for fill in fills] == [Decimal("3"), Decimal("2"), Decimal("7")]
     assert len({fill.id for fill in fills}) == 3
     assert simulator.execute(order(quantity="12"), bars + (bars[-1],)) == fills
+
+
+def test_incremental_bars_respect_quantity_already_filled() -> None:
+    simulator = PaperExecutionSimulator(policy(participation="0.10"))
+    intent = order(quantity="10")
+    first_batch = simulator.execute(intent, (bar(1, volume="30"),))
+
+    second_batch = simulator.execute(
+        intent,
+        (bar(2, volume="100"),),
+        prior_fills=first_batch,
+    )
+
+    assert [fill.quantity for fill in first_batch] == [Decimal("3")]
+    assert [fill.quantity for fill in second_batch] == [Decimal("7")]
+    assert sum((fill.quantity for fill in first_batch + second_batch), Decimal("0")) == Decimal(
+        "10"
+    )
+
+
+def test_same_timestamp_revisions_are_canonical_across_input_order() -> None:
+    simulator = PaperExecutionSimulator(policy())
+    event_time = DECISION_TIME + timedelta(minutes=1)
+    available_at = event_time + timedelta(seconds=2)
+    first_revision = ExecutionBar(
+        symbol=Symbol("NVDA"),
+        event_time=event_time,
+        available_at=available_at,
+        open=Decimal("100"),
+        volume=Decimal("100"),
+        content_hash="revision-a",
+    )
+    second_revision = ExecutionBar(
+        symbol=Symbol("NVDA"),
+        event_time=event_time,
+        available_at=available_at,
+        open=Decimal("101"),
+        volume=Decimal("100"),
+        content_hash="revision-b",
+    )
+
+    forward = simulator.execute(order(), (first_revision, second_revision))
+    reversed_input = simulator.execute(order(), (second_revision, first_revision))
+
+    assert forward == reversed_input
+    assert forward[0].price == Decimal("101.0404")
 
 
 @given(minutes=st.integers(min_value=-30, max_value=30))

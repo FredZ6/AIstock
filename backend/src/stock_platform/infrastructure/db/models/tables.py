@@ -379,6 +379,12 @@ paper_fill = Table(
     CheckConstraint("fee >= 0", name=conv("ck_paper_fill_fee")),
     CheckConstraint("filled_at >= source_bar_time", name=conv("ck_paper_fill_bar_time")),
 )
+Index(
+    "paper_fill_one_reversal_per_fill_idx",
+    paper_fill.c.reversal_of_id,
+    unique=True,
+    postgresql_where=paper_fill.c.reversal_of_id.is_not(None),
+)
 cash_ledger = Table(
     "cash_ledger",
     metadata,

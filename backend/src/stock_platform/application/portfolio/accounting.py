@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID, uuid5
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Connection
 
@@ -190,6 +190,9 @@ def reverse_fill(
     original = tuple(entry for entry in existing if entry.source_id == item.id)
     if not original:
         raise ValueError("fill has no ledger entries to reverse")
+    original_entry_ids = {entry.id for entry in original}
+    if any(entry.reversal_of_id in original_entry_ids for entry in existing):
+        raise ValueError("fill is already reversed")
     reversal_entries = tuple(
         _entry(
             transaction_id=reversal.id,
@@ -288,6 +291,31 @@ class PostgresPaperAccountingStore:
                 )
                 .on_conflict_do_nothing(index_elements=[paper_fill.c.idempotency_key])
             )
+        persisted_quantity = self.connection.execute(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (paper_fill.c.reversal_of_id.is_(None), paper_fill.c.quantity),
+                            else_=-paper_fill.c.quantity,
+                        )
+                    ),
+                    ZERO,
+                )
+            ).where(paper_fill.c.order_id == order.id)
+        ).scalar_one()
+        persisted_status = (
+            "REJECTED"
+            if not order.risk_approved
+            else "FILLED"
+            if persisted_quantity == order.quantity
+            else "PARTIALLY_FILLED"
+            if persisted_quantity > ZERO
+            else "PENDING"
+        )
+        self.connection.execute(
+            update(paper_order).where(paper_order.c.id == order.id).values(status=persisted_status)
+        )
         for entry in entries:
             self.connection.execute(
                 insert(cash_ledger)

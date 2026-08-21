@@ -96,11 +96,13 @@ def test_corporate_actions_are_point_in_time_and_idempotent(engine: Engine) -> N
         split_position = processor.adjust_position(
             Position(Symbol("NVDA"), Decimal("10")), first_cutoff
         )
+        repeated_split_position = processor.adjust_position(split_position, first_cutoff)
         entries = initial_funding(portfolio_id, Decimal("1000"), "USD", DECISION_TIME)
         posted = processor.apply_dividends(entries, portfolio_id, split_position, later_cutoff)
         repeated = processor.apply_dividends(posted, portfolio_id, split_position, later_cutoff)
 
         assert split_position.quantity == Decimal("20")
+        assert repeated_split_position.quantity == Decimal("20")
         assert cash_balance(posted, portfolio_id, "USD") == Decimal("1010")
         assert repeated == posted
         assert is_balanced(posted)

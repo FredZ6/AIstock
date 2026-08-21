@@ -43,7 +43,13 @@ class PaperExecutionSimulator:
     def __init__(self, policy: ExecutionPolicy) -> None:
         self.policy = policy
 
-    def execute(self, order: OrderIntent, bars: Sequence[ExecutionBar]) -> tuple[PaperFill, ...]:
+    def execute(
+        self,
+        order: OrderIntent,
+        bars: Sequence[ExecutionBar],
+        *,
+        prior_fills: Sequence[PaperFill] = (),
+    ) -> tuple[PaperFill, ...]:
         if not order.risk_approved:
             return ()
         if order.execution_policy_version_id != self.policy.id:
@@ -53,7 +59,24 @@ class PaperExecutionSimulator:
         for item in bars:
             key = (str(item.symbol), item.event_time)
             current = revisions.get(key)
-            if current is None or item.available_at > current.available_at:
+            if (
+                current is not None
+                and (
+                    item.available_at,
+                    item.content_hash,
+                )
+                == (current.available_at, current.content_hash)
+                and (
+                    item.open,
+                    item.volume,
+                )
+                != (current.open, current.volume)
+            ):
+                raise ValueError("conflicting bars share a revision identity")
+            if current is None or (item.available_at, item.content_hash) > (
+                current.available_at,
+                current.content_hash,
+            ):
                 revisions[key] = item
         eligible = sorted(
             (
@@ -63,9 +86,25 @@ class PaperExecutionSimulator:
             ),
             key=lambda item: (item.event_time, item.available_at),
         )
-        remaining = order.quantity
+        unique_prior = tuple({item.id: item for item in prior_fills}.values())
+        if any(
+            item.order_id != order.id
+            or item.portfolio_id != order.portfolio_id
+            or item.symbol != order.symbol
+            or item.execution_policy_version_id != self.policy.id
+            or item.reversal_of_id is not None
+            for item in unique_prior
+        ):
+            raise ValueError("prior fills do not belong to the order")
+        previously_filled = sum((item.quantity for item in unique_prior), Decimal("0"))
+        if previously_filled > order.quantity:
+            raise ValueError("prior fills exceed order quantity")
+        consumed_revisions = {(item.source_bar_time, item.filled_at) for item in unique_prior}
+        remaining = order.quantity - previously_filled
         fills: list[PaperFill] = []
         for item in eligible:
+            if (item.event_time, item.available_at) in consumed_revisions:
+                continue
             available = item.volume * self.policy.volume_participation
             quantity = min(remaining, available)
             if quantity <= 0:
@@ -85,6 +124,7 @@ class PaperExecutionSimulator:
                     str(order.id),
                     item.event_time.isoformat(),
                     item.available_at.isoformat(),
+                    item.content_hash,
                     str(quantity),
                     str(self.policy.id),
                 )

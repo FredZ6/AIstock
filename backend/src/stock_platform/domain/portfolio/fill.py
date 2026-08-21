@@ -24,6 +24,7 @@ class ExecutionBar:
     available_at: datetime
     open: Decimal
     volume: Decimal
+    content_hash: str
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "symbol", Symbol(str(self.symbol)))
@@ -37,6 +38,10 @@ class ExecutionBar:
         _decimal("volume", self.volume)
         if self.volume < 0:
             raise ValueError("volume cannot be negative")
+        content_hash = self.content_hash.strip().lower()
+        if not content_hash:
+            raise ValueError("bar content_hash is required")
+        object.__setattr__(self, "content_hash", content_hash)
 
 
 @dataclass(frozen=True, slots=True)

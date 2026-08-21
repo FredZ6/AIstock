@@ -541,3 +541,67 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
 - Safety boundary: this is deterministic local paper simulation only. No live-broker endpoint,
   credential, switch, real order, real funds, LLM execution, or Task 12 portfolio-decision path was
   introduced. Real research-provider credentials remain optional and unrelated to Task 11 acceptance.
+
+### Task 11 independent-review P1 remediation — 2026-08-21
+
+- Incremental fills RED: the focused unit test exited 1 because `execute` accepted no prior-fill
+  state; the reproduced 10-share order filled 3 shares and then another 10 from an incremental bar.
+  GREEN: callers provide immutable prior fills, consumed revisions are skipped, and only the true
+  remainder can fill. Database migration `0009_paper_fill_quantity_guard` serializes inserts on the
+  PaperOrder row and rejects net cumulative quantity above the order quantity.
+- Rejected-intent bypass RED: PostgreSQL accepted a PaperOrder that changed a rejected OrderIntent
+  into an approved order. Migration `0010_paper_order_intent_guard` requires all duplicated order
+  facts and risk approval to match on INSERT/UPDATE and enforces status consistency.
+- Reversal RED: application code and PostgreSQL allowed a second timestamped reversal of the same
+  Fill. Application accounting now rejects a different second reversal while preserving exact
+  redelivery idempotency; migration `0011_unique_paper_fill_reversal` adds a partial unique index on
+  non-null `reversal_of_id`.
+- Split/NAV RED: replaying one split on an already adjusted Position doubled the quantity again, and
+  NAV rebuilt a 2-for-1 fixture as 1500 instead of 2000. Positions now retain applied split IDs;
+  point-in-time reconstruction orders visible Fill and split facts deterministically, excludes
+  reversed Fill pairs, and applies each split once. The corrected fixture rebuilds cash 1000 plus
+  positions 1000 for NAV 2000.
+- Portfolio isolation RED: NAV accepted a Fill from another portfolio and inflated a 2000 fixture to
+  12000. NAV now rejects any visible Fill whose `portfolio_id` differs from the authoritative Ledger.
+- Revision determinism RED: two Bar revisions with identical event/availability times produced the
+  same Fill ID but prices 100 versus 101 when input order changed. `ExecutionBar` now requires a
+  normalized content hash; canonical revision selection and Fill identity include that stable hash,
+  while conflicting facts under one revision identity are rejected.
+- Trigger interaction debugging: the first combined portfolio run exited 1 after 20 passes because
+  PostgreSQL executes the cumulative BEFORE INSERT trigger before `ON CONFLICT DO NOTHING`, causing
+  exact redelivery to look like an overfill. Migration `0012_idempotent_fill_guard` first validates an
+  existing idempotency key against every immutable Fill fact; exact matches reach unique-key dedup,
+  while collisions with different facts fail. The complete portfolio suite then exited 0 with 21
+  passed.
+- Migration and append-only acceptance: isolated migration regression exited 0 with 2 passed;
+  consecutive `alembic upgrade head` calls and `alembic check` exited 0 with no drift. The combined
+  portfolio, migration, and append-only command exited 0 with 26 passed.
+- First complete regression: `make verify` exited 0; 138 files passed Ruff formatting, Ruff lint and
+  strict Mypy passed over 124 source files, Alembic/MCP drift checks passed, backend reported 170
+  passed / 3 explicit credential-gated skips, TypeScript/ESLint passed, Vitest reported 1 passed, and
+  the Next.js production build completed successfully.
+- Completion-gate repeat: a second unchanged `make verify` exited 0 with the same 170 backend passed /
+  3 explicit credential-gated skips, 1 Vitest passed, and all format, lint, type, migration, contract,
+  and Next.js production-build gates green.
+- Scope remains Task 11 only. No Task 12 agent/risk/benchmark implementation, Live Broker surface,
+  real-funds path, or LLM execution authority was added.
+
+### Task 11 P2 order-status remediation — 2026-08-21
+
+- Incremental persistence RED: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest
+  backend/tests/integration/portfolio/test_paper_accounting_store.py::test_incremental_fills_advance_persisted_order_status
+  -q` — exit 1; after persisting a 3-share partial fill and a later 7-share fill for a 10-share order,
+  PostgreSQL still reported `PARTIALLY_FILLED` instead of `FILLED`.
+- GREEN: `PostgresPaperAccountingStore.persist` now recomputes PaperOrder status in the same transaction
+  from the authoritative persisted net quantity: ordinary immutable fills add quantity and reversal
+  fills subtract it. Exact redelivery remains idempotent, and a fully reversed order returns to
+  `PENDING` without mutating fill history. The focused command exited 0 with 1 passed.
+- Related regression: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest
+  backend/tests/unit/portfolio backend/tests/integration/portfolio
+  backend/tests/integration/db/test_migrations.py backend/tests/integration/db/test_append_only.py -q`
+  — exit 0; 27 passed, including a persisted-status assertion that a complete fill reversal returns the
+  order to `PENDING` without changing immutable history.
+- Complete acceptance: `make verify` — exit 0; 138 files passed Ruff formatting, Ruff lint and strict
+  Mypy passed over 124 source files, Alembic/MCP drift checks passed, backend reported 171 passed / 3
+  explicit credential-gated skips, TypeScript/ESLint passed, Vitest reported 1 passed, and the Next.js
+  production build completed successfully.

@@ -102,13 +102,23 @@ class PostgresCorporateActionStore:
 class CorporateActionProcessor:
     def adjust_position(self, position: Position, actions: Sequence[CorporateAction]) -> Position:
         quantity = position.quantity
+        applied_split_ids = set(position.applied_split_ids)
         unique = {action.id: action for action in actions}
         for action in sorted(
             unique.values(), key=lambda item: (item.effective_at, item.available_at, item.id)
         ):
-            if isinstance(action, SplitAction) and action.symbol == position.symbol:
+            if (
+                isinstance(action, SplitAction)
+                and action.symbol == position.symbol
+                and action.id not in applied_split_ids
+            ):
                 quantity *= action.ratio
-        return Position(symbol=position.symbol, quantity=quantity)
+                applied_split_ids.add(action.id)
+        return Position(
+            symbol=position.symbol,
+            quantity=quantity,
+            applied_split_ids=frozenset(applied_split_ids),
+        )
 
     def apply_dividends(
         self,
