@@ -10,6 +10,7 @@ from alembic.config import Config
 from psycopg import sql
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import DBAPIError
 
 
 @pytest.fixture
@@ -59,6 +60,77 @@ def _alembic_config(database_url: str) -> Config:
     config = Config(str(backend_dir / "alembic.ini"))
     config.set_main_option("sqlalchemy.url", database_url)
     return config
+
+
+def test_fresh_upgrade_does_not_invent_legacy_market_context(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "head")
+    command.upgrade(config, "head")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        assert (
+            connection.execute(text("SELECT count(*) FROM market_context_snapshot")).scalar_one()
+            == 0
+        )
+    engine.dispose()
+
+
+def test_legacy_order_backfill_preserves_unknown_risk_and_context_facts(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "0012_idempotent_fill_guard")
+    engine = create_engine(migration_database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO order_intent (
+                    id, portfolio_id, symbol, side, quantity, decision_time,
+                    execution_policy_version_id, risk_approved
+                ) VALUES (
+                    '70000000-0000-0000-0000-000000000018',
+                    '71000000-0000-0000-0000-000000000018',
+                    'NVDA', 'SELL', 7, '2026-08-20T14:30:00Z',
+                    '00000000-0000-0000-0000-000000000007', true
+                )
+                """
+            )
+        )
+    engine.dispose()
+
+    command.upgrade(config, "head")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        risk = connection.execute(
+            text(
+                """
+                SELECT requested_weight, approved_weight, current_weight, approved_delta,
+                       reference_nav, reference_price, max_order_quantity,
+                       authorization_source, authorized_side
+                FROM risk_decision
+                WHERE id = '70000000-0000-0000-0000-000000000018'
+                """
+            )
+        ).one()
+        context = connection.execute(
+            text(
+                """
+                SELECT qqq_trend, qqq_volatility, soxx_relative_strength, vix,
+                       regime_label, source_lineage
+                FROM market_context_snapshot
+                WHERE id = '00000000-0000-0000-0000-000000000016'
+                """
+            )
+        ).one()
+    engine.dispose()
+
+    assert risk == (0, 0, 0, 0, None, None, 7, "LEGACY_BACKFILL", "SELL")
+    assert context == (None, None, None, None, "UNKNOWN", ["LEGACY_UNKNOWN"])
 
 
 def test_0003_backfills_existing_market_data_from_unique_raw_objects(
@@ -143,3 +215,58 @@ def test_0003_backfills_existing_market_data_from_unique_raw_objects(
         "option-hash",
         "fixture/option",
     )
+
+
+def test_0007_preserves_and_hardens_existing_append_only_facts(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "0006_alert_market_bar_hardening")
+    engine = create_engine(migration_database_url)
+    with engine.begin() as connection:
+        fill_id = connection.execute(
+            text("INSERT INTO paper_fill DEFAULT VALUES RETURNING id")
+        ).scalar_one()
+        ledger_id = connection.execute(
+            text("INSERT INTO cash_ledger DEFAULT VALUES RETURNING id")
+        ).scalar_one()
+    engine.dispose()
+
+    command.upgrade(config, "head")
+    command.upgrade(config, "head")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        fill = connection.execute(
+            text(
+                """
+                SELECT order_id, symbol, execution_policy_version_id, idempotency_key
+                FROM paper_fill WHERE id = :id
+                """
+            ),
+            {"id": fill_id},
+        ).one()
+        ledger = connection.execute(
+            text(
+                """
+                SELECT transaction_id, source_id, account, debit, credit, idempotency_key
+                FROM cash_ledger WHERE id = :id
+                """
+            ),
+            {"id": ledger_id},
+        ).one()
+        assert fill[0] == fill_id
+        assert fill[1] == "FIXTURE"
+        assert fill[2] is not None
+        assert fill[3] == f"legacy:{fill_id}"
+        assert ledger == (
+            ledger_id,
+            ledger_id,
+            "LEGACY:CASH",
+            0,
+            0,
+            f"legacy:{ledger_id}",
+        )
+        with pytest.raises(DBAPIError, match="append-only"):
+            connection.execute(text("UPDATE paper_fill SET created_at = created_at"))
+    engine.dispose()

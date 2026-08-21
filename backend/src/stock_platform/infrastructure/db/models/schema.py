@@ -23,8 +23,12 @@ CORE_TABLES = frozenset(
         "confidence_policy_version",
         "tool_call",
         "agent_event",
+        "risk_decision",
+        "order_intent",
+        "paper_order",
         "paper_fill",
         "cash_ledger",
+        "corporate_action",
         "alert_event",
         "alert_thesis_link",
         "alert_explanation",
@@ -42,5 +46,6 @@ APPEND_ONLY_TABLES = frozenset(
         "cash_ledger",
         "tool_call",
         "agent_event",
+        "risk_decision",
     }
 )

@@ -1,7 +1,8 @@
 # AI Agent 美股科技研究与模拟投资平台
 
-Evidence-grounded US technology research and paper-trading simulation. The current M1 Data Plane
-runs in **Fixture Mode** without provider credentials and cannot connect to a live broker.
+Evidence-grounded US technology research and paper-trading simulation. The repository is implemented
+through **M4 Portfolio Task 12**; Task 13 controlled learning is not yet implemented. It runs in
+**Fixture Mode** without provider credentials and cannot connect to a live broker.
 
 ## Requirements
 
@@ -34,6 +35,18 @@ normalized point-in-time records to PostgreSQL.
   tools under `stock_platform.mcp_servers`.
 - Provider circuit state is available through `FallbackPolicy.health()` for the Task 14 control
   plane to expose at `/api/v1/providers/health`; the HTTP control plane itself remains out of M1.
+
+## M2–M4 capabilities
+
+- Bounded research agents produce evidence-grounded, policy-version-pinned decisions and deterministic
+  decision diffs without granting an LLM execution authority.
+- Alerts use deterministic rule evaluation, transactional outbox delivery, idempotency, and explicit
+  approval boundaries.
+- Paper execution uses next-eligible-bar fills, immutable fill and double-entry ledger facts,
+  point-in-time Corporate Actions, and deterministic NAV reconstruction.
+- The Task 12 Portfolio graph freezes research and market context, maps ResearchOpinion separately from
+  PortfolioAction, applies a deterministic Risk Gateway, binds each pending order to exact immutable
+  risk authorization, and reports Cash/QQQ/equal-weight/momentum benchmarks and portfolio metrics.
 
 ## Safety boundary
 

@@ -476,3 +476,217 @@ worktree.
   contract drift checks passed, 148 backend tests passed with 3 explicit credential-gated provider
   tests skipped, TypeScript and ESLint passed, 1 Vitest test passed, and the Next.js production build
   completed successfully.
+
+## M4 Portfolio
+
+Authoritative sources: Notion design baseline v0.2 and Codex executable engineering spec,
+re-read on 2026-08-21. Linear milestone: M4 Portfolio (FRE-15, FRE-16). Branch:
+`codex/m4-portfolio`, created from synchronized `main@aae517091aa1052559154cb46d5481ce8660f7dd`
+in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not started.
+
+### Task 11 — complete; awaiting human review
+
+- M3 closure: FRE-14 was marked Done, Linear M3 Alerts reached 100%, and Notion received PR #2 / final
+  merge commit `aae5170` / final verification evidence before M4 began.
+- Bootstrap: the first `make bootstrap` exited 2 after creating `.venv` because the restricted sandbox
+  could not resolve `files.pythonhosted.org`; the unchanged command with dependency-network permission
+  exited 0 and installed the pinned Python and pnpm lockfiles.
+- Baseline: `make verify` — exit 0; 148 backend tests passed with 3 explicit credential-gated provider
+  skips, and all Python, database, contract, Web, and production-build gates passed.
+- Unit RED: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest backend/tests/unit/portfolio -q`
+  — exit 2 with two expected collection errors because the portfolio application/domain packages did
+  not exist. Minimal domain implementation then made the same command exit 0 with 9 passed, including
+  Hypothesis ledger and fill-timing properties.
+- Integration RED: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest
+  backend/tests/integration/portfolio -q` — exit 2 with two expected collection errors because the
+  Corporate Action service and PostgreSQL accounting store did not exist. After migration/service
+  implementation, the first run had 3 passed / 1 fixture failure: the fixture omitted `ingested_at`
+  and correctly violated `available_at <= ingested_at`. Explicit UTC ingestion time produced 4 passed.
+- Paper execution: a pinned `ExecutionPolicyVersion` deterministically controls half-spread, slippage,
+  per-share/minimum fees, next-eligible-bar timing, and available-volume participation. Replays sort and
+  deduplicate bars, generate stable UUIDv5 fills, reject unapproved orders, and only fill bars strictly
+  later than the aware UTC decision time. All quantities, prices, fees, ratios, and NAV values use
+  `Decimal`; binary float and naive time are rejected.
+- Accounting: each funding, fill, dividend, and correction produces balanced debit/credit journal
+  entries. Application persistence rejects an unbalanced journal before any write, duplicate fills and
+  entries are idempotent, buys cannot make cash negative, and positions/NAV rebuild only from immutable
+  PaperFill and CashLedger facts. Corrections append an inverse Fill and inverse entries without updating
+  history.
+- Reversal RED/GREEN: the PostgreSQL test initially exited 1 because the normal fill trigger rejected a
+  valid opposite-side reversal. Migration `0008_paper_fill_reversals` validates the original immutable
+  fill, exact inverse identity, zero reversal fee, and later timestamp; the focused test then exited 0
+  with 1 passed. A separate store-boundary RED proved unbalanced entries were accepted; the minimal
+  pre-write balance check made the same focused test pass.
+- Corporate Actions: `corporate_action` stores raw-object lineage and provider/feed/time/hash/key facts.
+  Queries require `effective_at <= as_of` and `available_at <= as_of`; split ratios adjust derived
+  positions and cash dividends append idempotent balanced entries. Naive cutoffs are rejected.
+- Database migrations: `0007_paper_execution_ledger` adds OrderIntent, PaperOrder, hardened PaperFill,
+  double-entry CashLedger fields, CorporateAction lineage, constraints, and a database trigger rejecting
+  unapproved or non-future fills. It safely backfills legacy append-only rows. `0008` adds strictly
+  validated reversal fills. Two consecutive `alembic upgrade head` calls and `alembic check` exited 0
+  with no drift.
+- Migration regression: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest
+  backend/tests/integration/db/test_migrations.py -q` — exit 0; 2 passed. It covers isolated empty/legacy
+  upgrade paths, 0006→head backfill, repeated head, and retained append-only rejection. The combined Task
+  11 command over unit, portfolio integration, and migration tests exited 0 with 15 passed.
+- Full verification remediation: the first `make verify` exited 2 on one Ruff formatting difference.
+  The second passed format/lint, strict Mypy over 124 source files, and Alembic drift, then exited 2 with
+  160 passed / 3 skipped / 2 failed because the M0 append-only test still inserted newly hardened facts
+  with `DEFAULT VALUES`. Replacing that obsolete setup with valid approved-order and balanced-ledger
+  fixtures made the focused append-only suite exit 0 with 3 passed.
+- Complete acceptance: `make verify` — exit 0; 134 files formatted, Ruff lint passed, strict Mypy passed
+  over 124 source files, Alembic and MCP contract drift checks passed, 162 backend tests passed with 3
+  explicit credential-gated provider tests skipped, TypeScript and ESLint passed, 1 Vitest test passed,
+  and the Next.js production build completed successfully.
+- Safety boundary: this is deterministic local paper simulation only. No live-broker endpoint,
+  credential, switch, real order, real funds, LLM execution, or Task 12 portfolio-decision path was
+  introduced. Real research-provider credentials remain optional and unrelated to Task 11 acceptance.
+
+### Task 11 independent-review P1 remediation — 2026-08-21
+
+- Incremental fills RED: the focused unit test exited 1 because `execute` accepted no prior-fill
+  state; the reproduced 10-share order filled 3 shares and then another 10 from an incremental bar.
+  GREEN: callers provide immutable prior fills, consumed revisions are skipped, and only the true
+  remainder can fill. Database migration `0009_paper_fill_quantity_guard` serializes inserts on the
+  PaperOrder row and rejects net cumulative quantity above the order quantity.
+- Rejected-intent bypass RED: PostgreSQL accepted a PaperOrder that changed a rejected OrderIntent
+  into an approved order. Migration `0010_paper_order_intent_guard` requires all duplicated order
+  facts and risk approval to match on INSERT/UPDATE and enforces status consistency.
+- Reversal RED: application code and PostgreSQL allowed a second timestamped reversal of the same
+  Fill. Application accounting now rejects a different second reversal while preserving exact
+  redelivery idempotency; migration `0011_unique_paper_fill_reversal` adds a partial unique index on
+  non-null `reversal_of_id`.
+- Split/NAV RED: replaying one split on an already adjusted Position doubled the quantity again, and
+  NAV rebuilt a 2-for-1 fixture as 1500 instead of 2000. Positions now retain applied split IDs;
+  point-in-time reconstruction orders visible Fill and split facts deterministically, excludes
+  reversed Fill pairs, and applies each split once. The corrected fixture rebuilds cash 1000 plus
+  positions 1000 for NAV 2000.
+- Portfolio isolation RED: NAV accepted a Fill from another portfolio and inflated a 2000 fixture to
+  12000. NAV now rejects any visible Fill whose `portfolio_id` differs from the authoritative Ledger.
+- Revision determinism RED: two Bar revisions with identical event/availability times produced the
+  same Fill ID but prices 100 versus 101 when input order changed. `ExecutionBar` now requires a
+  normalized content hash; canonical revision selection and Fill identity include that stable hash,
+  while conflicting facts under one revision identity are rejected.
+- Trigger interaction debugging: the first combined portfolio run exited 1 after 20 passes because
+  PostgreSQL executes the cumulative BEFORE INSERT trigger before `ON CONFLICT DO NOTHING`, causing
+  exact redelivery to look like an overfill. Migration `0012_idempotent_fill_guard` first validates an
+  existing idempotency key against every immutable Fill fact; exact matches reach unique-key dedup,
+  while collisions with different facts fail. The complete portfolio suite then exited 0 with 21
+  passed.
+- Migration and append-only acceptance: isolated migration regression exited 0 with 2 passed;
+  consecutive `alembic upgrade head` calls and `alembic check` exited 0 with no drift. The combined
+  portfolio, migration, and append-only command exited 0 with 26 passed.
+- First complete regression: `make verify` exited 0; 138 files passed Ruff formatting, Ruff lint and
+  strict Mypy passed over 124 source files, Alembic/MCP drift checks passed, backend reported 170
+  passed / 3 explicit credential-gated skips, TypeScript/ESLint passed, Vitest reported 1 passed, and
+  the Next.js production build completed successfully.
+- Completion-gate repeat: a second unchanged `make verify` exited 0 with the same 170 backend passed /
+  3 explicit credential-gated skips, 1 Vitest passed, and all format, lint, type, migration, contract,
+  and Next.js production-build gates green.
+- Scope remains Task 11 only. No Task 12 agent/risk/benchmark implementation, Live Broker surface,
+  real-funds path, or LLM execution authority was added.
+
+### Task 11 P2 order-status remediation — 2026-08-21
+
+- Incremental persistence RED: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest
+  backend/tests/integration/portfolio/test_paper_accounting_store.py::test_incremental_fills_advance_persisted_order_status
+  -q` — exit 1; after persisting a 3-share partial fill and a later 7-share fill for a 10-share order,
+  PostgreSQL still reported `PARTIALLY_FILLED` instead of `FILLED`.
+- GREEN: `PostgresPaperAccountingStore.persist` now recomputes PaperOrder status in the same transaction
+  from the authoritative persisted net quantity: ordinary immutable fills add quantity and reversal
+  fills subtract it. Exact redelivery remains idempotent, and a fully reversed order returns to
+  `PENDING` without mutating fill history. The focused command exited 0 with 1 passed.
+- Related regression: `UV_CACHE_DIR=$PWD/.uv-cache uv run --offline pytest
+  backend/tests/unit/portfolio backend/tests/integration/portfolio
+  backend/tests/integration/db/test_migrations.py backend/tests/integration/db/test_append_only.py -q`
+  — exit 0; 27 passed, including a persisted-status assertion that a complete fill reversal returns the
+  order to `PENDING` without changing immutable history.
+- Complete acceptance: `make verify` — exit 0; 138 files passed Ruff formatting, Ruff lint and strict
+  Mypy passed over 124 source files, Alembic/MCP drift checks passed, backend reported 171 passed / 3
+  explicit credential-gated skips, TypeScript/ESLint passed, Vitest reported 1 passed, and the Next.js
+  production build completed successfully.
+
+### FRE-15 acceptance and Task 12 portfolio decision graph — 2026-08-21
+
+- FRE-15 independent acceptance: a fresh `make verify` exited 0 with 171 backend tests passed and 3
+  explicit credential-gated provider skips; all Python format/lint/type, Alembic/MCP drift, Web
+  type/lint/Vitest, and Next.js production-build gates passed. Linear FRE-15 was moved to Done with
+  commit `a92824277c180dcb50b3b4bcb42c4dac1eb41deb` and its verification evidence; FRE-16 was then moved
+  to In Progress before Task 12 implementation began.
+- Portfolio module RED: the authoritative Task 12 unit/integration selection initially exited 2 during
+  collection because allocation, benchmarks, metrics, risk, and the portfolio agent graph did not yet
+  exist. The minimal implementation separates ResearchOpinion from PortfolioAction, freezes research
+  inputs, constructs deterministic target proposals, runs a no-tool risk gateway, creates only approved
+  pending paper orders, executes at the next eligible bar, and rebuilds ledger/NAV plus Cash, QQQ,
+  equal-weight, and momentum benchmark returns under the same cost convention.
+- Deterministic risk gateway: policy-version-pinned decisions enforce position, gross exposure, cash
+  reserve, daily turnover, stale research, missing prices, earnings blackout, drawdown, duplicate
+  intents, and incomplete evidence. Model output is only a proposal: it cannot create a Fill unless a
+  deterministic approved/clipped RiskDecision exists. The graph permits zero external tool calls, at
+  most three LLM calls, and at most 60 seconds.
+- Risk-state propagation RED/GREEN: the focused rebalance test first exited 1 because
+  `PortfolioDecisionGraph.run` did not accept `daily_turnover` or `drawdown`. Adding Decimal-validated
+  state fields and passing them to `PortfolioRiskSnapshot` made the unchanged command exit 0 with 1
+  passed. The portfolio suite initially reported 30 passed / 9 infrastructure failures because the
+  restricted sandbox blocked localhost PostgreSQL; the identical database-enabled command exited 0
+  with 39 passed.
+- Risk audit migration: `0013_risk_decision_audit` adds append-only RiskDecision facts, policy/research
+  lineage, reason codes, and a non-null unique OrderIntent foreign key. A database trigger rejects an
+  order whose portfolio, symbol, decision time, or approval does not match its deterministic risk
+  decision. Migration `0014_risk_constraint_names` normalizes generated constraint names so Alembic
+  detects no drift while preserving safe legacy backfill.
+- Metrics and benchmarks: Decimal-only implementations cover return, CAGR, volatility, Sharpe,
+  Sortino, maximum drawdown, Calmar, turnover, beta, and information ratio. Benchmark fixtures cover
+  Cash, QQQ, equal-weight, and momentum with aligned timing and explicit transaction costs; aware UTC
+  timestamps and finite positive price/NAV inputs are required.
+- Local gates: Ruff formatting and lint exited 0; focused strict Mypy exited 0 over 90 source files.
+  Two consecutive `alembic upgrade head` calls and `alembic check` exited 0 with no new operations.
+  The combined migration, schema, append-only, portfolio unit, and portfolio integration selection
+  exited 0 with 53 passed.
+- Initial Task 12 verification: `make verify` exited 0; 151 files passed Ruff formatting, Ruff lint
+  passed, strict Mypy passed over 135 source files, Alembic/MCP drift checks passed, backend reported
+  188 passed / 3 explicit credential-gated provider skips, TypeScript and ESLint passed, Vitest
+  reported 1 passed, and the Next.js production build completed successfully.
+- Pre-commit review found that sequential proposals did not decrement remaining cash, constrained
+  allocations depended on input order, RiskDecision did not bind exact order economics, benchmarks
+  hardcoded zero costs, post-fill NAV reused the decision mark, frozen research/context pins were not
+  enforced end-to-end, and metrics could accept misaligned observations. Focused RED tests reproduced
+  each path before remediation.
+- Review remediation: the Risk Gateway now canonicalizes proposals and decrements cash/gross/turnover;
+  immutable RiskDecision facts bind current/approved weights, signed delta, reference NAV/price,
+  maximum quantity, risk policy, research DecisionSnapshot, and MarketContextSnapshot. Runtime,
+  application persistence, and PostgreSQL triggers all reject unauthorized quantity/side changes.
+  Market context is point-in-time persisted, frozen research verifies all policy/prompt/model/data-cutoff
+  pins, benchmarks apply the execution spread/slippage/fee model on actual strategy turnover, and NAV
+  uses the point-in-time market-bar mark visible at its timestamp while retaining execution costs.
+- Migrations `0015`–`0018` safely backfill legacy orders, add market-context and exact-order lineage,
+  and reject contradictory append-only risk facts. The first `0017` upgrade correctly rolled back with
+  exit 1 because its revision identifier exceeded Alembic's 32-character storage limit; shortening only
+  the identifier made upgrade/check exit 0. The combined portfolio/migration/schema/append-only suite
+  then exited 0 with 60 passed.
+- Final pre-commit verification: `make verify` exited 0; 154 files passed Ruff formatting, Ruff lint
+  passed, strict Mypy passed over 135 source files, Alembic/MCP drift checks passed, backend reported
+  195 passed / 3 explicit credential-gated provider skips, TypeScript and ESLint passed, Vitest
+  reported 1 passed, and the Next.js production build completed successfully.
+- Second independent-review remediation removes caller-supplied cash/weights/prices/turnover from the
+  graph boundary and derives them from immutable Ledger, Fill, and point-in-time Bar facts. Post-fill
+  NAV now exposes spread/slippage loss against the market mark. PostgreSQL additionally pins each order
+  to the execution policy frozen by its DecisionSnapshot. Legacy migrations preserve unknown weights,
+  NAV, prices, and market inputs as explicit `LEGACY_BACKFILL` / `UNKNOWN` facts instead of inventing
+  100% weights or zero-valued observations; an empty database receives no synthetic context row.
+- Final acceptance rerun: two consecutive `alembic upgrade head` commands exited 0; the migration,
+  rebalance, and accounting integration selection exited 0 with 16 passed. Ruff format/check, strict
+  Mypy over 136 source files, and Alembic drift check all exited 0.
+- Final independent review found and the implementation fixed four remaining edge cases: a fully
+  invested zero-cash portfolio now uses reconstructed decision NAV without division; benchmark fees
+  use that same pre-trade NAV; valuation rejects conflicting immutable Bar revision identities in
+  either input order; and daily turnover uses UTC day boundaries. The focused regression command
+  exited 0 with 18 passed / 1 database test deselected, and the full Task 12 unit/database/integration
+  selection exited 0 with 67 passed. The reviewer reported no remaining P1/P2 blockers and returned a
+  ready verdict.
+- Completion-gate `make verify` exited 0: 156 files passed Ruff formatting, Ruff lint passed, strict
+  Mypy passed over 136 source files, Alembic/MCP drift checks passed, backend reported 202 passed / 3
+  explicit credential-gated provider skips, TypeScript/ESLint passed, Vitest reported 1 passed, and
+  the Next.js production build completed successfully.
+- Scope remains Task 12. No Task 13 implementation, live-broker endpoint, real-funds path, provider
+  credential field, external portfolio-graph tool, or LLM execution authority was introduced.
