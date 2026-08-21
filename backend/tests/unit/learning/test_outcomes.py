@@ -64,6 +64,11 @@ def test_outcome_rejects_float_and_naive_time() -> None:
         DecisionForReview(uuid4(), "NVDA", datetime(2026, 8, 21), Decimal("100"))
 
 
+def test_price_observation_rejects_availability_before_event_time() -> None:
+    with pytest.raises(ValueError, match="event_time <= available_at"):
+        PriceObservation(NOW, NOW - timedelta(seconds=1), Decimal("100"))
+
+
 def test_pre_decision_prices_do_not_contaminate_excursions_or_benchmark_base() -> None:
     decision = DecisionForReview(uuid4(), "NVDA", NOW - timedelta(days=6), Decimal("100"))
     prices = (

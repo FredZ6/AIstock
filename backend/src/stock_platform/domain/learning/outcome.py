@@ -52,6 +52,8 @@ class PriceObservation:
     def __post_init__(self) -> None:
         event_time = require_aware(self.event_time).astimezone(UTC)
         available_at = require_aware(self.available_at).astimezone(UTC)
+        if event_time > available_at:
+            raise ValueError("timestamps must satisfy event_time <= available_at")
         if not isinstance(self.price, Decimal):
             raise TypeError("price must use Decimal")
         if not self.price.is_finite() or self.price <= 0:

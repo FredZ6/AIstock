@@ -761,11 +761,17 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
 - The final review pass additionally froze the complete weekly input decision set—including immature
   pending decisions—in `weekly_review_run.decision_ids`, and made forbidden audit reconstruction read
   the existing `policy_control` row without requiring callers to repeat bootstrap configuration.
-- Focused acceptance: the authoritative Task 13 command exited 0 with 42 passed. Two consecutive
+- Final PR human review found one remaining point-in-time invariant gap: Task 13's `PriceObservation`
+  accepted `available_at < event_time`, unlike the platform's canonical market facts. The regression
+  test first exited 1 because no exception was raised; the minimal UTC time-order guard then made the
+  complete outcome unit module exit 0 with 8 passed. An initial focused rerun was blocked by sandbox
+  localhost policy (`Operation not permitted`, exit 1; 26 passed before database setup failures); the
+  identical command with authorized local PostgreSQL access exited 0.
+- Focused acceptance: the authoritative Task 13 command exited 0 with 43 passed. Two consecutive
   `alembic upgrade head` commands exited 0, `alembic check` exited 0 with no new operations, and the
   migration/schema/append-only regression command exited 0 with 16 passed.
 - Completion gate: `make verify` exited 0; 178 files passed Ruff formatting, Ruff lint passed, strict
-  Mypy passed over 157 source files, Alembic/MCP drift checks passed, backend reported 244 passed / 3
+  Mypy passed over 157 source files, Alembic/MCP drift checks passed, backend reported 245 passed / 3
   explicit credential-gated provider skips, TypeScript/ESLint passed, Vitest reported 1 passed, and
   the Next.js production build completed successfully.
 - Final-gate debugging evidence: pre-success runs exited 2 for Ruff formatting, import order, and strict
