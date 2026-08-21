@@ -83,7 +83,21 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
         portfolio_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         order_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         risk_decision_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
+        market_context_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         transaction_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
+        connection.execute(
+            text(
+                """
+                INSERT INTO market_context_snapshot (
+                    id, as_of, available_at, algorithm_version, source_lineage
+                ) VALUES (
+                    :market_context_id, now() - interval '1 minute',
+                    now() - interval '1 minute', 'append-only-test-v1', '[]'::jsonb
+                )
+                """
+            ),
+            {"market_context_id": market_context_id},
+        )
         connection.execute(
             text(
                 """
@@ -97,12 +111,15 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
                     (SELECT id FROM decision_snapshot LIMIT 1),
                     :portfolio_id, 'FIXTURE', 'APPROVED', 1, 1, 0, 1, 1, 1, 1,
                     (SELECT id FROM risk_policy_version LIMIT 1),
-                    now() - interval '1 minute',
-                    '00000000-0000-0000-0000-000000000016'::uuid
+                    now() - interval '1 minute', :market_context_id
                 )
                 """
             ),
-            {"portfolio_id": portfolio_id, "risk_decision_id": risk_decision_id},
+            {
+                "portfolio_id": portfolio_id,
+                "risk_decision_id": risk_decision_id,
+                "market_context_id": market_context_id,
+            },
         )
         connection.execute(
             text(

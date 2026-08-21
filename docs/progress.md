@@ -1039,3 +1039,18 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
   default reach Compose while preserving test-supplied Alembic URLs. Ruff and the focused 3-test suite
   exited 0. A fresh complete local `make verify` then exited 0 again with 285 passed / 3 skips and all
   Python/Web/static/build gates green. Hosted verification remains required.
+- Third hosted run: GitHub Actions run `32515250076` reached the authoritative `make verify` gate and
+  reported 6 failed / 279 passed / 3 skipped. All failures were test-fixture foreign-key violations:
+  two integration fixtures hard-coded the legacy market-context sentinel from migration 0016, while
+  migration 0018 intentionally removes that row when no legacy RiskDecision references it. The local
+  long-lived database masked that invalid dependency.
+- Fresh-database regression fix: the accounting helper and append-only test now create and reference
+  their own explicit `market_context_snapshot` facts. The focused existing-database suite exited 0
+  with 9 passed. An explicitly empty temporary PostgreSQL database then upgraded through Alembic 0023
+  with exit 0, and the same focused suite against it exited 0 with 9 passed; both temporary databases
+  created during diagnosis were removed afterward.
+- Post-fix local completion gate: a complete from-the-start `make verify` exited 0. Ruff format checked
+  209 files, Ruff lint passed, strict Mypy passed over 183 source files, Alembic/MCP/OpenAPI drift
+  checks passed, backend reported 285 passed / 3 explicit credential-gated skips / 1 existing
+  upstream warning, Web Vitest reported 1 passed, and TypeScript, ESLint, and the Next.js production
+  build passed. A green hosted rerun remains the final merge condition.

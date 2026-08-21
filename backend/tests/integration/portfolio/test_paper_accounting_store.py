@@ -84,6 +84,22 @@ def insert_risk_fact(
     connection.execute(
         text(
             """
+            INSERT INTO market_context_snapshot (
+                id, as_of, available_at, qqq_trend, qqq_volatility,
+                soxx_relative_strength, vix, regime_label, algorithm_version,
+                source_lineage
+            ) VALUES (
+                :id, :as_of, :as_of, 0.05, 0.18, 0.02, 18, 'RISK_ON',
+                'regime-test-v1', '[]'::jsonb
+            )
+            ON CONFLICT (id) DO NOTHING
+            """
+        ),
+        {"id": MARKET_CONTEXT_ID, "as_of": DECISION_TIME},
+    )
+    connection.execute(
+        text(
+            """
             INSERT INTO risk_decision (
                 id, proposal_id, portfolio_id, symbol, status, requested_weight,
                 approved_weight, current_weight, approved_delta, reference_nav,
@@ -98,8 +114,7 @@ def insert_risk_fact(
                 CASE WHEN :approved THEN 1 ELSE NULL END,
                 CASE WHEN :approved THEN :quantity ELSE 0 END,
                 CASE WHEN :approved THEN '[]'::jsonb ELSE '["DRAWDOWN_LIMIT"]'::jsonb END,
-                :policy_id, :decided_at,
-                '00000000-0000-0000-0000-000000000016'::uuid
+                :policy_id, :decided_at, :market_context_id
             )
             """
         ),
@@ -112,6 +127,7 @@ def insert_risk_fact(
             "quantity": quantity,
             "policy_id": policy_id,
             "decided_at": DECISION_TIME,
+            "market_context_id": MARKET_CONTEXT_ID,
         },
     )
     return decision_id
