@@ -987,3 +987,33 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
   lint passed, strict Mypy passed over 182 source files, Alembic/MCP/OpenAPI drift checks passed,
   backend reported 282 passed / 3 credential-gated skips / 1 upstream deprecation warning, Web Vitest
   reported 1 passed, and TypeScript, ESLint, and the Next.js production build passed.
+
+## GitHub Actions verification gate (2026-08-22)
+
+- Design baseline: one least-privilege Ubuntu `verify` job mirrors the authoritative local
+  `make verify` gate for pull requests and pushes to `main`; it uses only Fixture Mode and the
+  repository's local Docker Compose PostgreSQL, Redis, and MinIO credentials.
+- RED environment diagnosis: the first focused test command exited 2 before collection because `uv`
+  attempted to initialize `/Users/fredz/.cache/uv`, which is outside the worktree sandbox. Re-running
+  with the repository-local `UV_CACHE_DIR` used by `scripts/verify.sh` reached the intended test.
+- RED: `UV_CACHE_DIR=/private/tmp/aistock-m6-control-plane/.uv-cache uv run pytest
+  backend/tests/contract/ci/test_github_actions.py -q` exited 1 with 3 failed. Every failure was the
+  expected `FileNotFoundError` for the not-yet-created `.github/workflows/ci.yml`.
+- GREEN: after adding the single-job workflow, the same focused command exited 0 with 3 passed. The
+  workflow pins Checkout, setup-python, setup-node, setup-uv, and pnpm setup to full immutable commit
+  SHAs while retaining human-readable release comments; it grants only `contents: read`.
+- Related-contract debugging: the first `backend/tests/contract` run was sandboxed from
+  `localhost:55432`, producing 10 setup errors and one MCP audit failure after 34 tests had passed.
+  The identical command with local-service access exited 0 with 45 passed / 3 explicit
+  credential-gated skips / 1 existing upstream Starlette/httpx warning.
+- Completion gate: the first `make verify` exited 2 before tests because Ruff required one fewer blank
+  line after the new test file's import block. Ruff's exact diff was applied; the focused Ruff check
+  and 3 CI tests then exited 0. A complete from-the-start `make verify` exited 0: 209 files passed Ruff
+  format, Ruff lint passed, strict Mypy passed over 183 source files, Alembic/MCP/OpenAPI drift checks
+  passed, backend reported 285 passed / 3 credential-gated skips / 1 existing upstream warning, Web
+  Vitest reported 1 passed, and TypeScript, ESLint, and the Next.js production build passed.
+- CI scope and residual risk: PR-to-main, push-to-main, and manual triggers share per-ref concurrency
+  cancellation. A fresh database is upgraded to Alembic head before `make verify`; Docker service
+  state and logs are emitted on failure, and volumes are always removed. No provider secret, Live
+  Broker setting, real-money path, or automatic policy activation was added. The remaining acceptance
+  step is the first real GitHub-hosted `Verify` run on PR #5.
