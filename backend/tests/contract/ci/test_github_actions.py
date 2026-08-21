@@ -1,6 +1,8 @@
+import json
 from pathlib import Path
 
 WORKFLOW = Path(__file__).parents[4] / ".github" / "workflows" / "ci.yml"
+PACKAGE_JSON = Path(__file__).parents[4] / "package.json"
 
 
 def workflow_text() -> str:
@@ -21,10 +23,12 @@ def test_ci_runs_for_main_changes_with_least_privilege() -> None:
 
 def test_ci_uses_locked_toolchains_and_fixture_services() -> None:
     content = workflow_text()
+    package = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
 
     assert 'python-version: "3.12"' in content
     assert 'node-version: "22"' in content
-    assert 'version: "11"' in content
+    assert package["packageManager"] == "pnpm@11.19.0"
+    assert 'version: "11"' not in content
     assert "astral-sh/setup-uv@" in content
     assert "ENVIRONMENT: fixture" in content
     assert "docker compose up -d --wait postgres redis minio" in content

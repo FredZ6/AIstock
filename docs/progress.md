@@ -1017,3 +1017,15 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
   state and logs are emitted on failure, and volumes are always removed. No provider secret, Live
   Broker setting, real-money path, or automatic policy activation was added. The remaining acceptance
   step is the first real GitHub-hosted `Verify` run on PR #5.
+- First hosted run: GitHub Actions run `32511069888` parsed and started correctly but exited 1 in
+  `Set up pnpm`. Its log proved two competing version sources: workflow input `version: 11` and the
+  repository's exact `packageManager: pnpm@11.19.0`. No dependency installation, service startup, or
+  test command ran before the action rejected the ambiguity.
+- Hosted-failure RED/GREEN: the revised contract first exited 1 with 1 failed / 2 passed by requiring
+  the workflow to omit `version: 11` and to preserve the exact root package-manager pin. Removing only
+  that redundant action input made Ruff and the focused suite exit 0 with 3 passed.
+- Post-fix local gate: a fresh complete `make verify` exited 0 with the same authoritative results:
+  209 files passed Ruff format, Ruff lint passed, strict Mypy passed over 183 source files,
+  Alembic/MCP/OpenAPI drift checks passed, backend reported 285 passed / 3 explicit credential-gated
+  skips / 1 existing upstream warning, Web Vitest reported 1 passed, and TypeScript, ESLint, and the
+  Next.js production build passed. The next hosted run must pass before CI configuration is accepted.
