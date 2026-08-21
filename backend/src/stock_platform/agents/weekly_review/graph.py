@@ -1,6 +1,6 @@
 """Bounded weekly outcome attribution and controlled-learning workflow."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import timedelta
 from uuid import UUID
 
@@ -35,6 +35,7 @@ class WeeklyReviewGraph:
         prices: Mapping[UUID, tuple[PriceObservation, ...]],
         benchmark_prices: Sequence[PriceObservation],
         replay_candidates: Sequence[CandidateLesson] = (),
+        on_node_completed: Callable[[str], None] | None = None,
     ) -> WeeklyReviewResult:
         budgets = specification.budgets
         if budgets.llm_calls > 8 or budgets.tool_calls > 8:
@@ -47,12 +48,16 @@ class WeeklyReviewGraph:
         matured, pending = self._nodes.select_matured(
             frozen_decisions, as_of=specification.data_cutoff
         )
+        if on_node_completed is not None:
+            on_node_completed("select_matured")
         outcomes = self._nodes.compute_outcomes(
             matured,
             prices=dict(prices),
             benchmark_prices=tuple(benchmark_prices),
             as_of=specification.data_cutoff,
         )
+        if on_node_completed is not None:
+            on_node_completed("compute_outcomes")
         self._checkpoints.save(
             run_id,
             {
@@ -63,13 +68,21 @@ class WeeklyReviewGraph:
             saved_at=specification.decision_time,
         )
         attributions = self._nodes.attribute_errors(matured, outcomes)
+        if on_node_completed is not None:
+            on_node_completed("attribute_errors")
         reflections = self._nodes.reflect(attributions)
+        if on_node_completed is not None:
+            on_node_completed("reflect")
         lessons = self._nodes.create_candidate_lessons(
             attributions, created_at=specification.decision_time
         )
+        if on_node_completed is not None:
+            on_node_completed("create_candidate_lessons")
         replays = self._nodes.replay(
             tuple(replay_candidates), frozen_decisions, outcomes, attributions
         )
+        if on_node_completed is not None:
+            on_node_completed("replay")
         return WeeklyReviewResult(
             run_id=run_id,
             route=self.route,

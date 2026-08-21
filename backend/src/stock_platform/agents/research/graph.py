@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import cast
+from collections.abc import Callable
+from typing import Any, cast
 
 from langgraph.graph import END, START, StateGraph
 
@@ -31,12 +32,26 @@ class DailyResearchGraph:
         "persist_decision",
     )
 
-    def __init__(self, *, provider: ResearchCollectionProvider, store: ResearchStore) -> None:
+    def __init__(
+        self,
+        *,
+        provider: ResearchCollectionProvider,
+        store: ResearchStore,
+        on_node_completed: Callable[[str], None] | None = None,
+    ) -> None:
         self._store = store
         nodes = ResearchNodes(provider=provider, store=store)
         builder = StateGraph(ResearchState)
         for name in self.node_names:
-            builder.add_node(name, getattr(nodes, name))
+            node = getattr(nodes, name)
+
+            def observed(state: ResearchState, *, _name: str = name, _node: Any = node) -> Any:
+                result = _node(state)
+                if on_node_completed is not None:
+                    on_node_completed(_name)
+                return result
+
+            builder.add_node(name, observed)
         builder.add_edge(START, "preflight")
         builder.add_conditional_edges(
             "preflight",

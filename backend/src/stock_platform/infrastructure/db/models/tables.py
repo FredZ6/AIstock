@@ -268,6 +268,7 @@ decision_snapshot = Table(
     Column("prompt_version", Text, nullable=False),
     Column("model_version", Text, nullable=False),
     Column("data_cutoff", DateTime(timezone=True), nullable=False),
+    Column("available_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
     Column("supersedes_decision_id", UUID(as_uuid=True), ForeignKey("decision_snapshot.id")),
     created_at(),
 )
@@ -301,6 +302,79 @@ agent_event = Table(
     Column("payload", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     created_at(),
     UniqueConstraint("run_id", "sequence", name="agent_event_run_id_sequence_key"),
+)
+agent_run = Table(
+    "agent_run",
+    metadata,
+    uuid_pk(),
+    Column("run_type", Text, nullable=False),
+    Column("idempotency_key", Text, nullable=False),
+    Column("request_hash", Text, nullable=False),
+    Column("request_payload", JSONB, nullable=False),
+    Column("symbol", Text),
+    Column("decision_time", DateTime(timezone=True), nullable=False),
+    Column("data_cutoff", DateTime(timezone=True), nullable=False),
+    Column("status", Text, nullable=False, server_default=text("'QUEUED'")),
+    Column("attempt_count", Integer, nullable=False, server_default=text("0")),
+    Column("max_attempts", Integer, nullable=False, server_default=text("3")),
+    Column("last_error", JSONB),
+    Column("lease_expires_at", DateTime(timezone=True)),
+    Column(
+        "research_scoring_policy_version",
+        Text,
+        nullable=False,
+        server_default=text("'research-v1'"),
+    ),
+    Column("risk_policy_version", Text, nullable=False, server_default=text("'risk-v1'")),
+    Column("execution_policy_version", Text, nullable=False, server_default=text("'execution-v1'")),
+    Column(
+        "confidence_policy_version", Text, nullable=False, server_default=text("'confidence-v1'")
+    ),
+    Column("prompt_version", Text, nullable=False, server_default=text("'prompt-v1'")),
+    Column("model_version", Text, nullable=False, server_default=text("'fixture-v1'")),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    created_at(),
+    UniqueConstraint("idempotency_key", name="agent_run_idempotency_key_key"),
+    CheckConstraint(
+        "run_type IN ('RESEARCH', 'PORTFOLIO', 'ALERT_MONITOR', 'WEEKLY_REVIEW')",
+        name=conv("ck_agent_run_type"),
+    ),
+    CheckConstraint(
+        "status IN ('QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED')",
+        name=conv("ck_agent_run_status"),
+    ),
+    CheckConstraint("data_cutoff <= decision_time", name=conv("ck_agent_run_cutoff")),
+    CheckConstraint(
+        "attempt_count >= 0 AND max_attempts > 0 AND attempt_count <= max_attempts",
+        name=conv("ck_agent_run_attempts"),
+    ),
+)
+Index("agent_run_active_created_idx", agent_run.c.status, agent_run.c.created_at)
+paper_portfolio_config = Table(
+    "paper_portfolio_config",
+    metadata,
+    uuid_pk(),
+    Column("name", Text, nullable=False),
+    Column("initial_cash", Numeric, nullable=False),
+    Column("currency", Text, nullable=False),
+    created_at(),
+    UniqueConstraint("name", name="paper_portfolio_config_name_key"),
+    CheckConstraint(
+        "id = '10000000-0000-0000-0000-000000000001'::uuid",
+        name=conv("ck_paper_portfolio_config_singleton_id"),
+    ),
+    CheckConstraint("initial_cash > 0", name=conv("ck_paper_portfolio_config_cash")),
+    CheckConstraint("currency = 'USD'", name=conv("ck_paper_portfolio_config_currency")),
+)
+watchlist_item = Table(
+    "watchlist_item",
+    metadata,
+    Column("symbol", Text, primary_key=True),
+    Column("daily_research", Boolean, nullable=False, server_default=text("true")),
+    Column("intraday_monitoring", Boolean, nullable=False, server_default=text("true")),
+    Column("thresholds", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    created_at(),
 )
 risk_decision = Table(
     "risk_decision",
@@ -554,6 +628,8 @@ alert_event = Table(
     Column("conditions", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("metrics", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     Column("data_quality", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    Column("acknowledged_at", DateTime(timezone=True)),
+    Column("acknowledged_by", Text),
     created_at(),
     UniqueConstraint("alert_key", name="alert_event_alert_key_key"),
     CheckConstraint(

@@ -224,33 +224,13 @@ class PostgresPaperAccountingStore:
     def __init__(self, connection: Connection) -> None:
         self.connection = connection
 
-    def persist(
+    def persist_risk_decision(
         self,
-        order: OrderIntent,
-        fills: Sequence[PaperFill],
-        entries: Sequence[LedgerEntry],
-        *,
-        risk_decision: RiskDecision | None = None,
-        market_context: MarketContextSnapshot | None = None,
+        risk_decision: RiskDecision,
+        market_context: MarketContextSnapshot,
     ) -> None:
-        if not isinstance(order, OrderIntent):
-            raise TypeError("order must be an OrderIntent")
-        if not is_balanced(entries):
-            raise ValueError("ledger entries must be balanced before persistence")
-        if risk_decision is None or order.risk_decision_id != risk_decision.id:
-            raise ValueError("order must point to its deterministic risk decision")
-        if market_context is None or risk_decision.market_context_snapshot_id != market_context.id:
+        if risk_decision.market_context_snapshot_id != market_context.id:
             raise ValueError("risk decision must point to its frozen market context")
-        if order.symbol != risk_decision.symbol:
-            raise ValueError("order and risk decision identity do not match")
-        if order.portfolio_id != risk_decision.portfolio_id:
-            raise ValueError("order and risk decision portfolio do not match")
-        if order.risk_approved != risk_decision.approved:
-            raise ValueError("order approval must match deterministic risk decision")
-        if order.quantity != risk_decision.max_order_quantity or (
-            (order.side is OrderSide.BUY) != (risk_decision.approved_delta > ZERO)
-        ):
-            raise ValueError("order exceeds deterministic risk authorization")
         context_values = {
             "id": market_context.id,
             "as_of": market_context.as_of,
@@ -279,6 +259,13 @@ class PostgresPaperAccountingStore:
         )
         if any(persisted_context[key] != value for key, value in context_values.items()):
             raise ValueError("market context identity was reused with different facts")
+        authorized_side = (
+            "BUY"
+            if risk_decision.approved_delta > ZERO
+            else "SELL"
+            if risk_decision.approved_delta < ZERO
+            else None
+        )
         risk_values = {
             "id": risk_decision.id,
             "proposal_id": risk_decision.proposal_id,
@@ -294,9 +281,7 @@ class PostgresPaperAccountingStore:
             "reference_price": risk_decision.reference_price,
             "max_order_quantity": risk_decision.max_order_quantity,
             "authorization_source": "DETERMINISTIC",
-            "authorized_side": (
-                order.side.value if risk_decision.max_order_quantity > ZERO else None
-            ),
+            "authorized_side": authorized_side,
             "market_context_snapshot_id": risk_decision.market_context_snapshot_id,
             "reason_codes": [reason.value for reason in risk_decision.reason_codes],
             "risk_policy_version_id": risk_decision.risk_policy_version_id,
@@ -316,6 +301,59 @@ class PostgresPaperAccountingStore:
         )
         if any(persisted_risk[key] != value for key, value in risk_values.items()):
             raise ValueError("risk decision identity was reused with different facts")
+
+    def persist_ledger(self, entries: Sequence[LedgerEntry]) -> None:
+        if not is_balanced(entries):
+            raise ValueError("ledger entries must be balanced before persistence")
+        for entry in entries:
+            self.connection.execute(
+                insert(cash_ledger)
+                .values(
+                    id=entry.id,
+                    portfolio_id=entry.portfolio_id,
+                    amount=entry.debit - entry.credit,
+                    currency=entry.currency,
+                    entry_type=entry.account,
+                    occurred_at=entry.occurred_at,
+                    transaction_id=entry.transaction_id,
+                    source_id=entry.source_id,
+                    account=entry.account,
+                    debit=entry.debit,
+                    credit=entry.credit,
+                    idempotency_key=entry.idempotency_key,
+                    reversal_of_id=entry.reversal_of_id,
+                )
+                .on_conflict_do_nothing(index_elements=[cash_ledger.c.idempotency_key])
+            )
+
+    def persist(
+        self,
+        order: OrderIntent,
+        fills: Sequence[PaperFill],
+        entries: Sequence[LedgerEntry],
+        *,
+        risk_decision: RiskDecision | None = None,
+        market_context: MarketContextSnapshot | None = None,
+    ) -> None:
+        if not isinstance(order, OrderIntent):
+            raise TypeError("order must be an OrderIntent")
+        if not is_balanced(entries):
+            raise ValueError("ledger entries must be balanced before persistence")
+        if risk_decision is None or order.risk_decision_id != risk_decision.id:
+            raise ValueError("order must point to its deterministic risk decision")
+        if market_context is None:
+            raise ValueError("risk decision must point to its frozen market context")
+        if order.symbol != risk_decision.symbol:
+            raise ValueError("order and risk decision identity do not match")
+        if order.portfolio_id != risk_decision.portfolio_id:
+            raise ValueError("order and risk decision portfolio do not match")
+        if order.risk_approved != risk_decision.approved:
+            raise ValueError("order approval must match deterministic risk decision")
+        if order.quantity != risk_decision.max_order_quantity or (
+            (order.side is OrderSide.BUY) != (risk_decision.approved_delta > ZERO)
+        ):
+            raise ValueError("order exceeds deterministic risk authorization")
+        self.persist_risk_decision(risk_decision, market_context)
         self.connection.execute(
             insert(order_intent)
             .values(
@@ -403,26 +441,7 @@ class PostgresPaperAccountingStore:
         self.connection.execute(
             update(paper_order).where(paper_order.c.id == order.id).values(status=persisted_status)
         )
-        for entry in entries:
-            self.connection.execute(
-                insert(cash_ledger)
-                .values(
-                    id=entry.id,
-                    portfolio_id=entry.portfolio_id,
-                    amount=entry.debit - entry.credit,
-                    currency=entry.currency,
-                    entry_type=entry.account,
-                    occurred_at=entry.occurred_at,
-                    transaction_id=entry.transaction_id,
-                    source_id=entry.source_id,
-                    account=entry.account,
-                    debit=entry.debit,
-                    credit=entry.credit,
-                    idempotency_key=entry.idempotency_key,
-                    reversal_of_id=entry.reversal_of_id,
-                )
-                .on_conflict_do_nothing(index_elements=[cash_ledger.c.idempotency_key])
-            )
+        self.persist_ledger(entries)
 
     def load_fills(self, portfolio_id: UUID, *, as_of: datetime) -> tuple[PaperFill, ...]:
         cutoff = require_aware(as_of)

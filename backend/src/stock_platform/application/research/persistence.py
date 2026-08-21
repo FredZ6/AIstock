@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Protocol, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import Connection, Table, and_, insert, select
+from sqlalchemy import Connection, Table, and_, func, insert, select
 
 from stock_platform.agents.research.state import ResearchResult
 from stock_platform.infrastructure.db.models.tables import (
@@ -50,9 +51,17 @@ class InMemoryResearchStore:
 
 
 class PostgresResearchStore:
-    def __init__(self, connection: Connection) -> None:
+    def __init__(
+        self,
+        connection: Connection,
+        *,
+        available_at: datetime | None = None,
+        record_events: bool = True,
+    ) -> None:
         self.connection = connection
         self._results: dict[str, ResearchResult] = {}
+        self.available_at = available_at
+        self.record_events = record_events
 
     def latest(self, run_id: str) -> ResearchResult | None:
         return self._results.get(run_id)
@@ -66,11 +75,30 @@ class PostgresResearchStore:
         )
         if existing is not None:
             return existing
+        policy: dict[str, str] = {"source": "task_specification"}
+        if policy_table.name == "risk_policy_version":
+            policy = {
+                "max_position_weight": "0.20",
+                "max_gross_exposure": "1",
+                "min_cash_reserve": "0.05",
+                "max_daily_turnover": "0.25",
+                "max_drawdown": "0.20",
+                "max_research_age_days": "2",
+                "earnings_blackout_days": "1",
+            }
+        elif policy_table.name == "execution_policy_version":
+            policy = {
+                "spread_bps": "0",
+                "slippage_bps": "0",
+                "fee_per_share": "0",
+                "minimum_fee": "0",
+                "volume_participation": "1",
+            }
         return cast(
             UUID,
             self.connection.execute(
                 insert(policy_table)
-                .values(version=version, policy={"source": "task_specification"})
+                .values(version=version, policy=policy)
                 .returning(policy_table.c.id)
             ).scalar_one(),
         )
@@ -214,6 +242,7 @@ class PostgresResearchStore:
                 prompt_version=versions.prompt,
                 model_version=versions.model,
                 data_cutoff=result.specification.data_cutoff,
+                available_at=self.available_at or datetime.now(UTC),
             )
         )
         self.connection.execute(
@@ -225,13 +254,26 @@ class PostgresResearchStore:
             )
         )
         run_uuid = UUID(result.run_id)
-        for sequence, node in enumerate(result.route, start=1):
+        if not self.record_events:
+            self._results[result.run_id] = result
+            return
+        next_sequence = (
+            int(
+                self.connection.execute(
+                    select(func.coalesce(func.max(agent_event.c.sequence), 0)).where(
+                        agent_event.c.run_id == run_uuid
+                    )
+                ).scalar_one()
+            )
+            + 1
+        )
+        for sequence, node in enumerate(result.route, start=next_sequence):
             self.connection.execute(
                 insert(agent_event).values(
                     run_id=run_uuid,
                     sequence=sequence,
-                    event_type=f"research.{node}",
-                    payload={"status": result.status.value},
+                    event_type="node.completed",
+                    payload={"node": node, "status": result.status.value},
                 )
             )
         self._results[result.run_id] = result

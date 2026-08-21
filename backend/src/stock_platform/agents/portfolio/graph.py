@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC
 from decimal import Decimal
 from itertools import pairwise
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 from langgraph.graph import END, START, StateGraph
@@ -39,13 +39,27 @@ class PortfolioDecisionGraph:
         "update_ledger_nav",
     )
 
-    def __init__(self, *, risk_policy: RiskPolicy, execution_policy: ExecutionPolicy) -> None:
+    def __init__(
+        self,
+        *,
+        risk_policy: RiskPolicy,
+        execution_policy: ExecutionPolicy,
+        on_node_completed: Callable[[str], None] | None = None,
+    ) -> None:
         self._risk_policy = risk_policy
         self._execution_policy = execution_policy
         nodes = PortfolioNodes(risk_policy=risk_policy, execution_policy=execution_policy)
         builder = StateGraph(PortfolioState)
         for name in self.node_names:
-            builder.add_node(name, getattr(nodes, name))
+            node = getattr(nodes, name)
+
+            def observed(state: PortfolioState, *, _name: str = name, _node: Any = node) -> Any:
+                result = _node(state)
+                if on_node_completed is not None:
+                    on_node_completed(_name)
+                return result
+
+            builder.add_node(name, observed)
         builder.add_edge(START, self.node_names[0])
         for current, following in pairwise(self.node_names):
             builder.add_edge(current, following)
@@ -81,11 +95,24 @@ class PortfolioDecisionGraph:
             raise ValueError("market context cannot be after decision time")
         if market_context.available_at > specification.data_cutoff:
             raise ValueError("market context was unavailable at the data cutoff")
+        portfolio_versions = specification.policy_versions
+        governed_versions = (
+            portfolio_versions.research_scoring,
+            portfolio_versions.risk,
+            portfolio_versions.execution,
+            portfolio_versions.confidence,
+        )
         for item in research:
-            if item.policy_versions != specification.policy_versions:
+            research_versions = item.policy_versions
+            if (
+                research_versions.research_scoring,
+                research_versions.risk,
+                research_versions.execution,
+                research_versions.confidence,
+            ) != governed_versions:
                 raise ValueError("frozen research policy pins do not match task specification")
-            if item.data_cutoff != specification.data_cutoff:
-                raise ValueError("frozen research data cutoff does not match task specification")
+            if item.data_cutoff > specification.data_cutoff:
+                raise ValueError("frozen research data cutoff is after task specification")
         if not isinstance(drawdown, Decimal):
             raise TypeError("drawdown must use Decimal")
         if any(item.portfolio_id != portfolio_id for item in ledger):
