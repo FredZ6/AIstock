@@ -1054,3 +1054,6 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
   checks passed, backend reported 285 passed / 3 explicit credential-gated skips / 1 existing
   upstream warning, Web Vitest reported 1 passed, and TypeScript, ESLint, and the Next.js production
   build passed. A green hosted rerun remains the final merge condition.
+- Final hosted gate: GitHub Actions run `32515964511` completed the fresh-service and fresh-database
+  workflow in 2m19s with `Verify` passing. This closes the required independent hosted acceptance gate
+  for Task 14 and PR #5.
