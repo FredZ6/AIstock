@@ -1,9 +1,28 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { AppShell } from '../components/layout/app-shell'
 
+const storedThemes = new Map<string, string>()
+
 describe('product shell', () => {
+  beforeEach(() => {
+    storedThemes.clear()
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key: string) => storedThemes.get(key) ?? null,
+        removeItem: (key: string) => storedThemes.delete(key),
+        setItem: (key: string, value: string) => storedThemes.set(key, value),
+      },
+    })
+  })
+
+  afterEach(() => {
+    delete document.documentElement.dataset.theme
+    window.localStorage.removeItem('theme')
+  })
+
   it('exposes the locked eight-page information architecture with Today as the landing page', () => {
     render(
       <AppShell currentPath="/">
@@ -28,6 +47,7 @@ describe('product shell', () => {
       { href: '/eval', label: 'Eval & Admin' },
     ])
     expect(screen.getByRole('link', { name: 'Today' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('region', { name: 'Current market ticker' })).not.toBeInTheDocument()
     expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
   })
 
@@ -45,5 +65,23 @@ describe('product shell', () => {
       '#main-content',
     )
     expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content')
+    expect(screen.getByText('Current · Portfolio')).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('switches to a persistent dark theme and exposes the inverse action', () => {
+    render(
+      <AppShell currentPath="/">
+        <h1>Today</h1>
+      </AppShell>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to dark mode' }))
+
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
+    expect(window.localStorage.getItem('theme')).toBe('dark')
+    expect(screen.getByRole('button', { name: 'Switch to light mode' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
   })
 })

@@ -11,6 +11,7 @@ __pycache__/
 node_modules/
 test-results/
 playwright-report/
+.playwright-cli/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

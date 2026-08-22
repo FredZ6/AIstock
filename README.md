@@ -1,7 +1,7 @@
 # AI Agent 美股科技研究与模拟投资平台
 
 Evidence-grounded US technology research and paper-trading simulation. The repository is implemented
-through **M5 Learning Task 13**. It runs in **Fixture Mode** without provider credentials and cannot
+through **M6 Product Task 15**. It runs in **Fixture Mode** without provider credentials and cannot
 connect to a live broker.
 
 ## Requirements
@@ -51,6 +51,15 @@ normalized point-in-time records to PostgreSQL.
   emits duplicate-safe Candidate Lessons, evaluates prior Lessons against later decisions without
   future leakage, and records human approval/rejection plus transactional policy audit facts. No Lesson
   can activate itself or mutate an online prompt.
+
+## M6 product surface
+
+- The FastAPI control plane provides the locked REST contract, idempotent run admission, and durable
+  SSE recovery developed in Task 14.
+- Eight responsive Next.js pages provide Today, Watchlist, Research, Run Trace, Portfolio, Alerts,
+  Weekly Review, and Eval/Admin workflows with explicit loading and failure-state components.
+- Fixture-mode decisions remain traceable through Report, Claim, Evidence, ToolCall, provider, and
+  aware timestamps; paper fills and cash-ledger fixtures reconcile from opening cash to current cash.
 
 ## Safety boundary
 
