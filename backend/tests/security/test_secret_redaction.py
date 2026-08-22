@@ -5,6 +5,8 @@ def test_redaction_removes_credentials_prompts_addresses_and_untrusted_text() ->
     payload = {
         "authorization": "Bearer super-secret",
         "api_key": "provider-key",
+        "key": "generic-secret",
+        "private_key": "private-secret",
         "prompt": "system prompt includes password=hunter2",
         "recipient_email": "analyst@example.com",
         "notification_address": "chat:123456",
@@ -15,6 +17,8 @@ def test_redaction_removes_credentials_prompts_addresses_and_untrusted_text() ->
     assert redact(payload) == {
         "authorization": "[REDACTED]",
         "api_key": "[REDACTED]",
+        "key": "[REDACTED]",
+        "private_key": "[REDACTED]",
         "prompt": "[REDACTED]",
         "recipient_email": "[REDACTED]",
         "notification_address": "[REDACTED]",

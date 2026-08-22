@@ -1438,3 +1438,36 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   credential-gated skipped / 1 existing warning. Web: 10 files / 41 passed. No live broker, real-money
   execution, automatic policy activation, naive datetime, binary-float money, or Task 18 work was
   added.
+
+#### Task 17 pre-PR review remediation
+
+- The first two-axis standards/specification review found release blockers in generic secret
+  redaction, historical correlation backfill, production OTel export/log wiring, runtime metric call
+  sites, authenticated human policy rollback, exact recovery commands, and real recovery evidence.
+  Each behavior was covered by a failing regression before the minimal correction.
+- Redaction once again covers generic `key` and `private_key` fields. Migration 0024 now backfills
+  AgentEvent and ToolCall from their owning AgentRun while temporarily disabling and restoring the
+  append-only trigger; the 0023-to-head historical migration regression passed and the local database
+  reports zero correlation mismatches for both tables.
+- OTel uses an opt-in, loopback-only OTLP/HTTP exporter and structured correlated JSON logs. HTTP,
+  worker, MCP, Provider, DB-audit, graph, alert, queue, cost, and evaluation paths now invoke the
+  shared low-cardinality observability boundary. A real local export produced one collector resource
+  span and one `m7.acceptance` span.
+- Human policy actions require a constant-time checked bearer token and a fixed server-configured
+  human actor; partial configuration and request-supplied identity are rejected. No Provider or live
+  broker credential/path was introduced.
+- `scripts/verify-recovery.sh` performs a full TimescaleDB custom-format backup/restore into an
+  isolated temporary database, Alembic drift validation, a real Redis restart, bounded worker
+  recovery, and append-only PaperFill/CashLedger idempotency tests. The first real run exited 1 and
+  exposed missing Timescale pre/post-restore state. Its RED regression failed as expected; adding
+  `timescaledb_pre_restore()` and `timescaledb_post_restore()` fixed the root cause. The corrected
+  real run exited 0 with 7 passed and cleaned its temporary database.
+- Corrected focused gate: `pytest backend/tests/security backend/tests/integration/observability
+  backend/tests/integration/recovery -q --junitxml=reports/verification/task17-focused.xml` exited 0,
+  29 passed / 0 failed / 0 skipped with the existing Starlette-httpx warning. The first corrected
+  full gate then exited 2 solely because the newly explicit Authorization header made the locked
+  OpenAPI artifact stale; the generated diff contained only those five human-only endpoints. After
+  deterministic regeneration, `make verify` exited 0: 237 files format clean, Ruff clean, strict
+  Mypy clean over 208 files, Alembic/MCP/OpenAPI drift clean, backend 359 passed / 3 explicit
+  credential-gated skips / 1 existing warning, Web 10 files / 41 passed, TypeScript/ESLint clean,
+  and the ten-route Next.js production build passed.

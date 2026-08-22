@@ -21,12 +21,16 @@ _SENSITIVE_KEYS = (
     "provider_payload",
     "raw_text",
     "full_text",
+    "private_key",
 )
+_SENSITIVE_EXACT_KEYS = frozenset({"key"})
 
 
 def _sensitive_key(key: object) -> bool:
     normalized = str(key).lower()
-    return any(fragment in normalized for fragment in _SENSITIVE_KEYS)
+    return normalized in _SENSITIVE_EXACT_KEYS or any(
+        fragment in normalized for fragment in _SENSITIVE_KEYS
+    )
 
 
 def redact(value: Any) -> Any:

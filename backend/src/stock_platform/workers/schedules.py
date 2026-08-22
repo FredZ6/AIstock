@@ -15,6 +15,7 @@ from stock_platform.application.runs import (
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
 from stock_platform.infrastructure.db.models.tables import agent_run, watchlist_item
+from stock_platform.infrastructure.observability.metrics import platform_metrics
 from stock_platform.settings import Settings
 
 Dispatch = Callable[[str, str], None]
@@ -251,6 +252,7 @@ def recover_queued_runs(
         )
         .order_by(agent_run.c.created_at)
     ).all()
+    platform_metrics.set_queue(queue="agent-runs", depth=len(rows))
     for run_id, run_type in rows:
         dispatch(TASKS[run_type], str(run_id))
     return tuple(str(run_id) for run_id, _ in rows)

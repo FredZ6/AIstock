@@ -5,7 +5,7 @@ from stock_platform.infrastructure.observability.context import (
     correlation_scope,
     current_correlation,
 )
-from stock_platform.infrastructure.observability.metrics import PlatformMetrics
+from stock_platform.infrastructure.observability.metrics import PlatformMetrics, platform_metrics
 from stock_platform.infrastructure.observability.redaction import redact
 
 __all__ = [
@@ -13,5 +13,6 @@ __all__ = [
     "PlatformMetrics",
     "correlation_scope",
     "current_correlation",
+    "platform_metrics",
     "redact",
 ]

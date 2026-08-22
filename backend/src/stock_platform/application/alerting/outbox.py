@@ -33,6 +33,7 @@ from stock_platform.infrastructure.db.models.tables import (
     thesis_evidence_link,
 )
 from stock_platform.infrastructure.observability.context import maybe_current_correlation
+from stock_platform.infrastructure.observability.metrics import platform_metrics
 
 _OUTBOX_NAMESPACE = UUID("4458e60a-ad59-420c-a71b-c2ca80e34a41")
 _NEW_YORK = ZoneInfo("America/New_York")
@@ -664,6 +665,8 @@ class PostgresAlertStore:
                 )
                 .on_conflict_do_nothing(index_elements=[notification_outbox.c.alert_key])
             )
+        if inserted is not None:
+            platform_metrics.observe_alert(rule=evaluation.rule_id, outcome="created")
         return inserted is not None
 
     def record_explanation(

@@ -18,6 +18,12 @@ def test_compose_wires_otel_prometheus_and_grafana_with_pinned_configs() -> None
         assert all(str(port).startswith("127.0.0.1:") for port in services[service]["ports"])
     assert (ROOT / "infra/otel/collector.yml").is_file()
     assert (ROOT / "infra/prometheus/prometheus.yml").is_file()
+    recovery_script = (ROOT / "scripts/verify-recovery.sh").read_text()
+    assert "pg_dump" in recovery_script and "pg_restore" in recovery_script
+    assert "timescaledb_pre_restore()" in recovery_script
+    assert "timescaledb_post_restore()" in recovery_script
+    assert "restart redis" in recovery_script
+    assert "test_replay_persists_one_append_only_fill" in recovery_script
 
 
 def test_grafana_dashboard_covers_slos_and_failure_categories() -> None:

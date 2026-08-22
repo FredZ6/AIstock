@@ -13,3 +13,5 @@ never label by symbol, run ID, correlation ID, address, or raw content.
 PostgreSQL is authoritative for AgentEvent, ToolCall, DecisionSnapshot, PaperFill, and CashLedger.
 Redis streams and Celery delivery are transient and may be rebuilt without rewriting those facts.
 Grafana requires authentication and all observability ports bind only to localhost by default.
+OTLP export is disabled by default and, when explicitly enabled, is hard-coded to the loopback
+Collector; configuration cannot redirect correlation identifiers to a remote endpoint.

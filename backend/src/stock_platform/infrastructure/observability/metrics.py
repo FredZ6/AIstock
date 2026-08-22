@@ -87,3 +87,6 @@ class PlatformMetrics:
 
     def render(self) -> str:
         return generate_latest(self._registry).decode()
+
+
+platform_metrics = PlatformMetrics()

@@ -5,11 +5,12 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from sqlalchemy import create_engine, insert, select
 from stock_platform.api.main import app
 from stock_platform.application.events.sse import load_events
 from stock_platform.application.runs import admit_run, append_run_event, execute_run
-from stock_platform.infrastructure.db.models.tables import agent_run
+from stock_platform.infrastructure.db.models.tables import agent_event, agent_run, tool_call
 from stock_platform.infrastructure.observability.context import (
     CorrelationContext,
     correlation_scope,
@@ -18,6 +19,7 @@ from stock_platform.infrastructure.observability.context import (
 from stock_platform.infrastructure.observability.metrics import PlatformMetrics
 from stock_platform.infrastructure.observability.telemetry import (
     JsonLogFormatter,
+    OperationalTelemetry,
     create_in_memory_tracer,
 )
 
@@ -116,6 +118,22 @@ def test_structured_logs_and_spans_share_redacted_correlation_attributes() -> No
     assert spans[0].attributes["correlation.id"] == str(correlation_id)
 
 
+def test_operational_telemetry_emits_correlated_redacted_logs_and_spans() -> None:
+    exporter = InMemorySpanExporter()
+    logs: list[str] = []
+    telemetry = OperationalTelemetry(exporter=exporter, log_sink=logs.append)
+    context = CorrelationContext(uuid4(), uuid4())
+
+    with correlation_scope(context), telemetry.span("provider.fetch", {"provider": "fixture"}):
+        telemetry.log("provider.fetch", {"private_key": "secret", "outcome": "ok"})
+
+    span = exporter.get_finished_spans()[0]
+    assert span.attributes is not None
+    assert span.attributes["correlation.id"] == str(context.correlation_id)
+    assert span.attributes["run.id"] == str(context.run_id)
+    assert '"private_key": "[REDACTED]"' in logs[0]
+
+
 def test_run_db_events_and_sse_replay_keep_one_correlation_path(
     isolated_database_url: str,
 ) -> None:
@@ -181,4 +199,53 @@ def test_worker_graph_boundary_restores_persisted_correlation_context(
 
     assert execute_run(isolated_database_url, admitted.id, "RESEARCH", work) is True
     assert observed == [CorrelationContext(correlation_id, admitted.id)]
+    engine.dispose()
+
+
+def test_0024_backfills_existing_event_and_tool_rows_from_their_run(
+    isolated_database_url: str,
+) -> None:
+    config = Config("backend/alembic.ini")
+    config.set_main_option("sqlalchemy.url", isolated_database_url)
+    command.upgrade(config, "0023_run_execution_guards")
+    engine = create_engine(isolated_database_url)
+    run_id = uuid4()
+    now = datetime(2026, 8, 23, 4, tzinfo=UTC)
+    with engine.begin() as connection:
+        connection.execute(
+            insert(agent_run).values(
+                id=run_id,
+                run_type="RESEARCH",
+                idempotency_key=f"legacy-{run_id}",
+                request_hash="b" * 64,
+                request_payload={},
+                decision_time=now,
+                data_cutoff=now,
+            )
+        )
+        connection.execute(
+            insert(agent_event).values(run_id=run_id, sequence=1, event_type="legacy", payload={})
+        )
+        connection.execute(
+            insert(tool_call).values(
+                run_id=run_id, tool_name="legacy", request_fingerprint="c" * 64
+            )
+        )
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        run_correlation = connection.execute(
+            select(agent_run.c.correlation_id).where(agent_run.c.id == run_id)
+        ).scalar_one()
+        assert (
+            connection.execute(
+                select(agent_event.c.correlation_id).where(agent_event.c.run_id == run_id)
+            ).scalar_one()
+            == run_correlation
+        )
+        assert (
+            connection.execute(
+                select(tool_call.c.correlation_id).where(tool_call.c.run_id == run_id)
+            ).scalar_one()
+            == run_correlation
+        )
     engine.dispose()

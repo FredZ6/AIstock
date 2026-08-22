@@ -17,13 +17,13 @@ from stock_platform.infrastructure.observability.context import (
     correlation_scope,
     current_correlation,
 )
-from stock_platform.infrastructure.observability.metrics import PlatformMetrics
+from stock_platform.infrastructure.observability.metrics import platform_metrics
+from stock_platform.infrastructure.observability.telemetry import operational_telemetry
 
 app = FastAPI(title="AI Stock Research Platform", version="0.2.0")
 app.include_router(health_router)
 app.include_router(rest_router)
 app.include_router(events_router)
-metrics = PlatformMetrics()
 
 
 @app.middleware("http")
@@ -36,29 +36,37 @@ async def correlation_middleware(
     except ValueError:
         correlation_id = uuid4()
         with correlation_scope(CorrelationContext(correlation_id=correlation_id)):
-            response = _error_response(
+            invalid_response = _error_response(
                 400,
                 "INVALID_CORRELATION_ID",
                 "x-correlation-id must be a UUID",
             )
-        response.headers["x-correlation-id"] = str(correlation_id)
-        return response
+        invalid_response.headers["x-correlation-id"] = str(correlation_id)
+        return invalid_response
     context = CorrelationContext(correlation_id=correlation_id)
     with correlation_scope(context):
-        response = await call_next(request)
+        with operational_telemetry.span("http.request", {"http.method": request.method}) as span:
+            response = await call_next(request)
+            span.set_attribute("http.status_code", response.status_code)
     response.headers["x-correlation-id"] = str(correlation_id)
     route = request.scope.get("route")
-    metrics.observe_request(
+    route_name = str(getattr(route, "path", "unmatched"))
+    platform_metrics.observe_request(
         service="api",
-        route=str(getattr(route, "path", "unmatched")),
+        route=route_name,
         status=str(response.status_code),
     )
+    with correlation_scope(context):
+        operational_telemetry.log(
+            "http.request.completed",
+            {"method": request.method, "route": route_name, "status": response.status_code},
+        )
     return response
 
 
 @app.get("/metrics", include_in_schema=False)
 def prometheus_metrics() -> Response:
-    return Response(metrics.render(), media_type=CONTENT_TYPE_LATEST)
+    return Response(platform_metrics.render(), media_type=CONTENT_TYPE_LATEST)
 
 
 def _error_response(

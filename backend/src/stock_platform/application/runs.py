@@ -16,6 +16,8 @@ from stock_platform.infrastructure.observability.context import (
     CorrelationContext,
     correlation_scope,
 )
+from stock_platform.infrastructure.observability.metrics import platform_metrics
+from stock_platform.infrastructure.observability.telemetry import operational_telemetry
 
 RunType = Literal["RESEARCH", "PORTFOLIO", "ALERT_MONITOR", "WEEKLY_REVIEW"]
 RunWork = Callable[[Connection, RowMapping, "RunControl"], None]
@@ -184,10 +186,11 @@ def append_run_event(
 class RunControl:
     """Small durable boundary used by graph nodes for events and cancellation."""
 
-    def __init__(self, database_url: str, run_id: UUID, attempt: int) -> None:
+    def __init__(self, database_url: str, run_id: UUID, attempt: int, run_type: RunType) -> None:
         self._engine = create_engine(database_url)
         self._run_id = run_id
         self._attempt = attempt
+        self._run_type = run_type
 
     def close(self) -> None:
         self._engine.dispose()
@@ -207,6 +210,7 @@ class RunControl:
 
     def node_completed(self, node: str) -> None:
         self.emit("node.completed", {"node": node, "status": "COMPLETED"})
+        platform_metrics.observe_graph(graph=self._run_type.lower(), node=node, outcome="completed")
 
 
 def _claim_run(engine: Any, run_id: UUID, expected_type: RunType) -> tuple[RowMapping, int] | None:
@@ -290,7 +294,7 @@ def execute_run(
         if claim is None:
             return False
         row, attempt = claim
-        control = RunControl(database_url, run_id, attempt)
+        control = RunControl(database_url, run_id, attempt, expected_type)
         try:
             with engine.begin() as connection:
                 context = CorrelationContext(
@@ -298,7 +302,14 @@ def execute_run(
                     run_id=run_id,
                 )
                 with correlation_scope(context):
-                    work(connection, row, control)
+                    with operational_telemetry.span(
+                        "worker.run", {"run.type": expected_type.lower()}
+                    ):
+                        operational_telemetry.log(
+                            "worker.run.started",
+                            {"run_type": expected_type, "attempt": attempt},
+                        )
+                        work(connection, row, control)
                 completed = connection.execute(
                     update(agent_run)
                     .where(
