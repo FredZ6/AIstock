@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import { AppShell } from './layout/app-shell'
+import { PerformanceChart } from './portfolio/performance-chart'
 import { StateBoundary } from './states/state-boundary'
 import { type TodaySnapshot } from '../lib/api'
 import { formatMoney, formatPercent } from '../lib/format'
@@ -43,31 +44,32 @@ export function TodayPage({ snapshot }: TodayPageProps) {
             <h1>Today</h1>
             <p className="today-summary">What changed, what needs attention, and what the system can prove.</p>
           </div>
-          <div className="time-context" aria-label="Snapshot time">
-            <p>
-              <span>New York</span>
-              <time dateTime={snapshot.asOf}>{times.newYork}</time>
-            </p>
-            <p>
-              <span>Shanghai</span>
-              <time dateTime={snapshot.asOf}>{times.shanghai}</time>
-            </p>
+          <div className="today-meta">
+            <div className="time-context" aria-label="Snapshot time">
+              <p>
+                <span>New York</span>
+                <time dateTime={snapshot.asOf}>{times.newYork}</time>
+              </p>
+              <p>
+                <span>Shanghai</span>
+                <time dateTime={snapshot.asOf}>{times.shanghai}</time>
+              </p>
+            </div>
+            <div className="fixture-notice" role="note">
+              <strong>Fixture Mode</strong>
+              <span>Frozen synthetic fixture · not current market data</span>
+            </div>
           </div>
         </header>
 
-        <div className="fixture-notice" role="note">
-          <strong>Fixture Mode</strong>
-          <span>Frozen synthetic fixture · not current market data</span>
-        </div>
-
-        <StateBoundary state={state}>
+        <StateBoundary compact state={state}>
           <div className="today-content">
-            <section className="market-portfolio-grid" aria-label="Market and portfolio summary">
+            <section className="market-portfolio-grid surface-card" aria-label="Market and portfolio summary">
               <div className="market-regime">
                 <p className="section-kicker">Market regime</p>
-                <div className="regime-title">
+                <div className="regime-title" data-testid="regime-metadata">
                   <Signal tone="positive">{snapshot.marketRegime.label}</Signal>
-                  <span>{snapshot.marketRegime.algorithmVersion}</span>
+                  <span className="algorithm-version"><small>Model</small><span>{snapshot.marketRegime.algorithmVersion}</span></span>
                 </div>
                 <dl className="metric-list compact">
                   <div><dt>QQQ trend</dt><dd>{formatPercent(snapshot.marketRegime.qqqTrend)}</dd></div>
@@ -78,12 +80,7 @@ export function TodayPage({ snapshot }: TodayPageProps) {
               </div>
 
               <div className="portfolio-summary">
-                <p className="section-kicker">Paper portfolio</p>
-                <p className="nav-value">{formatMoney(snapshot.portfolio.nav, snapshot.portfolio.currency)}</p>
-                <div className="portfolio-change">
-                  <span><small>Day return</small>{formatPercent(snapshot.portfolio.dayReturn)}</span>
-                  <span><small>Drawdown</small>{formatPercent(snapshot.portfolio.drawdown)}</span>
-                </div>
+                <PerformanceChart compact snapshot={{ ...snapshot.portfolio, asOf: snapshot.asOf }} />
                 <dl className="benchmark-strip" aria-label="Portfolio benchmarks">
                   {[
                     ['Cash', snapshot.portfolio.benchmarks.cash],
@@ -102,31 +99,16 @@ export function TodayPage({ snapshot }: TodayPageProps) {
                 <div><p className="section-kicker">Discover</p><h2 id="watchlist-title">Watchlist signals</h2></div>
                 <Link href="/watchlist">Manage watchlist</Link>
               </div>
-              <div className="table-scroll">
-                <table aria-label="Watchlist signals">
-                  <thead><tr><th scope="col">Symbol</th><th scope="col">Price</th><th scope="col">Day</th><th scope="col">Research opinion</th><th scope="col">Portfolio action</th><th scope="col">Data quality</th></tr></thead>
-                  <tbody>
-                    {snapshot.watchlist.map((item) => (
-                      <tr key={item.symbol}>
-                        <th scope="row"><Link href={`/research/${item.symbol}`}>{item.symbol}</Link></th>
-                        <td>{formatMoney(item.price, 'USD')}</td>
-                        <td>{formatPercent(item.dailyReturn)}</td>
-                        <td><Signal tone={item.researchOpinion.toLowerCase()}>{item.researchOpinion}</Signal></td>
-                        <td><Signal tone={item.portfolioAction.toLowerCase()}>{item.portfolioAction}</Signal></td>
-                        <td>
-                          <div className="quality-line">
-                            <span>{item.dataQuality.freshness}</span>
-                            <span>{formatPercent(item.dataQuality.coverage, { fractionDigits: 0, signed: false })} coverage</span>
-                            <span>{item.dataQuality.provider}</span>
-                            <span>{item.dataQuality.delaySeconds}s delay</span>
-                            <span>{item.dataQuality.conflict ? 'Conflict detected' : 'No conflict'}</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ul className="watchlist-heatmap" aria-label="Watchlist heatmap">
+                {snapshot.watchlist.map((item) => (
+                  <li key={item.symbol} data-direction={item.dailyReturn.startsWith('-') ? 'negative' : 'positive'}>
+                    <div className="heatmap-primary"><Link href={`/research/${item.symbol}`}>{item.symbol}</Link><strong>{formatPercent(item.dailyReturn)}</strong></div>
+                    <span>{formatMoney(item.price, 'USD')}</span>
+                    <div className="heatmap-decisions"><Signal tone={item.researchOpinion.toLowerCase()}>{item.researchOpinion}</Signal><Signal tone={item.portfolioAction.toLowerCase()}>{item.portfolioAction}</Signal></div>
+                    <div className="quality-line"><span>{item.dataQuality.freshness}</span><span>{formatPercent(item.dataQuality.coverage, { fractionDigits: 0, signed: false })} coverage</span><span>{item.dataQuality.provider}</span><span>{item.dataQuality.delaySeconds}s delay</span><span>{item.dataQuality.conflict ? 'Conflict detected' : 'No conflict'}</span></div>
+                  </li>
+                ))}
+              </ul>
             </section>
 
             <div className="attention-grid">

@@ -17,7 +17,7 @@ export function RunTracePage({ snapshot }: { snapshot: RunTraceSnapshot }) {
         <div className="section-heading"><div><p className="section-kicker">Sequence</p><h2 id="events-title">Durable event trace</h2></div><span className="muted-copy">Resume with Last-Event-ID · {snapshot.lastEventId}</span></div>
         <ol aria-label="Durable run events" className="trace-list">{snapshot.events.map((event) => <li key={event.id}>
           <span className="trace-sequence">{String(event.sequence).padStart(2, '0')}</span>
-          <div><div className="trace-title"><strong>{event.type}</strong><Signal tone={event.status}>{event.status}</Signal></div><p>{event.detail}</p><small>{event.id} · <time dateTime={event.eventTime}>{formatDualTime(event.eventTime).newYork}</time></small></div>
+          <div><div className="trace-title"><strong>{event.type}</strong><Signal tone={event.status}>{event.status}</Signal></div><p>{event.detail}</p><small>{event.id} · <span>{new Intl.NumberFormat('en-US').format(Number(event.durationMs))} ms</span> · <time dateTime={event.eventTime}>{formatDualTime(event.eventTime).newYork}</time></small></div>
         </li>)}</ol>
       </section>
     </AppShell>

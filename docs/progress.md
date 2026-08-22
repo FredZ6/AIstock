@@ -1164,3 +1164,104 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
   presentation boundary. No Provider credential, real-funds path, live-broker configuration,
   automatic Policy activation, or Task 16 evaluation metric was added. Real-provider UI integration
   remains credential-gated and outside this Fixture acceptance.
+
+## Task 15 TradingView market-reference checkpoint (2026-08-22)
+
+- TDD RED/GREEN: the focused page suites first exited 1 with four expected missing-region failures
+  for the homepage ticker, NVDA overview, Watchlist mini charts, and Portfolio mini charts. The shared
+  implementation then passed 10/10 focused tests. A dark-theme contrast regression first failed
+  1/3 because `isTransparent` was true; the corrected official theme background passed 3/3.
+- Product placement: Today renders a compact six-symbol Ticker Tape directly below navigation;
+  `/research/NVDA` renders the requested Symbol Overview after the immutable AI thesis and before
+  evidence lineage; Watchlist and Paper Portfolio render lightweight Mini Charts. Each chart is
+  labelled `Current market reference` and `Not decision-time evidence`, and TradingView attribution
+  remains visible. External market widgets do not enter Evidence, Decision, replay, or backend data.
+- Theme race regression: a saved-dark-theme test first failed because the external light script was
+  injected before theme restoration. Theme context plus deferred injection now starts only the final
+  theme script. A real dark-mode reload previously produced five TradingView `querySelector` errors;
+  the same reload after the fix reported no console errors and rendered high-contrast dark widgets.
+- Browser evidence: official widgets loaded with current delayed-market labels at 1440px and 393px.
+  Visual checks covered the compact Today tape, rounded desktop/mobile Symbol Overview, Watchlist
+  Mini Chart, and dark theme. No npm dependency or provider credential was added.
+- Fresh verification: focused Vitest exited 0 with 11/11. The first sandboxed `make verify` could not
+  access local PostgreSQL; the authorized rerun then exposed and fixed nullable `aria-pressed` typing.
+  The final complete `make verify` exited 0: Ruff format/lint, strict Mypy over 183 files, Alembic drift,
+  285 backend passed / 3 credential-gated skipped / 1 existing warning, 34/34 Web tests, TypeScript,
+  ESLint, and all ten Next.js routes passed. Final Playwright exited 0 with 6/6 desktop/mobile tests.
+
+## Task 15 portfolio performance and Framer dark-theme checkpoint (2026-08-23)
+
+- TDD RED/GREEN: the focused Portfolio and shell suites first exited 1 with two expected failures:
+  the new Portfolio performance figure did not exist and the obsolete Today Ticker Tape was still
+  rendered. The minimal implementation then exited 0 with 2 files / 7 tests passing. Regression
+  coverage verifies the three independent metrics, default 30-day state, 7-day range switching,
+  Drawdown switching, accessible SVG history labels, frozen-data disclosure, and absence of the
+  homepage ticker.
+- Portfolio overview: Net asset value, Day return, and Current drawdown now sit above a dependency-free
+  responsive SVG line/area chart. Users can select 7/30/90-day or all-history ranges and switch among
+  Net asset value, Cumulative return, and Drawdown. The 16-point Fixture history keeps aware timestamps
+  and decimal strings as source facts; numeric conversion is isolated to SVG pixel placement.
+- UI revision: dark mode follows the supplied Framer design reference with a `#090909` canvas,
+  `#141414`/`#1c1c1c` surfaces, `#262626` hairlines, white/gray typography, `#0099ff` signal blue,
+  20px cards, compact 15px rhythm, and white selected pills. Finance risk semantics remain text-backed,
+  and the light theme remains available. The homepage TradingView Ticker Tape and its caption were
+  removed; symbol-detail and lightweight holding/watchlist market references remain explicitly
+  separated from decision-time evidence.
+- Browser evidence: Playwright inspected desktop and 393×852 dark layouts, verified Drawdown plus
+  Last 7 days yields an Aug 15–Aug 21 accessible history, confirmed the Today DOM has no current-market
+  ticker, and reported 0 console errors / 0 warnings. Generated screenshots were deleted after review.
+- Fresh gate: `make verify` exited 0: 209 files passed Ruff format, Ruff lint passed, strict Mypy passed
+  over 183 source files, Alembic drift checks passed, backend reported 285 passed / 3 explicit
+  credential-gated skips / 1 existing Starlette-httpx deprecation warning, Web reported 9 files /
+  33 tests passed, TypeScript and ESLint passed, and Next.js generated all ten routes. The separate
+  `pnpm exec playwright test e2e/happy-path.spec.ts` run exited 0 with 6/6 desktop/mobile tests.
+
+## Task 15 Today portfolio-chart checkpoint (2026-08-23)
+
+- TDD RED/GREEN: the new Today regression first exited 1 because no figure named `Paper portfolio
+  performance` existed. GREEN reuses the Portfolio performance component through a compact variant;
+  the focused Today suite exited 0 with 6/6 tests. Related Today contract, shell, and Portfolio suites
+  then exited 0 with 4 files / 18 tests.
+- The Today Paper portfolio now presents Net asset value, Day return, Current drawdown, a frozen
+  30-day net-asset-value line/area chart, all four locked benchmark comparisons, and an `Open portfolio`
+  route. Full range and metric controls remain on `/portfolio` so the Today card stays efficient.
+- The Today contract now carries an explicit performance history. Every point validates aware time,
+  Decimal-string NAV, cumulative return, and drawdown; new contract tests reject naive history times
+  and numeric money. The chart converts strings to numbers only for SVG presentation coordinates.
+- Browser review covered dark desktop and 393×852 mobile layouts. Both retained clear hierarchy and
+  responsive stacking, and the console reported 0 errors / 0 warnings. Generated screenshots were
+  deleted after inspection.
+- Fresh gate: `make verify` exited 0 with 209 Ruff-formatted files, Ruff lint, strict Mypy over 183
+  files, clean Alembic drift, 285 backend passed / 3 credential-gated skipped / 1 existing warning,
+  9 Web files / 35 tests passed, TypeScript, ESLint, and all ten Next.js routes. The separate full
+  Playwright run exited 0 with 6/6 desktop/mobile tests.
+
+## Task 15 Notion acceptance-blocker closure (2026-08-23)
+
+- Re-audited FRE-19 against the complete Notion v0.2 page contract and closed every reported P1/P2
+  gap. Watchlist now has a validated add-symbol session draft, per-symbol daily-research and intraday
+  monitoring controls, Decimal-string thresholds, and an aware earnings date. Stock Research now
+  exposes Fundamentals, Earnings, News, Options, Analyst Targets, and immutable Decision History.
+  Run Trace records and renders per-step duration alongside node/tool/token/cost/retry/fallback and
+  checkpoint facts.
+- Portfolio now exposes derived cash, position unrealized P&L, accepted/rejected RiskDecision facts,
+  append-only PaperFill rows, and CashLedger rows rather than relying on a ledger-status sentence.
+  Weekly Review adds Thesis hit outcomes and descriptive confidence buckets while leaving formal
+  Brier/ECE gates to Task 16. Alerts now use the locked PRICE, VOLUME, OPTIONS, EARNINGS, NEWS,
+  ANALYST_TARGET, and PORTFOLIO_RISK category union. Today uses a responsive, non-color-only
+  Watchlist heatmap instead of a table.
+- Accessibility TDD added `@axe-core/playwright@4.10.2`. Initial scans correctly failed on missing
+  document title, light-theme navigation contrast, small tertiary text contrast, and keyboard access
+  to horizontally scrollable tables; each owned-DOM defect was fixed. The scan covers all eight
+  routes at desktop and mobile viewports and fails on serious/critical WCAG 2 A/AA violations.
+  Cross-origin TradingView iframe internals are explicitly excluded because they are third-party;
+  the owned widget host remains labelled and covered.
+- Final repository gate: authorized `make verify` exited 0. Ruff format/lint, strict Mypy over 183
+  source files, Alembic/MCP/OpenAPI drift checks, and the production Next.js build passed. Backend:
+  285 passed, 3 credential-gated skips, 1 existing Starlette/httpx deprecation warning. Web: 9 files,
+  37/37 tests passed. Final `pnpm exec playwright test --reporter=line` exited 0 with 8/8 tests across
+  desktop and mobile Chrome, including both eight-route Axe scans. `git diff --check` exited 0.
+- Safety boundary: all new values are visibly frozen synthetic fixtures; Money stays as Decimal
+  strings, timestamps are aware, ResearchOpinion remains distinct from PortfolioAction, and no live
+  broker, real-funds path, provider credential, automatic policy activation, or Task 16 metric was
+  added.

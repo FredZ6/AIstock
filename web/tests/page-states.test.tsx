@@ -64,6 +64,7 @@ describe('StateBoundary', () => {
     )
 
     const status = screen.getByRole('status', { name: 'Provider coverage degraded' })
+    expect(status).toHaveClass('surface-card')
     expect(status).toHaveTextContent('SEC')
     expect(status).toHaveTextContent('Options')
     expect(screen.getByText('Partial market context')).toBeInTheDocument()
@@ -101,6 +102,7 @@ describe('StateBoundary', () => {
     )
 
     expect(screen.getByRole('alert')).toHaveAccessibleName('Today data unavailable')
+    expect(screen.getByRole('alert')).toHaveClass('surface-card')
     expect(screen.getByRole('link', { name: 'Try again' })).toHaveAttribute('href', '/')
   })
 

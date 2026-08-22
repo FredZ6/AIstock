@@ -47,6 +47,12 @@ export type TodaySnapshot = {
     dayReturn: string
     drawdown: string
     nav: string
+    performanceHistory: Array<{
+      cumulativeReturn: string
+      drawdown: string
+      nav: string
+      time: string
+    }>
   }
   providers: Array<{
     id: string
@@ -142,6 +148,19 @@ export function parseTodaySnapshot(value: unknown): TodaySnapshot {
   const marketRegime = record(source.marketRegime, 'marketRegime')
   const portfolio = record(source.portfolio, 'portfolio')
   const benchmarks = record(portfolio.benchmarks, 'portfolio.benchmarks')
+  const performanceHistory = list(
+    portfolio.performanceHistory,
+    'portfolio.performanceHistory',
+  ).map((item, index) => {
+    const path = `portfolio.performanceHistory[${index}]`
+    const point = record(item, path)
+    return {
+      time: awareDateTime(point.time, `${path}.time`),
+      nav: decimal(point.nav, `${path}.nav`),
+      cumulativeReturn: decimal(point.cumulativeReturn, `${path}.cumulativeReturn`),
+      drawdown: decimal(point.drawdown, `${path}.drawdown`),
+    }
+  })
   const activeRunSource = source.activeRun === null ? null : record(source.activeRun, 'activeRun')
   const activeRun = activeRunSource
     ? {
@@ -180,6 +199,7 @@ export function parseTodaySnapshot(value: unknown): TodaySnapshot {
       currency: enumeration(portfolio.currency, ['USD'] as const, 'portfolio.currency'),
       dayReturn: decimal(portfolio.dayReturn, 'portfolio.dayReturn'),
       drawdown: decimal(portfolio.drawdown, 'portfolio.drawdown'),
+      performanceHistory,
       benchmarks: {
         cash: decimal(benchmarks.cash, 'portfolio.benchmarks.cash'),
         qqq: decimal(benchmarks.qqq, 'portfolio.benchmarks.qqq'),
@@ -258,6 +278,15 @@ export const fixtureTodaySnapshot = parseTodaySnapshot({
     currency: 'USD',
     dayReturn: '0.0042',
     drawdown: '-0.0180',
+    performanceHistory: [
+      { time: '2026-07-25T20:00:00Z', nav: '102265.97', cumulativeReturn: '0.0226597', drawdown: '0' },
+      { time: '2026-08-01T20:00:00Z', nav: '101360.00', cumulativeReturn: '0.0136', drawdown: '-0.0089' },
+      { time: '2026-08-08T20:00:00Z', nav: '101620.00', cumulativeReturn: '0.0162', drawdown: '-0.0063' },
+      { time: '2026-08-15T20:00:00Z', nav: '100780.00', cumulativeReturn: '0.0078', drawdown: '-0.0145' },
+      { time: '2026-08-18T20:00:00Z', nav: '100240.00', cumulativeReturn: '0.0024', drawdown: '-0.0198' },
+      { time: '2026-08-20T20:00:00Z', nav: '100005.16', cumulativeReturn: '0.0000516', drawdown: '-0.0221' },
+      { time: '2026-08-21T20:00:00Z', nav: '100425.18', cumulativeReturn: '0.0042518', drawdown: '-0.0180' },
+    ],
     benchmarks: { cash: '0', qqq: '0.0038', equalWeight: '0.0031', momentum: '0.0045' },
   },
   watchlist: [

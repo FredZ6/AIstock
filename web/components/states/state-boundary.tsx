@@ -50,47 +50,48 @@ export type ViewState =
 
 type StateBoundaryProps = {
   children?: ReactNode
+  compact?: boolean
   state: ViewState
 }
 
-function StateMessage({ state }: { state: EmptyState | StaleState | DegradedState | PartialState }) {
+function StateMessage({ compact, state }: { compact?: boolean; state: EmptyState | StaleState | DegradedState | PartialState }) {
   return (
     <section
       aria-label={state.title}
       aria-live="polite"
-      className="state-surface border-y border-zinc-700 bg-zinc-900/70 px-5 py-6"
+      className={`state-surface surface-card${compact ? ' state-compact' : ''}`}
       data-state={state.kind}
       role="status"
     >
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-300">
+      <p className="state-label">
         {state.kind}
       </p>
-      <h2 className="mt-2 text-lg font-semibold text-zinc-100">{state.title}</h2>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">{state.message}</p>
+      <h2>{state.title}</h2>
+      <p className="state-message">{state.message}</p>
       {state.kind === 'stale' ? (
-        <p className="mt-4 text-xs text-zinc-500">
+        <p className="state-timestamp">
           Last updated <time dateTime={state.lastUpdatedAt}>{state.lastUpdatedAt}</time>
         </p>
       ) : null}
       {state.kind === 'degraded' ? (
-        <ul aria-label="Degraded providers" className="mt-4 flex flex-wrap gap-2">
+        <ul aria-label="Degraded providers" className="state-tags">
           {state.providers.map((provider) => (
-            <li className="border border-amber-400/40 px-2 py-1 text-xs text-amber-200" key={provider}>
+            <li key={provider}>
               {provider}
             </li>
           ))}
         </ul>
       ) : null}
       {state.kind === 'partial' ? (
-        <ul aria-label="Missing records" className="mt-4 flex flex-wrap gap-2">
-          {state.missing.map((item) => <li className="border border-amber-400/40 px-2 py-1 text-xs text-amber-200" key={item}>{item}</li>)}
+        <ul aria-label="Missing records" className="state-tags">
+          {state.missing.map((item) => <li key={item}>{item}</li>)}
         </ul>
       ) : null}
     </section>
   )
 }
 
-export function StateBoundary({ children, state }: StateBoundaryProps) {
+export function StateBoundary({ children, compact, state }: StateBoundaryProps) {
   if (state.kind === 'success') {
     return children
   }
@@ -99,11 +100,11 @@ export function StateBoundary({ children, state }: StateBoundaryProps) {
     return (
       <section
         aria-live="polite"
-        className="state-surface border-y border-zinc-800 px-5 py-6"
+        className={`state-surface surface-card${compact ? ' state-compact' : ''}`}
         data-state="loading"
         role="status"
       >
-        <p className="text-sm text-zinc-300">Loading {state.label}…</p>
+        <p className="state-message">Loading {state.label}…</p>
       </section>
     )
   }
@@ -112,15 +113,15 @@ export function StateBoundary({ children, state }: StateBoundaryProps) {
     return (
       <section
         aria-label={state.title}
-        className="state-surface border-y border-red-400/40 bg-red-950/20 px-5 py-6"
+        className={`state-surface surface-card${compact ? ' state-compact' : ''}`}
         data-state="failure"
         role="alert"
       >
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-red-300">Failure</p>
-        <h2 className="mt-2 text-lg font-semibold text-zinc-100">{state.title}</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">{state.message}</p>
+        <p className="state-label">Failure</p>
+        <h2>{state.title}</h2>
+        <p className="state-message">{state.message}</p>
         {state.retryHref ? (
-          <Link className="mt-4 inline-block text-sm font-semibold text-red-200 underline" href={state.retryHref}>
+          <Link className="state-retry" href={state.retryHref}>
             Try again
           </Link>
         ) : null}
@@ -130,7 +131,7 @@ export function StateBoundary({ children, state }: StateBoundaryProps) {
 
   return (
     <>
-      <StateMessage state={state} />
+      <StateMessage compact={compact} state={state} />
       {state.kind === 'degraded' || state.kind === 'partial' ? children : null}
     </>
   )

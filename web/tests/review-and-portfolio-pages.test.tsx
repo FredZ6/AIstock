@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { AlertsPage } from '../components/alerts/alerts-page'
@@ -19,28 +19,49 @@ describe('portfolio and review pages', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'AI Portfolio' })).toBeInTheDocument()
     expect(screen.getAllByText(/Paper Trading/i).length).toBeGreaterThan(0)
     expect(screen.getByText('USD 100,425.18')).toBeInTheDocument()
+    const performance = screen.getByRole('figure', { name: 'Portfolio performance' })
+    expect(within(performance).getByRole('tab', { name: 'Net asset value' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(performance).getByRole('img', { name: /Net asset value history/i })).toBeInTheDocument()
+    expect(within(performance).getByText(/Frozen synthetic performance history/i)).toBeInTheDocument()
+    fireEvent.click(within(performance).getByRole('tab', { name: 'Drawdown' }))
+    expect(within(performance).getByRole('tab', { name: 'Drawdown' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(performance).getByRole('img', { name: /Drawdown history/i })).toBeInTheDocument()
+    fireEvent.click(within(performance).getByRole('button', { name: 'Last 7 days' }))
+    expect(within(performance).getByRole('button', { name: 'Last 7 days' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('figure', { name: /Benchmark comparison/ })).toBeInTheDocument()
     for (const benchmark of ['Cash', 'QQQ', 'Equal weight', 'Momentum']) {
       expect(screen.getByText(benchmark)).toBeInTheDocument()
     }
     const positions = screen.getByRole('table', { name: 'Paper portfolio positions' })
     expect(within(positions).getByText('NVDA')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'NVDA current market chart' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'MSFT current market chart' })).toBeInTheDocument()
     expect(screen.getByText(/next eligible bar/i)).toBeInTheDocument()
     expect(screen.getByText('execution-v1')).toBeInTheDocument()
     expect(screen.getByText(/balanced ledger/i)).toBeInTheDocument()
+    expect(screen.getAllByText('USD 74,699.58').length).toBeGreaterThan(0)
+    expect(within(positions).getByRole('columnheader', { name: 'Unrealized P&L' })).toBeInTheDocument()
+    const risks = screen.getByRole('table', { name: 'Risk decisions' })
+    expect(within(risks).getByText('REJECTED')).toBeInTheDocument()
+    expect(within(risks).getByText(/position concentration limit/i)).toBeInTheDocument()
+    expect(within(screen.getByRole('table', { name: 'Paper fills' })).getByText('fill-nvda-001')).toBeInTheDocument()
+    expect(within(screen.getByRole('table', { name: 'Cash ledger' })).getByText('ledger-buy-nvda-001')).toBeInTheDocument()
   })
 
   it('renders deterministic alerts with thesis linkage and visible explanation failure', () => {
     render(<AlertsPage snapshot={fixtureAlertsSnapshot} />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'Alerts' })).toBeInTheDocument()
-    expect(screen.getByText('HIGH')).toBeInTheDocument()
+    expect(screen.getAllByText('HIGH').length).toBeGreaterThan(0)
     expect(screen.getByText(/materiality 82%/i)).toBeInTheDocument()
-    expect(screen.getByText('thesis-nvda-v3')).toBeInTheDocument()
+    expect(screen.getAllByText('thesis-nvda-v3').length).toBeGreaterThan(0)
     expect(screen.getByText('evidence-volume-breakout')).toBeInTheDocument()
     expect(screen.getByText(/Explanation unavailable/i)).toBeInTheDocument()
     expect(screen.getByText(/deterministic alert remains valid/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Acknowledge alert/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Acknowledge alert alert-nvda-volume-001' })).toBeDisabled()
+    for (const category of ['PRICE', 'VOLUME', 'OPTIONS', 'EARNINGS', 'NEWS', 'ANALYST_TARGET', 'PORTFOLIO_RISK']) {
+      expect(screen.getByText(category)).toBeInTheDocument()
+    }
   })
 
   it('makes weekly lesson approval consequences and replay evidence explicit', () => {
@@ -55,6 +76,10 @@ describe('portfolio and review pages', () => {
     expect(screen.getByText(/does not activate a policy/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Approve candidate lesson' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Reject candidate lesson' })).toBeDisabled()
+    expect(screen.getByRole('heading', { name: 'Thesis outcomes' })).toBeInTheDocument()
+    expect(screen.getByText('HIT')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Confidence calibration' })).toBeInTheDocument()
+    expect(screen.getByText(/70–79% confidence/i)).toBeInTheDocument()
   })
 
   it('keeps Eval and policy administration read-only in fixture mode', () => {
