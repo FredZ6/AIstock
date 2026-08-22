@@ -1073,3 +1073,40 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
   exited 0.
 - Next TDD slice: shared Loading/Empty/Stale/Degraded/Failure/Success states and the Today page data
   contract. No Task 16 evaluation implementation, Live Broker surface, or real-funds path has begun.
+
+## Task 15 Today states and contract checkpoint (2026-08-22)
+
+- Remote delivery resumed: `git -c http.version=HTTP/1.1 push -u origin codex/m6-product-ui`
+  exited 0 and established the upstream branch after the earlier network failure.
+- Shared-state RED/GREEN: six semantic state tests first failed on the intentionally missing
+  `components/states/state-boundary` module. The minimal discriminated state boundary then passed all
+  six Loading, Empty, Stale, Degraded, Failure, and Success cases. Non-blocking Degraded state keeps
+  known-good content visible; Failure exposes an alert and recovery action; Stale includes an
+  explicit timestamp.
+- Runtime-contract RED/GREEN: four tests first failed on the missing `lib/api` module. The parser now
+  rejects naive datetimes, numeric Money, invalid progress, and any ResearchOpinion/PortfolioAction
+  enum mixing. The Today snapshot keeps raw freshness, coverage, provider, delay, and conflict facts,
+  uses decimal strings for Money, and has only `fixture` or `read_only` provider modes.
+- Today-page RED/GREEN: three page tests first failed because the Today implementation did not exist.
+  The page now renders a frozen market regime, USD 100,000 paper-portfolio baseline, Cash/QQQ/equal
+  weight/momentum comparisons, dual New York/Shanghai times, a semantic watchlist table with separate
+  opinion/action columns, provider degradation, alerts, and active-run progress. The fixture is
+  visibly labelled frozen synthetic data rather than current market data.
+- Apple design review: retained information density while establishing one dominant Today hierarchy,
+  system typography, restrained warm-amber chrome, 44px interaction targets, text-backed status
+  signals, visible keyboard focus, instantaneous pressed feedback, and responsive tables/navigation.
+  Reduced-motion, reduced-transparency, and increased-contrast preferences are honored. The compact
+  degraded banner no longer displaces core facts; mobile navigation has an overflow affordance.
+- Browser evidence: Playwright visual inspection covered 1440px desktop and 390px mobile layouts.
+  After adding the app icon, the final reload reported 0 console errors and 0 warnings. Generated
+  browser artifacts are ignored and not committed.
+- Fresh checkpoint gate: `pnpm --dir web test -- --run` exited 0 with 5 files and 16/16 tests passing;
+  `pnpm --dir web typecheck` exited 0; `pnpm --dir web lint` exited 0; and
+  `pnpm --dir web build` exited 0 with the Today route statically generated. Task 15 remains In
+  Progress for the remaining locked pages; no Task 16 work, live-broker configuration, or real-money
+  path was added.
+- Delivery status: a local checkpoint commit was created after the gate. Two push attempts did not update
+  the remote branch: the sandboxed attempt could not resolve GitHub, and the authorized attempt hung
+  until interrupted. Read-only diagnosis then found both an invalid GitHub CLI token and a 15-second
+  HTTPS timeout to github.com. Re-authentication plus restored GitHub connectivity is required before
+  the checkpoint can be pushed; no remote-delivery success is claimed.

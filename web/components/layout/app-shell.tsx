@@ -19,14 +19,19 @@ type AppShellProps = {
 
 export function AppShell({ children, currentPath }: AppShellProps) {
   return (
-    <div>
-      <a href="#main-content">Skip to main content</a>
-      <header>
-        <p>AI Stock Research</p>
-        <nav aria-label="Primary">
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
+      <header className="app-chrome">
+        <div className="brand-lockup">
+          <span aria-hidden="true" className="brand-mark">A</span>
+          <p><strong>AI Stock Research</strong><span>Evidence before action</span></p>
+        </div>
+        <nav aria-label="Primary" className="primary-nav">
           {navigation.map((item) => (
             <Link
               aria-current={currentPath === item.href ? 'page' : undefined}
+              className="nav-link"
+              data-current={currentPath === item.href ? 'true' : undefined}
               href={item.href}
               key={item.href}
             >
@@ -35,8 +40,8 @@ export function AppShell({ children, currentPath }: AppShellProps) {
           ))}
         </nav>
       </header>
-      <main id="main-content">{children}</main>
-      <footer>
+      <main className="app-main" id="main-content">{children}</main>
+      <footer className="app-footer">
         <p>Paper Trading only · Not investment advice</p>
       </footer>
     </div>
