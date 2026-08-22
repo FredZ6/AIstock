@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import { parseAwareInstant } from '../../lib/time'
+
 type LoadingState = {
   kind: 'loading'
   label: string
@@ -55,6 +57,10 @@ type StateBoundaryProps = {
 }
 
 function StateMessage({ compact, state }: { compact?: boolean; state: EmptyState | StaleState | DegradedState | PartialState }) {
+  if (state.kind === 'stale') {
+    parseAwareInstant(state.lastUpdatedAt)
+  }
+
   return (
     <section
       aria-label={state.title}

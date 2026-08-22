@@ -20,6 +20,7 @@ export type WatchlistSnapshot = {
 
 export type ResearchSnapshot = {
   asOf: string
+  report: { generatedAt: string; id: string }
   decisionDiff: Array<{ field: string; from: string; to: string }>
   fundamentals: Array<{ label: string; source: string; value: string }>
   earnings: Array<{ period: string; reportedAt: string; summary: string }>
@@ -112,6 +113,7 @@ export type AlertsSnapshot = {
     category: AlertCategory
     eventTime: string
     evidenceId: string
+    invalidationConditionId: string
     explanation: { detail: string; status: 'COMPLETED' | 'FAILED' | 'TIMEOUT' | 'DISABLED' }
     id: string
     materiality: string

@@ -1270,3 +1270,35 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
   does not hang on a third-party service; the application integration itself is unchanged. On the
   final revision, `make verify` exited 0 with the same 285 passed / 3 skipped backend and 37/37 Web
   results, and the separate desktop/mobile Playwright plus Axe run exited 0 with 8/8 tests.
+
+## Task 15 pre-merge human-review closure (2026-08-23)
+
+- A two-axis review against `main@8db13b8`, Notion v0.2, and repository invariants found five
+  actionable P1 defects: binary-float NAV chart projection, presentation paths accepting naive
+  datetimes, a missing Report step in the UI trace, alerts without invalidation-condition IDs, and
+  an incomplete paper-fill/CashLedger fixture that could not reconstruct current cash. It also found
+  README status drift and a duplicated Today `Signal` component.
+- TDD RED exited 1 with exactly five expected failures. GREEN exited 0 with 10 files / 40 tests:
+  chart coordinates retain cent-level distinctions beyond JavaScript Number precision, naive times
+  are rejected, the trace includes `report-nvda-v3`, alerts expose their invalidation condition, and
+  opening cash plus NVDA/MSFT fills reconcile exactly to USD 74,699.58.
+- `normalizeDecimalSeries` converts Decimal strings to scaled BigInt values and converts only the
+  final dimensionless 0–1 ratio to Number for SVG coordinates. `parseAwareInstant` is now the shared
+  presentation boundary for chart, watchlist, and dual-zone time rendering. Today reuses the shared
+  `Signal`, and README now reports M6 Task 15 accurately.
+- The review also questioned static Fixture route data. Re-reading the authoritative task text showed
+  Task 15 explicitly requires the eight page/state contracts and SSE recovery tests, while Task 18
+  owns the clean-room end-to-end demo. Fixture Mode therefore remains an explicit, non-live boundary;
+  connecting every product view to enriched control-plane view models remains integration debt, not
+  a Task 15 merge blocker.
+- Final gate on the reviewed revision: `make verify` exited 0 with 285 backend passed / 3 skipped,
+  10 Web files / 40 passed, clean Ruff/Mypy/Alembic/API drift checks, and a successful ten-route
+  production build. The parallel browser run completed all assertions but intermittently stalled
+  during dev-server teardown; the diagnostic single-worker run
+  `pnpm --dir web exec playwright test --reporter=line --workers=1` exited 0 with 8/8 desktop/mobile
+  tests and the same Axe coverage.
+- Final standards follow-up added a sixth regression: the shared stale-state boundary now rejects a
+  naive `lastUpdatedAt` before rendering. Its focused RED run exited 1 with the expected single
+  failure; GREEN exited 0 with 8/8 state tests. The fresh repository gate then exited 0 with 285
+  backend passed / 3 skipped and 10 Web files / 41 passed; the single-worker desktop/mobile
+  Playwright plus Axe run again exited 0 with 8/8 tests.

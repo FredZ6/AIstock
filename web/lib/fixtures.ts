@@ -31,6 +31,7 @@ export const fixtureWatchlistSnapshot: WatchlistSnapshot = {
 export const fixtureResearchSnapshot: ResearchSnapshot = {
   symbol: 'NVDA',
   asOf: '2026-08-21T20:00:00Z',
+  report: { id: 'report-nvda-v3', generatedAt: '2026-08-21T20:00:30Z' },
   researchOpinion: 'BULLISH',
   portfolioAction: 'HOLD',
   fundamentals: [
@@ -161,8 +162,15 @@ export const fixturePortfolioSnapshot: PortfolioSnapshot = {
     { id: 'risk-decision-001', orderIntentId: 'intent-nvda-add-001', status: 'REJECTED', reason: 'Position concentration limit would be exceeded.' },
     { id: 'risk-decision-002', orderIntentId: 'intent-msft-hold-001', status: 'ACCEPTED', reason: 'No simulated execution required.' },
   ],
-  fills: [{ id: 'fill-nvda-001', orderId: 'paper-order-nvda-001', symbol: 'NVDA', quantity: '120', price: '126.2968333333333333333333333', eventTime: '2026-07-25T14:31:00Z' }],
-  cashLedger: [{ id: 'ledger-buy-nvda-001', kind: 'PAPER_BUY', amount: '-15155.62', balance: '74699.58', eventTime: '2026-07-25T14:31:00Z' }],
+  fills: [
+    { id: 'fill-nvda-001', orderId: 'paper-order-nvda-001', symbol: 'NVDA', quantity: '120', price: '126.2968333333333333333333333', eventTime: '2026-07-25T14:31:00Z' },
+    { id: 'fill-msft-001', orderId: 'paper-order-msft-001', symbol: 'MSFT', quantity: '20', price: '507.24', eventTime: '2026-07-25T14:32:00Z' },
+  ],
+  cashLedger: [
+    { id: 'ledger-opening-001', kind: 'OPENING_CASH', amount: '100000.00', balance: '100000.00', eventTime: '2026-05-23T20:00:00Z' },
+    { id: 'ledger-buy-nvda-001', kind: 'PAPER_BUY', amount: '-15155.62', balance: '84844.38', eventTime: '2026-07-25T14:31:00Z' },
+    { id: 'ledger-buy-msft-001', kind: 'PAPER_BUY', amount: '-10144.80', balance: '74699.58', eventTime: '2026-07-25T14:32:00Z' },
+  ],
   execution: {
     fillTiming: 'Next eligible bar after decision time',
     policyVersion: 'execution-v1',
@@ -184,15 +192,16 @@ export const fixtureAlertsSnapshot: AlertsSnapshot = {
       eventTime: '2026-08-21T19:45:00Z',
       thesisId: 'thesis-nvda-v3',
       evidenceId: 'evidence-volume-breakout',
+      invalidationConditionId: 'invalidation-nvda-volume-001',
       acknowledged: false,
       explanation: { status: 'FAILED', detail: 'Explanation unavailable; deterministic alert remains valid and visible.' },
     },
-    { id: 'alert-aapl-price-001', category: 'PRICE', symbol: 'AAPL', severity: 'MEDIUM', materiality: '0.61', summary: 'Frozen fixture price threshold crossed.', reviewAction: 'Review price evidence', eventTime: '2026-08-21T19:40:00Z', thesisId: 'thesis-aapl-v1', evidenceId: 'evidence-price-001', acknowledged: false, explanation: { status: 'COMPLETED', detail: 'Deterministic price rule.' } },
-    { id: 'alert-nvda-options-001', category: 'OPTIONS', symbol: 'NVDA', severity: 'LOW', materiality: '0.42', summary: 'Options coverage became unavailable.', reviewAction: 'Review evidence gap', eventTime: '2026-08-21T19:35:00Z', thesisId: 'thesis-nvda-v3', evidenceId: 'evidence-options-gap', acknowledged: false, explanation: { status: 'DISABLED', detail: 'No free-form explanation requested.' } },
-    { id: 'alert-msft-earnings-001', category: 'EARNINGS', symbol: 'MSFT', severity: 'MEDIUM', materiality: '0.58', summary: 'Frozen earnings window entered.', reviewAction: 'Review earnings cutoff', eventTime: '2026-08-21T19:30:00Z', thesisId: 'thesis-msft-v2', evidenceId: 'evidence-earnings-001', acknowledged: false, explanation: { status: 'COMPLETED', detail: 'Calendar rule.' } },
-    { id: 'alert-amd-news-001', category: 'NEWS', symbol: 'AMD', severity: 'LOW', materiality: '0.36', summary: 'Frozen fixture news item linked.', reviewAction: 'Review cited news', eventTime: '2026-08-21T19:25:00Z', thesisId: 'thesis-amd-v1', evidenceId: 'evidence-news-001', acknowledged: false, explanation: { status: 'COMPLETED', detail: 'News linkage rule.' } },
-    { id: 'alert-aapl-target-001', category: 'ANALYST_TARGET', symbol: 'AAPL', severity: 'LOW', materiality: '0.31', summary: 'Analyst target record changed in fixture.', reviewAction: 'Review target provenance', eventTime: '2026-08-21T19:20:00Z', thesisId: 'thesis-aapl-v1', evidenceId: 'evidence-target-001', acknowledged: false, explanation: { status: 'COMPLETED', detail: 'Target-change rule.' } },
-    { id: 'alert-portfolio-risk-001', category: 'PORTFOLIO_RISK', symbol: 'PORTFOLIO', severity: 'HIGH', materiality: '0.87', summary: 'Proposed concentration breached the frozen risk policy.', reviewAction: 'Review rejected RiskDecision', eventTime: '2026-08-21T19:15:00Z', thesisId: 'thesis-nvda-v3', evidenceId: 'risk-decision-001', acknowledged: false, explanation: { status: 'COMPLETED', detail: 'Deterministic portfolio-risk rule.' } },
+    { id: 'alert-aapl-price-001', category: 'PRICE', symbol: 'AAPL', severity: 'MEDIUM', materiality: '0.61', summary: 'Frozen fixture price threshold crossed.', reviewAction: 'Review price evidence', eventTime: '2026-08-21T19:40:00Z', thesisId: 'thesis-aapl-v1', evidenceId: 'evidence-price-001', invalidationConditionId: 'invalidation-aapl-price-001', acknowledged: false, explanation: { status: 'COMPLETED', detail: 'Deterministic price rule.' } },
+    { id: 'alert-nvda-options-001', category: 'OPTIONS', symbol: 'NVDA', severity: 'LOW', materiality: '0.42', summary: 'Options coverage became unavailable.', reviewAction: 'Review evidence gap', eventTime: '2026-08-21T19:35:00Z', thesisId: 'thesis-nvda-v3', evidenceId: 'evidence-options-gap', invalidationConditionId: 'invalidation-nvda-options-001', acknowledged: false, explanation: { status: 'DISABLED', detail: 'No free-form explanation requested.' } },
+    { id: 'alert-msft-earnings-001', category: 'EARNINGS', symbol: 'MSFT', severity: 'MEDIUM', materiality: '0.58', summary: 'Frozen earnings window entered.', reviewAction: 'Review earnings cutoff', eventTime: '2026-08-21T19:30:00Z', thesisId: 'thesis-msft-v2', evidenceId: 'evidence-earnings-001', invalidationConditionId: 'invalidation-msft-earnings-001', acknowledged: false, explanation: { status: 'COMPLETED', detail: 'Calendar rule.' } },
+    { id: 'alert-amd-news-001', category: 'NEWS', symbol: 'AMD', severity: 'LOW', materiality: '0.36', summary: 'Frozen fixture news item linked.', reviewAction: 'Review cited news', eventTime: '2026-08-21T19:25:00Z', thesisId: 'thesis-amd-v1', evidenceId: 'evidence-news-001', invalidationConditionId: 'invalidation-amd-news-001', acknowledged: false, explanation: { status: 'COMPLETED', detail: 'News linkage rule.' } },
+    { id: 'alert-aapl-target-001', category: 'ANALYST_TARGET', symbol: 'AAPL', severity: 'LOW', materiality: '0.31', summary: 'Analyst target record changed in fixture.', reviewAction: 'Review target provenance', eventTime: '2026-08-21T19:20:00Z', thesisId: 'thesis-aapl-v1', evidenceId: 'evidence-target-001', invalidationConditionId: 'invalidation-aapl-target-001', acknowledged: false, explanation: { status: 'COMPLETED', detail: 'Target-change rule.' } },
+    { id: 'alert-portfolio-risk-001', category: 'PORTFOLIO_RISK', symbol: 'PORTFOLIO', severity: 'HIGH', materiality: '0.87', summary: 'Proposed concentration breached the frozen risk policy.', reviewAction: 'Review rejected RiskDecision', eventTime: '2026-08-21T19:15:00Z', thesisId: 'thesis-nvda-v3', evidenceId: 'risk-decision-001', invalidationConditionId: 'invalidation-nvda-concentration-001', acknowledged: false, explanation: { status: 'COMPLETED', detail: 'Deterministic portfolio-risk rule.' } },
   ],
 }
 

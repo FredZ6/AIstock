@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import type { ReactNode } from 'react'
 
 import { AppShell } from './layout/app-shell'
 import { PerformanceChart } from './portfolio/performance-chart'
@@ -7,18 +6,10 @@ import { StateBoundary } from './states/state-boundary'
 import { type TodaySnapshot } from '../lib/api'
 import { formatMoney, formatPercent } from '../lib/format'
 import { formatDualTime } from '../lib/time'
+import { Signal } from './ui/product-ui'
 
 type TodayPageProps = {
   snapshot: TodaySnapshot
-}
-
-function Signal({ children, tone }: { children: ReactNode; tone: string }) {
-  return (
-    <span className="signal" data-tone={tone}>
-      <span aria-hidden="true" className="signal-dot" />
-      {children}
-    </span>
-  )
 }
 
 export function TodayPage({ snapshot }: TodayPageProps) {

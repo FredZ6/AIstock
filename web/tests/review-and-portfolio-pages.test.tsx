@@ -5,6 +5,7 @@ import { AlertsPage } from '../components/alerts/alerts-page'
 import { EvalAdminPage } from '../components/eval/eval-admin-page'
 import { WeeklyReviewPage } from '../components/learning/weekly-review-page'
 import { PortfolioPage } from '../components/portfolio/portfolio-page'
+import { PerformanceChart } from '../components/portfolio/performance-chart'
 import {
   fixtureAlertsSnapshot,
   fixtureEvalAdminSnapshot,
@@ -13,6 +14,25 @@ import {
 } from '../lib/fixtures'
 
 describe('portfolio and review pages', () => {
+  it('normalizes monetary chart coordinates without binary floating-point loss', () => {
+    const snapshot = {
+      ...fixturePortfolioSnapshot,
+      asOf: '2026-08-21T20:00:00Z',
+      performanceHistory: [
+        { time: '2026-08-19T20:00:00Z', nav: '10000000000000000.01', cumulativeReturn: '0', drawdown: '0' },
+        { time: '2026-08-20T20:00:00Z', nav: '10000000000000000.02', cumulativeReturn: '0', drawdown: '0' },
+        { time: '2026-08-21T20:00:00Z', nav: '10000000000000000.03', cumulativeReturn: '0', drawdown: '0' },
+      ],
+    }
+
+    const { container } = render(<PerformanceChart snapshot={snapshot} />)
+
+    expect(container.querySelector('.chart-line')).toHaveAttribute(
+      'd',
+      'M 0.0 230.0 L 500.0 135.0 L 1000.0 40.0',
+    )
+  })
+
   it('renders an auditable paper portfolio with cash baseline and deterministic execution facts', () => {
     render(<PortfolioPage snapshot={fixturePortfolioSnapshot} />)
 
@@ -45,7 +65,12 @@ describe('portfolio and review pages', () => {
     expect(within(risks).getByText('REJECTED')).toBeInTheDocument()
     expect(within(risks).getByText(/position concentration limit/i)).toBeInTheDocument()
     expect(within(screen.getByRole('table', { name: 'Paper fills' })).getByText('fill-nvda-001')).toBeInTheDocument()
-    expect(within(screen.getByRole('table', { name: 'Cash ledger' })).getByText('ledger-buy-nvda-001')).toBeInTheDocument()
+    expect(within(screen.getByRole('table', { name: 'Paper fills' })).getByText('fill-msft-001')).toBeInTheDocument()
+    const cashLedger = screen.getByRole('table', { name: 'Cash ledger' })
+    expect(within(cashLedger).getByText('ledger-opening-001')).toBeInTheDocument()
+    expect(within(cashLedger).getByText('ledger-buy-nvda-001')).toBeInTheDocument()
+    expect(within(cashLedger).getByText('ledger-buy-msft-001')).toBeInTheDocument()
+    expect(within(cashLedger).getAllByText('USD 74,699.58')).toHaveLength(1)
   })
 
   it('renders deterministic alerts with thesis linkage and visible explanation failure', () => {
@@ -56,6 +81,7 @@ describe('portfolio and review pages', () => {
     expect(screen.getByText(/materiality 82%/i)).toBeInTheDocument()
     expect(screen.getAllByText('thesis-nvda-v3').length).toBeGreaterThan(0)
     expect(screen.getByText('evidence-volume-breakout')).toBeInTheDocument()
+    expect(screen.getByText('invalidation-nvda-volume-001')).toBeInTheDocument()
     expect(screen.getByText(/Explanation unavailable/i)).toBeInTheDocument()
     expect(screen.getByText(/deterministic alert remains valid/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Acknowledge alert alert-nvda-volume-001' })).toBeDisabled()

@@ -49,6 +49,21 @@ describe('StateBoundary', () => {
     )
   })
 
+  it('rejects a naive stale timestamp', () => {
+    expect(() =>
+      render(
+        <StateBoundary
+          state={{
+            kind: 'stale',
+            title: 'Market context is stale',
+            message: 'Decisions remain visible but should not be treated as current.',
+            lastUpdatedAt: '2026-08-21T20:00:00',
+          }}
+        />,
+      ),
+    ).toThrow(/timezone/i)
+  })
+
   it('names every degraded provider while retaining partial content', () => {
     render(
       <StateBoundary

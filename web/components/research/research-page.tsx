@@ -13,7 +13,7 @@ export function ResearchPage({ snapshot }: { snapshot: ResearchSnapshot }) {
       <PageHeading asOf={snapshot.asOf} eyebrow="Research" title={`${snapshot.symbol} research`} summary="A decision record whose conclusions stay attached to evidence, gaps, and provenance." />
       <FixtureNotice />
       <section className="decision-hero" aria-labelledby="thesis-title">
-        <div><p className="section-kicker">Investment thesis</p><h2 id="thesis-title">Investment thesis</h2><p className="thesis-copy">{snapshot.thesis.summary}</p></div>
+        <div><p className="section-kicker">Investment thesis</p><h2 id="thesis-title">Investment thesis</h2><p className="thesis-copy">{snapshot.thesis.summary}</p><p className="muted-copy">Report <strong>{snapshot.report.id}</strong> · <time dateTime={snapshot.report.generatedAt}>{formatDualTime(snapshot.report.generatedAt).newYork}</time></p></div>
         <dl className="decision-facts"><div><dt>Research opinion</dt><dd><Signal tone={snapshot.researchOpinion}>{snapshot.researchOpinion}</Signal></dd></div><div><dt>Portfolio action</dt><dd><Signal tone={snapshot.portfolioAction}>{snapshot.portfolioAction}</Signal></dd></div><div><dt>Confidence</dt><dd>{formatPercent(snapshot.thesis.confidence, { signed: false })}</dd></div><div><dt>Horizon</dt><dd>{snapshot.thesis.horizon}</dd></div></dl>
       </section>
       <TradingViewWidget kind="symbol-overview" symbol={snapshot.symbol} />

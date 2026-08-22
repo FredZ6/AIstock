@@ -47,7 +47,7 @@ describe('research workflow pages', () => {
     expect(screen.getByText(/session-only configuration draft/i)).toBeInTheDocument()
   })
 
-  it('traces a thesis statement through claim, evidence, tool call, provider, and timestamp', async () => {
+  it('traces a dashboard conclusion through report, claim, evidence, tool call, provider, and timestamp', async () => {
     render(<ResearchPage snapshot={fixtureResearchSnapshot} />)
 
     expect(screen.getByRole('heading', { level: 1, name: /NVDA research/i })).toBeInTheDocument()
@@ -61,6 +61,7 @@ describe('research workflow pages', () => {
     expect(screen.getAllByText('BULLISH').length).toBeGreaterThan(0)
     expect(screen.getAllByText('HOLD').length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'Investment thesis' })).toBeInTheDocument()
+    expect(screen.getByText('report-nvda-v3')).toBeInTheDocument()
     expect(screen.getByText(/CONTRADICTS/)).toBeInTheDocument()
     expect(screen.getAllByText(/UNAVAILABLE/).length).toBeGreaterThan(0)
     expect(screen.getByText('claim-nvda-demand')).toBeInTheDocument()

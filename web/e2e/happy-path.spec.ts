@@ -27,11 +27,12 @@ test('all eight product pages preserve navigation, safety copy, and one clear he
   }
 })
 
-test('a reviewer traces a Today conclusion to evidence, provider, ToolCall, and run event', async ({ page }) => {
+test('a reviewer traces a Today conclusion through report, evidence, provider, ToolCall, and run event', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('link', { name: 'NVDA' }).first().click()
 
   await expect(page).toHaveURL(/\/research\/NVDA$/)
+  await expect(page.getByText('report-nvda-v3')).toBeVisible()
   await expect(page.getByText('claim-nvda-demand')).toBeVisible()
   await expect(page.getByText('evidence-sec-revenue')).toBeVisible()
   await expect(page.getByText('tool-sec-companyfacts')).toBeVisible()

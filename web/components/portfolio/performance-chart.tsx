@@ -4,7 +4,9 @@ import { useState } from 'react'
 import Link from 'next/link'
 
 import type { PortfolioSnapshot } from '../../lib/product-types'
+import { normalizeDecimalSeries } from '../../lib/decimal'
 import { formatMoney, formatPercent } from '../../lib/format'
+import { parseAwareInstant } from '../../lib/time'
 
 type Metric = 'cumulativeReturn' | 'drawdown' | 'nav'
 type Range = 7 | 30 | 90 | 'all'
@@ -20,7 +22,7 @@ function shortDate(value: string) {
     day: 'numeric',
     month: 'short',
     timeZone: 'America/New_York',
-  }).format(new Date(value))
+  }).format(parseAwareInstant(value))
 }
 
 type PerformanceSnapshot = Pick<
@@ -42,17 +44,14 @@ export function PerformanceChart({
 }) {
   const [metric, setMetric] = useState<Metric>('nav')
   const [range, setRange] = useState<Range>(30)
-  const lastTime = new Date(snapshot.performanceHistory.at(-1)?.time ?? snapshot.asOf).getTime()
+  const lastTime = parseAwareInstant(snapshot.performanceHistory.at(-1)?.time ?? snapshot.asOf).getTime()
   const visible = range === 'all'
     ? snapshot.performanceHistory
-    : snapshot.performanceHistory.filter((point) => new Date(point.time).getTime() >= lastTime - range * 86_400_000)
-  const values = visible.map((point) => Number(point[metric]))
-  const low = Math.min(...values)
-  const high = Math.max(...values)
-  const spread = high - low || 1
-  const coordinates = values.map((value, index) => ({
+    : snapshot.performanceHistory.filter((point) => parseAwareInstant(point.time).getTime() >= lastTime - range * 86_400_000)
+  const normalizedValues = normalizeDecimalSeries(visible.map((point) => point[metric]))
+  const coordinates = normalizedValues.map((value, index) => ({
     x: visible.length === 1 ? 500 : index * 1000 / (visible.length - 1),
-    y: 230 - (value - low) / spread * 190,
+    y: 230 - value * 190,
   }))
   const line = coordinates.map((point, index) => `${index ? 'L' : 'M'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
   const area = coordinates.length ? `${line} L 1000 240 L 0 240 Z` : ''

@@ -5,6 +5,7 @@ import { FormEvent, useState } from 'react'
 
 import type { WatchlistSnapshot } from '../../lib/product-types'
 import { formatMoney, formatPercent } from '../../lib/format'
+import { parseAwareInstant } from '../../lib/time'
 import { formatDualTime } from '../../lib/time'
 import { AppShell } from '../layout/app-shell'
 import { TradingViewWidget } from '../market/tradingview-widget'
@@ -60,7 +61,7 @@ export function WatchlistPage({ snapshot }: { snapshot: WatchlistSnapshot }) {
               <td>{formatMoney(item.price, 'USD')}</td><td>{formatPercent(item.dailyReturn)}</td>
               <td><Signal tone={item.researchOpinion}>{item.researchOpinion}</Signal></td>
               <td><Signal tone={item.portfolioAction}>{item.portfolioAction}</Signal></td>
-              <td>{item.nextEarningsAt ? <time dateTime={item.nextEarningsAt}>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(item.nextEarningsAt))}</time> : 'Not in fixture'}</td>
+              <td>{item.nextEarningsAt ? <time dateTime={item.nextEarningsAt}>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(parseAwareInstant(item.nextEarningsAt))}</time> : 'Not in fixture'}</td>
               <td><div className="watchlist-settings">
                 <label><input type="checkbox" checked={item.dailyResearch} onChange={(event) => updateSymbol(item.symbol, { dailyResearch: event.target.checked })} /> <span>{item.symbol} daily research</span></label>
                 <label><input type="checkbox" checked={item.intradayMonitoring} onChange={(event) => updateSymbol(item.symbol, { intradayMonitoring: event.target.checked })} /> <span>{item.symbol} intraday monitoring</span></label>
