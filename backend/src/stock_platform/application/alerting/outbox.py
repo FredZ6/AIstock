@@ -32,6 +32,7 @@ from stock_platform.infrastructure.db.models.tables import (
     raw_data_object,
     thesis_evidence_link,
 )
+from stock_platform.infrastructure.observability.context import maybe_current_correlation
 
 _OUTBOX_NAMESPACE = UUID("4458e60a-ad59-420c-a71b-c2ca80e34a41")
 _NEW_YORK = ZoneInfo("America/New_York")
@@ -579,10 +580,14 @@ class PostgresAlertStore:
             created_at=features.event_time,
         )
         with self.connection.begin_nested():
+            correlation = maybe_current_correlation()
             inserted = self.connection.execute(
                 pg_insert(alert_event)
                 .values(
                     id=alert_id,
+                    correlation_id=(
+                        correlation.correlation_id if correlation is not None else alert_id
+                    ),
                     alert_key=alert_key,
                     symbol=str(features.symbol),
                     event_time=features.event_time,

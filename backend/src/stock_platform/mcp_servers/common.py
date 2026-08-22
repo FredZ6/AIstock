@@ -23,6 +23,7 @@ from stock_platform.application.market_data.repositories import (
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
 from stock_platform.infrastructure.db.models.tables import agent_event, tool_call
+from stock_platform.infrastructure.observability.context import maybe_current_correlation
 from stock_platform.infrastructure.providers.base import FeedType, ProviderResponse, ProviderStatus
 from stock_platform.settings import Settings
 
@@ -243,14 +244,18 @@ class PostgresMcpAuditSink:
         request_fingerprint: str,
         outcome: AuditOutcome,
     ) -> None:
+        context = maybe_current_correlation()
+        correlation_id = context.correlation_id if context is not None else uuid4()
         self._connection.execute(
             insert(tool_call).values(
+                correlation_id=correlation_id,
                 tool_name=tool_name,
                 request_fingerprint=request_fingerprint,
             )
         )
         self._connection.execute(
             insert(agent_event).values(
+                correlation_id=correlation_id,
                 event_type=f"mcp.tool.{outcome}",
                 payload={
                     "tool_name": tool_name,

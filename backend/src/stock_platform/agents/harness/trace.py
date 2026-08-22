@@ -11,25 +11,11 @@ from types import MappingProxyType
 from typing import Any, cast
 
 from stock_platform.domain.common.time import require_aware
-
-_SENSITIVE_FRAGMENTS = ("secret", "token", "key", "password", "authorization")
+from stock_platform.infrastructure.observability.redaction import redact
 
 
 def redact_payload(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return {
-            key: (
-                "[REDACTED]"
-                if any(fragment in key.lower() for fragment in _SENSITIVE_FRAGMENTS)
-                else redact_payload(item)
-            )
-            for key, item in value.items()
-        }
-    if isinstance(value, (list, tuple)):
-        return [redact_payload(item) for item in value]
-    if isinstance(value, str) and value.lower().startswith("bearer "):
-        return "[REDACTED]"
-    return value
+    return redact(value)
 
 
 @dataclass(frozen=True, slots=True)

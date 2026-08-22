@@ -48,6 +48,7 @@ from stock_platform.infrastructure.db.models.tables import (
     watchlist_item,
     weekly_review_run,
 )
+from stock_platform.infrastructure.observability.context import current_correlation
 from stock_platform.settings import Settings
 
 router = APIRouter(prefix="/api/v1")
@@ -113,6 +114,7 @@ def _create_run(
             symbol=symbol,
             decision_time=decision_time,
             data_cutoff=data_cutoff,
+            correlation_id=current_correlation().correlation_id,
         )
     except IdempotencyConflict as exception:
         raise ApiError(

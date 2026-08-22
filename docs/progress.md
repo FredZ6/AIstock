@@ -1396,3 +1396,45 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   `null` is canonicalized out before hashing, all four Policy pins reject empty strings, and the
   Fixture manifest rejects any calibrated-LLM judge even if all hashes are resealed. The final
   focused and full-gate counts above include these regressions.
+
+### Task 17 — local implementation complete; awaiting PR review
+
+- Baseline: `make bootstrap` initially exited 2 because sandbox DNS blocked the locked wheel download;
+  the authorized identical rerun exited 0. The untouched `make verify` then exited 0 with 336 backend
+  passed / 3 credential-gated skipped and 41 Web tests, establishing a clean `main@2e84e21` baseline.
+- Security/context RED: the first focused collection exited 2 because the observability and recovery
+  modules did not exist. GREEN exited 0 with 10 tests for recursive credential/prompt/address/provider
+  text redaction, validated UUID correlation headers, all eight required low-cardinality Prometheus
+  families, explicit rejection of symbol/run labels, bounded worker recovery, and provider circuit
+  opening/recovery.
+- Correlation RED/GREEN: HTTP/log/span tests first exited 2 on the absent telemetry module, then passed
+  8/8. The PostgreSQL/SSE test first exited 1 because run admission had no correlation pin; migration
+  `0024_observability_correlation` now persists and indexes one ID across AgentRun, AgentEvent,
+  ToolCall, and AlertEvent. A worker/graph test then failed because the context was not restored and
+  passed after `execute_run` installed the persisted context around graph work.
+- Recovery: a real Redis stream was deleted to simulate transient loss; PostgreSQL AgentEvent and its
+  correlation ID remained authoritative, the expired non-exhausted worker lease requeued exactly one
+  task, and existing idempotency/append-only fill and ledger guards remained covered by the full suite.
+  The recovery directory passed 5/5 after an actual Redis container replacement.
+- Operations assets RED/GREEN: the contract first failed 3/3 on absent Compose services, dashboard,
+  security guide, and runbooks. OTel Collector 0.132.0, Prometheus 3.5.0, and authenticated Grafana
+  12.1.0 are now provisioned with eight SLO/failure panels. Provider outage, stuck run, Redis loss,
+  database restore, and human-only policy rollback runbooks contain exact commands and RPO/RTO.
+- Security remediation: an initial anonymous-Grafana proposal was rejected before any write. The
+  accepted configuration keeps login enabled and binds Grafana, Prometheus, OTel, PostgreSQL, Redis,
+  and MinIO only to `127.0.0.1`. The focused test first failed on the legacy `0.0.0.0` bindings and
+  passed after hardening. All six services then ran successfully; Prometheus and Grafana health
+  endpoints succeeded and OTel reported ready.
+- Migration/idempotency: applying `alembic upgrade head` twice and `alembic current` exited 0 at
+  `0024_observability_correlation`. The first post-migration repository gate exposed four metadata-
+  missing indexes; after declaring them, `alembic check` reported no operations and the focused DB
+  migration/schema/model suite passed 14/14.
+- Locked Task 17 gate: `pytest backend/tests/security backend/tests/integration/observability
+  backend/tests/integration/recovery -q --junitxml=reports/verification/task17-focused.xml` exited 0,
+  24 passed / 0 failed / 0 skipped with one existing Starlette-httpx warning. Report:
+  `reports/verification/task17-focused.xml`.
+- Full repository gate: final `make verify` exited 0. Ruff format/lint and strict Mypy over 208 files,
+  Alembic/MCP/OpenAPI drift checks, and Next.js production build passed. Backend: 354 passed / 3
+  credential-gated skipped / 1 existing warning. Web: 10 files / 41 passed. No live broker, real-money
+  execution, automatic policy activation, naive datetime, binary-float money, or Task 18 work was
+  added.

@@ -287,6 +287,12 @@ tool_call = Table(
     "tool_call",
     metadata,
     uuid_pk(),
+    Column(
+        "correlation_id",
+        UUID(as_uuid=True),
+        nullable=False,
+        server_default=text("gen_random_uuid()"),
+    ),
     Column("run_id", UUID(as_uuid=True)),
     Column("tool_name", Text),
     Column("request_fingerprint", Text),
@@ -296,6 +302,12 @@ agent_event = Table(
     "agent_event",
     metadata,
     uuid_pk(),
+    Column(
+        "correlation_id",
+        UUID(as_uuid=True),
+        nullable=False,
+        server_default=text("gen_random_uuid()"),
+    ),
     Column("run_id", UUID(as_uuid=True)),
     Column("sequence", BigInteger),
     Column("event_type", Text),
@@ -307,6 +319,12 @@ agent_run = Table(
     "agent_run",
     metadata,
     uuid_pk(),
+    Column(
+        "correlation_id",
+        UUID(as_uuid=True),
+        nullable=False,
+        server_default=text("gen_random_uuid()"),
+    ),
     Column("run_type", Text, nullable=False),
     Column("idempotency_key", Text, nullable=False),
     Column("request_hash", Text, nullable=False),
@@ -618,6 +636,12 @@ alert_event = Table(
     "alert_event",
     metadata,
     uuid_pk(),
+    Column(
+        "correlation_id",
+        UUID(as_uuid=True),
+        nullable=False,
+        server_default=text("gen_random_uuid()"),
+    ),
     Column("alert_key", Text, nullable=False),
     Column("symbol", Text, nullable=False),
     Column("event_time", DateTime(timezone=True), nullable=False),
@@ -641,6 +665,10 @@ alert_event = Table(
         name=conv("ck_alert_event_materiality"),
     ),
 )
+Index("agent_run_correlation_idx", agent_run.c.correlation_id)
+Index("agent_event_correlation_idx", agent_event.c.correlation_id)
+Index("tool_call_correlation_idx", tool_call.c.correlation_id)
+Index("alert_event_correlation_idx", alert_event.c.correlation_id)
 alert_thesis_link = Table(
     "alert_thesis_link",
     metadata,
