@@ -1302,3 +1302,97 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
   failure; GREEN exited 0 with 8/8 state tests. The fresh repository gate then exited 0 with 285
   backend passed / 3 skipped and 10 Web files / 41 passed; the single-worker desktop/mobile
   Playwright plus Axe run again exited 0 with 8/8 tests.
+
+## M7 Quality
+
+Authoritative sources: Notion v0.2 design baseline and the complete Task 16 specification, re-read
+on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
+
+### Task 16 — local implementation complete; awaiting PR review
+
+- Domain-contract RED: `UV_CACHE_DIR=$PWD/.uv-cache uv run pytest
+  backend/tests/unit/evaluation/test_cases.py -q` exited 2 with the expected missing evaluation
+  package. GREEN exited 0 with 7 passed, covering aware UTC time, strict Decimal-string cost,
+  L0–L7/category enums, pinned versions/seed, canonical SHA-256, duplicate IDs, and unknown fields.
+- Metric RED/GREEN: the first focused run exited 2 on the absent application package; the minimal
+  deterministic Decimal implementation then passed 4/4 worked examples for precision/recall/F1,
+  schema/task/evidence/citation/conflict/numeric quality, Directional Accuracy, Thesis Hit Rate,
+  Brier/ECE/reliability, Abstain Accuracy, safety/recovery/audit/accounting/learning, latency P95,
+  and non-gating portfolio measurements.
+- Gate RED/GREEN: unit and integration tests first exited 2 because the policy module was absent.
+  `evaluation-gates-v0.2` now encodes all 18 exact hard boundaries. A review-found over-broad test
+  selector was corrected to distinguish non-blocking investment metrics from the required portfolio
+  decision latency gate; the combined slice passed 32/32.
+- Runner RED/GREEN: the runner test first exited 2 on the missing module. The completed suite has
+  exactly 200 deterministic cases (40 tool, 40 research, 30 evidence, 30 security, 20 alert,
+  20 portfolio, 20 learning) across L0–L7, each pinned to dataset/model/prompt/four policy versions,
+  seed, raw output, trace, latency, token usage, Decimal-string cost, verdict, and case hash. It
+  emits byte-reproducible `summary.json`, `cases.jsonl`, `junit.xml`, and escaped `report.html`;
+  injected schema failure returns exit 1. Generator output is independently idempotent.
+- CI RED/GREEN: workflow contracts first exited 1 with 3 expected missing-file failures. PR,
+  nightly, and weekly workflows now use SHA-pinned Actions and read-only permissions. PR evaluation
+  has a ten-minute timeout, nightly executes three fixture runs, and weekly provider smoke is
+  credential-detected and step-scoped; no live-broker field/path exists. The focused workflow suite
+  exited 0 with 4 passed.
+- Authoritative focused gate: `UV_CACHE_DIR=$PWD/.uv-cache uv run pytest
+  backend/tests/unit/evaluation backend/tests/integration/evaluation/test_release_gates.py -q` —
+  exit 0; 40 passed. `PYTHONPATH=$PWD/backend/src UV_CACHE_DIR=$PWD/.uv-cache uv run python
+  scripts/generate_eval_datasets.py --output evals/datasets` — exit 0. The corresponding
+  `scripts/run_offline_eval.py --dataset evals/datasets --output evals/reports/latest` — exit 0,
+  `offline evaluation: PASS`; 37 metrics and all 18 hard gates passed. `git diff --check` — exit 0.
+- Full repository gate: the first sandboxed `make verify` exited 1 only because policy denied local
+  PostgreSQL access after Ruff and Mypy passed. The authorized rerun of the identical command exited
+  0: 225 files formatted, Ruff lint clean, strict Mypy clean over 197 source files, Alembic/MCP/
+  OpenAPI drift clean, backend 325 passed / 3 explicit credential-gated skips / 1 existing
+  Starlette-httpx deprecation warning, Web 10 files / 41 passed, TypeScript/ESLint clean, and all ten
+  Next.js routes built.
+- Reproducibility evidence: dataset SHA-256 values are `afa4d74a…` alert, `57d0bcd5…` evidence,
+  `138ba530…` learning, `d5729c92…` portfolio, `7ee7a6f4…` research, `b384f499…` security, and
+  `6c834178…` tool. Manifest SHA-256 is `a921172f…`, baseline SHA-256 is `8d6970b1…`, and the latest
+  summary SHA-256 is `7a4eac0a…`; generated reports are ignored local/
+  CI artifacts while their frozen source datasets and manifest are versioned.
+- Scope and residuals: all observations are explicitly synthetic Fixture data, not current market
+  data or investment performance claims. Investment return, alpha, Sharpe, and win rate remain
+  descriptive and never block software release. Optional weekly live-provider smoke remains skipped
+  without real read-only Provider credentials. No live trading, automatic Policy activation, Task 17
+  observability/recovery implementation, or Task 18 clean-room demo was added.
+
+#### Task 16 pre-PR review remediation
+
+- Two-axis review reproduced four release-evidence blockers. A hand-selected seven-case corpus could
+  pass, offset timestamps produced mismatched stored/emitted hashes, nested raw outputs remained
+  mutable after hashing, and artifact upload was skipped on gate failure. It also found that leakage
+  and conflict recall trusted ambiguous booleans rather than their underlying facts.
+- Corpus-integrity RED/GREEN: the public runner now requires the versioned manifest, exact 200-case
+  distribution, complete L0–L7 coverage, seven exact filenames, every file SHA-256, and one corpus
+  digest. Missing, shortened, modified, version-mixed, or manifest-divergent corpora fail before gate
+  evaluation. Dataset generation writes the same manifest idempotently.
+- Evidence-integrity RED/GREEN: canonical hashing normalizes aware offsets to UTC before hashing;
+  report case hashes now equal summary evidence hashes after round-trip load. Raw output and trace
+  structures are recursively immutable. Judge kind/version are explicit; deterministic cases cannot
+  claim LLM calibration, and a calibrated-LLM judge requires a calibration version.
+- Metric-correctness RED/GREEN: point-in-time leakage is computed from each aware `available_at`
+  against case `as_of`; a one-second future record fails the hard gate. Conflict recall considers only
+  expected-conflict cases. Freshness compliance is a separate measured metric. The result corpus
+  remains a frozen raw-output evaluation input as required by Task 16; Task 18, not this runner,
+  owns clean-room execution of the complete product scenario.
+- Baseline comparison: `eval-baseline-v0.2.0` contains only metrics measured from the synthetic
+  Fixture corpus. Every report compares all 38 current metrics with that versioned baseline; the
+  accepted corpus has zero deltas. No live-market, Provider, benchmark, or resume value was invented.
+- CI evidence retention: PR and weekly artifacts upload with `always()`; nightly executes all three
+  runs even after one failure, uploads every report, then enforces their combined outcome. The
+  existing `ci.yml` remains the full PR `make verify` gate while `pr.yml` owns the under-ten-minute
+  offline-evaluation layer, avoiding duplicate full repository jobs.
+- Corrected focused gate: `uv run pytest backend/tests/unit/evaluation
+  backend/tests/integration/evaluation/test_release_gates.py -q` — exit 0; 51 passed. Corrected
+  offline CLI with explicit dataset/baseline/output — exit 0; `offline evaluation: PASS`, 38 metrics,
+  18 hard gates, zero baseline deltas. Corrected authorized `make verify` — exit 0: 226 files format
+  clean, Ruff clean, strict Mypy clean over 198 files, Alembic/MCP/OpenAPI drift clean, backend
+  336 passed / 3 credential-gated skips / 1 existing warning, Web 10 files / 41 passed, TypeScript/
+  ESLint clean, and all ten Next.js routes built. `git diff --check` — exit 0.
+- Second review pass added six citation-negative and five alert-negative cases without changing the
+  locked 200-case total. An injected always-cite result now measures precision `0.8` and fails the
+  citation hard gate; an always-trigger alert result measures precision `0.75`. Explicit optional
+  `null` is canonicalized out before hashing, all four Policy pins reject empty strings, and the
+  Fixture manifest rejects any calibrated-LLM judge even if all hashes are resealed. The final
+  focused and full-gate counts above include these regressions.

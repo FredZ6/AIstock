@@ -1,0 +1,66 @@
+name: Weekly Evaluation
+
+on:
+  schedule:
+    - cron: "41 4 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ENVIRONMENT: fixture
+      UV_CACHE_DIR: ${{ github.workspace }}/.uv-cache
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Install locked Python dependencies
+        run: uv sync --frozen
+      - name: Run frozen release evaluation
+        run: uv run python scripts/run_offline_eval.py --dataset evals/datasets --baseline evals/baselines/eval-v0.2.0.json --output reports/evaluation/weekly
+      - name: Detect configured provider credentials
+        id: provider_credentials
+        env:
+          ALPACA_DATA_KEY: ${{ secrets.ALPACA_DATA_KEY }}
+          ALPACA_DATA_SECRET: ${{ secrets.ALPACA_DATA_SECRET }}
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: |
+          test -n "$SEC_USER_AGENT" && echo "sec=true" >> "$GITHUB_OUTPUT" || echo "sec=false" >> "$GITHUB_OUTPUT"
+          test -n "$ALPACA_DATA_KEY" && test -n "$ALPACA_DATA_SECRET" && echo "alpaca=true" >> "$GITHUB_OUTPUT" || echo "alpaca=false" >> "$GITHUB_OUTPUT"
+          test -n "$FMP_API_KEY" && echo "fmp=true" >> "$GITHUB_OUTPUT" || echo "fmp=false" >> "$GITHUB_OUTPUT"
+      - name: SEC provider smoke when configured
+        if: steps.provider_credentials.outputs.sec == 'true'
+        env:
+          LIVE_PROVIDER_TESTS: "1"
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: uv run pytest backend/tests/contract/providers/test_live_adapter_contracts.py -m live -k sec -q
+      - name: Alpaca market-data smoke when configured
+        if: steps.provider_credentials.outputs.alpaca == 'true'
+        env:
+          LIVE_PROVIDER_TESTS: "1"
+          ALPACA_DATA_KEY: ${{ secrets.ALPACA_DATA_KEY }}
+          ALPACA_DATA_SECRET: ${{ secrets.ALPACA_DATA_SECRET }}
+        run: uv run pytest backend/tests/contract/providers/test_live_adapter_contracts.py -m live -k alpaca -q
+      - name: FMP provider smoke when configured
+        if: steps.provider_credentials.outputs.fmp == 'true'
+        env:
+          LIVE_PROVIDER_TESTS: "1"
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+        run: uv run pytest backend/tests/contract/providers/test_live_adapter_contracts.py -m live -k fmp -q
+      - name: Upload evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: weekly-evaluation
+          path: reports/evaluation/weekly
