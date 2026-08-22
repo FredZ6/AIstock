@@ -45,5 +45,6 @@ describe('product shell', () => {
       '#main-content',
     )
     expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content')
+    expect(screen.getByText('Current · Portfolio')).toHaveAttribute('aria-hidden', 'true')
   })
 })

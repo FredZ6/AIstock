@@ -69,6 +69,25 @@ describe('StateBoundary', () => {
     expect(screen.getByText('Partial market context')).toBeInTheDocument()
   })
 
+  it('keeps available records visible when a response is partial', () => {
+    render(
+      <StateBoundary
+        state={{
+          kind: 'partial',
+          title: 'Partial result',
+          message: 'Two symbols are still pending.',
+          missing: ['AMD', 'TSLA'],
+        }}
+      >
+        <p>Three verified symbols</p>
+      </StateBoundary>,
+    )
+
+    expect(screen.getByRole('status', { name: 'Partial result' })).toBeInTheDocument()
+    expect(screen.getByText('AMD')).toBeInTheDocument()
+    expect(screen.getByText('Three verified symbols')).toBeInTheDocument()
+  })
+
   it('uses an alert for failure and offers a deterministic recovery path', () => {
     render(
       <StateBoundary

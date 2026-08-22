@@ -1,0 +1,17 @@
+import type { WeeklyReviewSnapshot } from '../../lib/product-types'
+import { formatPercent } from '../../lib/format'
+import { formatDualTime } from '../../lib/time'
+import { AppShell } from '../layout/app-shell'
+import { FixtureNotice, PageHeading, Signal } from '../ui/product-ui'
+
+export function WeeklyReviewPage({ snapshot }: { snapshot: WeeklyReviewSnapshot }) {
+  return (
+    <AppShell currentPath="/weekly-review">
+      <PageHeading asOf={snapshot.asOf} eyebrow="Learn" title="Weekly Review" summary="Attribute outcomes, replay the past honestly, and keep every policy change under human control." />
+      <FixtureNotice />
+      <div className="review-grid"><section className="terminal-section first-section" aria-labelledby="outcomes-title"><p className="section-kicker">Measure</p><h2 id="outcomes-title">Outcome attribution</h2><div className="outcome-strip">{snapshot.outcomes.map((outcome) => <div key={`${outcome.symbol}-${outcome.horizon}`}><strong>{outcome.symbol}</strong><span>{outcome.horizon}</span><b>{formatPercent(outcome.return)}</b></div>)}</div><ul className="plain-list">{snapshot.attribution.map((item) => <li key={item.category}><strong>{item.category}</strong><p>{item.detail}</p></li>)}</ul></section>
+      <section className="terminal-section first-section replay-panel" aria-labelledby="replay-title"><p className="section-kicker">Verify</p><h2 id="replay-title">Point-in-time replay</h2><p>{snapshot.replay.result}</p><dl><div><dt>Historical cutoff</dt><dd><time dateTime={snapshot.replay.availableAtCutoff}>{formatDualTime(snapshot.replay.availableAtCutoff).newYork}</time></dd></div><div><dt>Counterfactual score delta</dt><dd>{snapshot.replay.scoreDelta}</dd></div></dl></section></div>
+      <section className="lesson-panel" aria-labelledby="lesson-title"><div><p className="section-kicker">Candidate lesson</p><h2 id="lesson-title">{snapshot.lesson.id}</h2><p>{snapshot.lesson.proposal}</p><Signal tone={snapshot.lesson.status}>{snapshot.lesson.status}</Signal></div><div className="approval-panel"><strong>Human decision boundary</strong><p>Approval records a human decision only. It does not activate a policy; automatic activation is disabled.</p><div><button disabled type="button">Approve candidate lesson</button><button disabled type="button">Reject candidate lesson</button></div><small>Fixture Mode is read-only.</small></div></section>
+    </AppShell>
+  )
+}

@@ -18,6 +18,7 @@ type AppShellProps = {
 }
 
 export function AppShell({ children, currentPath }: AppShellProps) {
+  const currentLabel = navigation.find((item) => item.href === currentPath)?.label ?? 'Research'
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to main content</a>
@@ -26,6 +27,7 @@ export function AppShell({ children, currentPath }: AppShellProps) {
           <span aria-hidden="true" className="brand-mark">A</span>
           <p><strong>AI Stock Research</strong><span>Evidence before action</span></p>
         </div>
+        <span aria-hidden="true" className="mobile-current">Current · {currentLabel}</span>
         <nav aria-label="Primary" className="primary-nav">
           {navigation.map((item) => (
             <Link

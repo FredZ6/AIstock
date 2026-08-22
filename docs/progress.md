@@ -1110,3 +1110,57 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
   until interrupted. Read-only diagnosis then found both an invalid GitHub CLI token and a 15-second
   HTTPS timeout to github.com. Re-authentication plus restored GitHub connectivity is required before
   the checkpoint can be pushed; no remote-delivery success is claimed.
+
+## Task 15 eight-page product interface completion (2026-08-22)
+
+- Authoritative scope: re-read the complete Notion Task 15 section and selective v0.2 UI override
+  before continuing. Delivered the locked Today, Watchlist, Stock Research, Research Run, AI
+  Portfolio, Alerts, Weekly Review, and Eval & Admin information architecture. Task 16 remains
+  explicitly unstarted on the Eval page.
+- Page TDD batch one: three tests first failed on the missing Watchlist, Research, and Run Trace
+  modules. The GREEN implementation provides a semantic five-symbol table; separate
+  ResearchOpinion and PortfolioAction; Thesis, invalidation conditions, Evidence relations/gaps,
+  deterministic DecisionDiff, frozen policy/model/prompt pins; Claim → Evidence → ToolCall → provider
+  → available-at traceability; and a durable ordered event trace with budgets, retry, fallback,
+  checkpoint, cost, and `Last-Event-ID`. The focused suite then passed with 19/19 total Web tests.
+- Page TDD batch two: the new Partial state and Portfolio, Alerts, Weekly Review, and Eval & Admin
+  tests first failed because behavior/modules were absent. GREEN adds Partial retention of verified
+  content, Cash/QQQ/equal-weight/momentum benchmark summary, Paper positions and execution/ledger
+  facts, deterministic alert lineage with visible explanation failure, outcome/error attribution,
+  Point-in-Time replay, Candidate Lesson consequences, and read-only Policy controls. Human Lesson
+  approval is explicitly distinct from Policy activation; automatic activation is disabled.
+- Durable SSE TDD: three tests first failed on the missing `lib/sse` module. The minimal store now
+  builds a reconnect request with `Last-Event-ID`, suppresses duplicate durable event IDs, orders by
+  authoritative sequence, and rejects cross-Run events, naive event times, invalid sequence values,
+  and same-sequence/different-ID protocol collisions.
+- Browser TDD: the first Playwright run could not launch because its private Chromium was absent; the
+  suite was configured to use the installed system Chrome and to start Next.js on `127.0.0.1`. The
+  sandboxed server then correctly failed with EPERM, while the authorized local run reached the app.
+  Its first behavioral run passed 4/6 and exposed only an over-broad safety-copy selector; scoping the
+  assertion to the semantic footer produced 6/6 at 1440×900 and 393×852. The flow visits all eight
+  routes, checks one H1, navigation and safety copy, traces Today → NVDA Research → Claim → Evidence
+  → Provider/ToolCall/timestamp → durable Run event, verifies keyboard focus, and rejects document
+  overflow.
+- Apple-design review: interactive desktop/mobile review covered Research, Portfolio, Alerts, Weekly
+  Review, and the shared shell. The implementation uses platform typography, restrained warm-amber
+  decision accents, immediate pressed/focus feedback, translucent structural chrome, semantic and
+  horizontally contained tables, non-color-only signals, dual time zones, reduced-motion,
+  reduced-transparency, and increased-contrast modes. Mobile now exposes `Current · <page>` without
+  reordering keyboard navigation. Final browser inspection reported 0 console errors / 0 warnings.
+- Accuracy regression: visual/code review found that dynamic symbol and Run routes could substitute
+  the NVDA/latest Fixture for an unknown identifier. A three-test RED reproduced the unsafe
+  substitution. GREEN routes only NVDA and the frozen latest Run to their facts; unknown identifiers
+  receive an explicit Empty state and return path. Vitest was also hardened to exclude Playwright
+  specs so each test runner owns one suite.
+- Fresh Task 15 gate: `pnpm --dir web test -- --run` exited 0 with 9 files / 30 tests passed;
+  `pnpm --dir web exec playwright test e2e/happy-path.spec.ts` exited 0 with 6/6 passed across desktop
+  and mobile Chrome. The authoritative `make verify` then exited 0 from the beginning: 209 files
+  passed Ruff format, Ruff lint passed, strict Mypy passed over 183 source files, Alembic/MCP/OpenAPI
+  drift checks passed, backend reported 285 passed / 3 explicit credential-gated skips / 1 existing
+  Starlette-httpx deprecation warning, Web reported 30/30, TypeScript and ESLint passed, and Next.js
+  generated all ten application routes successfully.
+- Safety and residuals: all displayed market/research values are frozen, visibly labelled synthetic
+  Fixtures. Money remains decimal-string formatted; timestamps are aware and converted only at the
+  presentation boundary. No Provider credential, real-funds path, live-broker configuration,
+  automatic Policy activation, or Task 16 evaluation metric was added. Real-provider UI integration
+  remains credential-gated and outside this Fixture acceptance.

@@ -25,6 +25,11 @@ type DegradedState = MessageState & {
   providers: string[]
 }
 
+type PartialState = MessageState & {
+  kind: 'partial'
+  missing: string[]
+}
+
 type FailureState = MessageState & {
   kind: 'failure'
   retryHref?: string
@@ -39,6 +44,7 @@ export type ViewState =
   | EmptyState
   | StaleState
   | DegradedState
+  | PartialState
   | FailureState
   | SuccessState
 
@@ -47,7 +53,7 @@ type StateBoundaryProps = {
   state: ViewState
 }
 
-function StateMessage({ state }: { state: EmptyState | StaleState | DegradedState }) {
+function StateMessage({ state }: { state: EmptyState | StaleState | DegradedState | PartialState }) {
   return (
     <section
       aria-label={state.title}
@@ -73,6 +79,11 @@ function StateMessage({ state }: { state: EmptyState | StaleState | DegradedStat
               {provider}
             </li>
           ))}
+        </ul>
+      ) : null}
+      {state.kind === 'partial' ? (
+        <ul aria-label="Missing records" className="mt-4 flex flex-wrap gap-2">
+          {state.missing.map((item) => <li className="border border-amber-400/40 px-2 py-1 text-xs text-amber-200" key={item}>{item}</li>)}
         </ul>
       ) : null}
     </section>
@@ -120,7 +131,7 @@ export function StateBoundary({ children, state }: StateBoundaryProps) {
   return (
     <>
       <StateMessage state={state} />
-      {state.kind === 'degraded' ? children : null}
+      {state.kind === 'degraded' || state.kind === 'partial' ? children : null}
     </>
   )
 }
