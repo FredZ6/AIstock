@@ -11,6 +11,10 @@ const pages = [
   ['/eval', 'Eval & Admin'],
 ] as const
 
+test.beforeEach(async ({ page }) => {
+  await page.route(/tradingview\.com/, (route) => route.abort())
+})
+
 test('all eight product pages preserve navigation, safety copy, and one clear heading', async ({ page }) => {
   for (const [path, heading] of pages) {
     await page.goto(path)

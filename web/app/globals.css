@@ -40,7 +40,14 @@ html { scroll-behavior: smooth; }
 body { min-width: 20rem; margin: 0; background: radial-gradient(circle at 8% 0%, oklch(93% 0.045 240 / 0.72), transparent 34rem), radial-gradient(circle at 92% 18%, oklch(95% 0.04 300 / 0.62), transparent 38rem), var(--ink); color: var(--text); font-size: 1rem; line-height: 1.5; text-rendering: optimizeLegibility; }
 :root[data-theme="dark"] body { background: radial-gradient(circle at 8% 0%, oklch(25% 0.055 245 / 0.55), transparent 34rem), radial-gradient(circle at 92% 18%, oklch(23% 0.045 300 / 0.42), transparent 38rem), var(--ink); }
 a { color: inherit; text-decoration-color: color-mix(in oklch, currentColor 45%, transparent); text-underline-offset: 0.22em; }
-a:focus-visible, button:focus-visible { border-radius: 0.35rem; outline: 0.18rem solid var(--signal); outline-offset: 0.18rem; }
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+table:focus-visible {
+  border-radius: 0.35rem;
+  outline: 0.18rem solid var(--signal);
+  outline-offset: 0.18rem;
+}
 a:active, button:active { transform: scale(0.98); transition: transform 100ms ease-out; }
 
 .app-shell { min-height: 100vh; }

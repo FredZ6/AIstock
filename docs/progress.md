@@ -1265,3 +1265,8 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
   strings, timestamps are aware, ResearchOpinion remains distinct from PortfolioAction, and no live
   broker, real-funds path, provider credential, automatic policy activation, or Task 16 metric was
   added.
+- Final review follow-up: inputs and keyboard-scrollable tables now share the visible focus-ring
+  contract. Playwright also aborts TradingView network requests during owned-DOM checks so the gate
+  does not hang on a third-party service; the application integration itself is unchanged. On the
+  final revision, `make verify` exited 0 with the same 285 passed / 3 skipped backend and 37/37 Web
+  results, and the separate desktop/mobile Playwright plus Axe run exited 0 with 8/8 tests.

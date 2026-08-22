@@ -12,6 +12,11 @@ const pages = [
   '/eval',
 ] as const
 
+test.beforeEach(async ({ page }) => {
+  // TradingView is a separately owned, cross-origin surface; keep the owned-DOM gate deterministic.
+  await page.route(/tradingview\.com/, (route) => route.abort())
+})
+
 test('all product pages have no serious or critical automated accessibility violations', async ({ page }) => {
   for (const path of pages) {
     await page.goto(path)
