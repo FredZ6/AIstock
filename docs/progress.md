@@ -1057,3 +1057,19 @@ in an isolated worktree. Scope in this record is Task 11 only; Task 12 has not s
 - Final hosted gate: GitHub Actions run `32515964511` completed the fresh-service and fresh-database
   workflow in 2m19s with `Verify` passing. This closes the required independent hosted acceptance gate
   for Task 14 and PR #5.
+
+## Task 15 product interface start (2026-08-22)
+
+- Linear: FRE-19 moved from Backlog to In Progress after FRE-18 reached Done.
+- Branch / base: `codex/m6-product-ui` from synchronized `main@8db13b87fa534c32923819fabd20026750c93bbc`.
+- Authoritative scope read: Notion v0.2 design baseline plus the complete Task 15 section and Linear
+  issue. The locked information architecture is Today, Watchlist, Stock Research, Research Run, AI
+  Portfolio, Alerts, Weekly Review, and Eval & Admin; Task 16 remains out of scope.
+- First TDD RED: `pnpm --dir web test -- --run` exited 1 with the expected unresolved
+  `components/layout/app-shell` import after the new worktree's locked dependencies were installed.
+- Minimal GREEN: added the semantic eight-destination product shell, current-page state, skip link,
+  and visible Paper Trading / not-investment-advice boundary. The focused command exited 0 with 3
+  passed; `pnpm --dir web typecheck`, `pnpm --dir web lint`, and the Next.js production build each
+  exited 0.
+- Next TDD slice: shared Loading/Empty/Stale/Degraded/Failure/Success states and the Today page data
+  contract. No Task 16 evaluation implementation, Live Broker surface, or real-funds path has begun.
