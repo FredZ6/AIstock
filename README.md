@@ -1,8 +1,8 @@
 # AI Agent 美股科技研究与模拟投资平台
 
 Evidence-grounded US technology research and paper-trading simulation. The repository is implemented
-through **M6 Product Task 15**. It runs in **Fixture Mode** without provider credentials and cannot
-connect to a live broker.
+through **M7 Quality Task 16**; Task 17 operational hardening remains in progress for the milestone.
+It runs in **Fixture Mode** without provider credentials and cannot connect to a live broker.
 
 ## Requirements
 

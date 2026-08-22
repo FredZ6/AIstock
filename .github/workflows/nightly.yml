@@ -1,0 +1,53 @@
+name: Nightly Evaluation
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ENVIRONMENT: fixture
+      UV_CACHE_DIR: ${{ github.workspace }}/.uv-cache
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Install locked Python dependencies
+        run: uv sync --frozen
+      - name: Run fixture evaluation A
+        id: evaluation_a
+        continue-on-error: true
+        run: uv run python scripts/run_offline_eval.py --dataset evals/datasets --baseline evals/baselines/eval-v0.2.0.json --output reports/evaluation/nightly-a
+      - name: Run fixture evaluation B
+        id: evaluation_b
+        continue-on-error: true
+        run: uv run python scripts/run_offline_eval.py --dataset evals/datasets --baseline evals/baselines/eval-v0.2.0.json --output reports/evaluation/nightly-b
+      - name: Run fixture evaluation C
+        id: evaluation_c
+        continue-on-error: true
+        run: uv run python scripts/run_offline_eval.py --dataset evals/datasets --baseline evals/baselines/eval-v0.2.0.json --output reports/evaluation/nightly-c
+      - name: Upload evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nightly-evaluation
+          path: reports/evaluation
+      - name: Enforce all nightly evaluations
+        if: always()
+        env:
+          EVALUATION_A: ${{ steps.evaluation_a.outcome }}
+          EVALUATION_B: ${{ steps.evaluation_b.outcome }}
+          EVALUATION_C: ${{ steps.evaluation_c.outcome }}
+        run: test "$EVALUATION_A" = success && test "$EVALUATION_B" = success && test "$EVALUATION_C" = success

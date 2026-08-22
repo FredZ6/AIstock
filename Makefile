@@ -1,4 +1,4 @@
-.PHONY: bootstrap up down seed clean-fixtures verify smoke
+.PHONY: bootstrap up down seed clean-fixtures verify evaluate smoke
 
 bootstrap:
 	./scripts/bootstrap.sh
@@ -17,6 +17,9 @@ clean-fixtures:
 
 verify:
 	./scripts/verify.sh
+
+evaluate:
+	PYTHONPATH="$(CURDIR)/backend/src" UV_CACHE_DIR="$(CURDIR)/.uv-cache" uv run python scripts/run_offline_eval.py --dataset evals/datasets --baseline evals/baselines/eval-v0.2.0.json --output reports/evaluation/latest
 
 smoke:
 	./scripts/smoke.sh
