@@ -15,3 +15,6 @@ Redis streams and Celery delivery are transient and may be rebuilt without rewri
 Grafana requires authentication and all observability ports bind only to localhost by default.
 OTLP export is disabled by default and, when explicitly enabled, is hard-coded to the loopback
 Collector; configuration cannot redirect correlation identifiers to a remote endpoint.
+API, Celery, and MCP processes must share one deployment-local `PROMETHEUS_MULTIPROC_DIR`; clear
+that directory only during a full deployment stop before starting the first process. The API
+`/metrics` endpoint aggregates the worker and MCP metric files for Prometheus.

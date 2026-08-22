@@ -9,10 +9,10 @@ Zero authoritative database fact loss. Uncommitted stream messages may require p
 Five minutes for restart and worker resubscription.
 
 ```bash
-docker compose restart redis
-docker compose exec redis redis-cli ping
-uv run pytest backend/tests/integration/recovery -q
-docker compose exec postgres psql -U postgres -d stock_platform -c "select count(*) from agent_event; select count(*) from paper_fill;"
+./scripts/verify-recovery.sh
 ```
 
-Recover queued runs from PostgreSQL. Never reconstruct PaperFill or CashLedger from Redis.
+The script restores a separate TimescaleDB copy, snapshots AgentEvent and PaperFill counts, starts a
+real Celery worker, restarts Redis, restarts the worker under a fresh node name, compares the durable
+counts, and runs the replay/idempotency regressions. Recover queued runs from PostgreSQL. Never
+reconstruct PaperFill or CashLedger from Redis.

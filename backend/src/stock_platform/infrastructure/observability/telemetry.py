@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
+import sys
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -21,6 +21,13 @@ from stock_platform.infrastructure.observability.context import (
     maybe_current_correlation,
 )
 from stock_platform.infrastructure.observability.redaction import redact
+
+
+def _default_log_sink() -> Callable[[str], None]:
+    def emit(line: str) -> None:
+        print(line, file=sys.stderr, flush=True)
+
+    return emit
 
 
 class JsonLogFormatter:
@@ -50,7 +57,7 @@ class OperationalTelemetry:
         if exporter is not None:
             provider.add_span_processor(SimpleSpanProcessor(exporter))
         self.tracer = provider.get_tracer("stock_platform")
-        self._log_sink = log_sink or logging.getLogger("stock_platform.operations").info
+        self._log_sink = log_sink or _default_log_sink()
 
     @contextmanager
     def span(self, name: str, attributes: Mapping[str, str] | None = None) -> Iterator[Any]:
@@ -60,7 +67,8 @@ class OperationalTelemetry:
                 span.set_attribute("correlation.id", str(context.correlation_id))
                 if context.run_id is not None:
                     span.set_attribute("run.id", str(context.run_id))
-            for key, value in (attributes or {}).items():
+            safe_attributes = redact(dict(attributes or {}))
+            for key, value in safe_attributes.items():
                 span.set_attribute(key, value)
             yield span
 

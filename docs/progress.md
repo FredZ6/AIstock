@@ -1471,3 +1471,39 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   Mypy clean over 208 files, Alembic/MCP/OpenAPI drift clean, backend 359 passed / 3 explicit
   credential-gated skips / 1 existing warning, Web 10 files / 41 passed, TypeScript/ESLint clean,
   and the ten-route Next.js production build passed.
+
+#### Task 17 second-review remediation
+
+- The second standards/specification pass found disconnected runtime correlation, a production
+  Provider circuit that was not yet wired, recovery checks that did not span worker/Redis restart,
+  process-local-only metrics, an INFO logger that could drop JSON, a dynamic alert-rule label, and
+  unredacted span attributes. RED tests reproduced all owned behaviors; the real worker regression
+  additionally exposed and prevented an advisory-lock deadlock between MCP audit and graph events.
+- Research workers now pass every allowed feed through `McpProviderGateway`; ToolCall and
+  `mcp.tool.completed` AgentEvent rows carry both the owning run ID and its correlation ID, and the
+  worker uses the existing independent `RunControl.emit` persistence boundary. A complete
+  HTTP-admission → worker → Research Graph → MCP gateway → Fixture Provider → PostgreSQL → durable
+  SSE test passed with one correlation ID, five audited tools, contiguous event sequences, and
+  idempotent second execution.
+- `GovernedHttpProvider` now owns the bounded circuit breaker. Two terminal upstream failures open
+  it, subsequent calls skip transport with `circuit_open`, and a request is retried after the aware
+  recovery timeout. The production adapter contract passed. Alert metrics accept only the locked
+  bounded rule set, and span attributes pass through the same recursive redaction boundary as logs.
+- Operational JSON writes directly and synchronously to stderr, so container collection does not
+  depend on Python logger levels or third-party `logging.disable` state. A real FastAPI request
+  regression verifies its event and correlation. Prometheus uses the official multiprocess file
+  collector when every API/Celery/MCP process inherits one deployment-local
+  `PROMETHEUS_MULTIPROC_DIR`; two independent producer processes aggregate to one API scrape value.
+- The recovery gate snapshots AgentEvent and PaperFill counts in the restored database, starts a
+  real named Celery worker, restarts Redis, stops and restarts the worker under a fresh node name,
+  compares durable counts, and then runs bounded recovery plus append-only fill/ledger replay tests.
+  A `pipefail`/early-exit readiness false negative was diagnosed and fixed by consuming the complete
+  Celery inspect output. Final `scripts/verify-recovery.sh` exited 0; Timescale pre/post restore and
+  Alembic drift passed, both workers answered ping, Redis returned PONG, counts matched, and 7/7
+  recovery/idempotency tests passed.
+- Final locked Task 17 command exited 0 with 34 passed / 0 failed / 0 skipped and one existing
+  warning; JUnit: `reports/verification/task17-focused.xml`. The expanded affected suite passed 59
+  with three credential-gated provider skips. Final `make verify` exited 0: 237 files format clean,
+  Ruff clean, strict Mypy clean over 208 files, Alembic/MCP/OpenAPI drift clean, backend 367 passed /
+  3 explicit credential-gated skips / 1 existing warning, Web 10 files / 41 passed, TypeScript/
+  ESLint clean, and all ten Next.js routes built.

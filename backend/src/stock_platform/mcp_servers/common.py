@@ -20,13 +20,19 @@ from stock_platform.application.market_data.repositories import (
     EngineMarketDataRepository,
     PointInTimeRepository,
 )
+from stock_platform.application.runs import append_run_event
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
 from stock_platform.infrastructure.db.models.tables import agent_event, tool_call
 from stock_platform.infrastructure.observability.context import maybe_current_correlation
 from stock_platform.infrastructure.observability.metrics import platform_metrics
 from stock_platform.infrastructure.observability.telemetry import operational_telemetry
-from stock_platform.infrastructure.providers.base import FeedType, ProviderResponse, ProviderStatus
+from stock_platform.infrastructure.providers.base import (
+    FeedType,
+    ProviderResponse,
+    ProviderStatus,
+    ResearchDataProvider,
+)
 from stock_platform.settings import Settings
 
 FastMcpSettings.model_rebuild()
@@ -246,8 +252,14 @@ class McpAuditSink(Protocol):
 
 
 class PostgresMcpAuditSink:
-    def __init__(self, connection: Connection) -> None:
+    def __init__(
+        self,
+        connection: Connection,
+        *,
+        event_emitter: Callable[[str, dict[str, Any]], None] | None = None,
+    ) -> None:
         self._connection = connection
+        self._event_emitter = event_emitter
 
     def record(
         self,
@@ -257,25 +269,33 @@ class PostgresMcpAuditSink:
     ) -> None:
         context = maybe_current_correlation()
         correlation_id = context.correlation_id if context is not None else uuid4()
+        run_id = context.run_id if context is not None else None
         with operational_telemetry.span("db.mcp_audit"):
             self._connection.execute(
                 insert(tool_call).values(
                     correlation_id=correlation_id,
+                    run_id=run_id,
                     tool_name=tool_name,
                     request_fingerprint=request_fingerprint,
                 )
             )
-            self._connection.execute(
-                insert(agent_event).values(
-                    correlation_id=correlation_id,
-                    event_type=f"mcp.tool.{outcome}",
-                    payload={
-                        "tool_name": tool_name,
-                        "request_fingerprint": request_fingerprint,
-                        "outcome": outcome,
-                    },
+            payload = {
+                "tool_name": tool_name,
+                "request_fingerprint": request_fingerprint,
+                "outcome": outcome,
+            }
+            if run_id is not None and self._event_emitter is not None:
+                self._event_emitter(f"mcp.tool.{outcome}", payload)
+            elif run_id is not None:
+                append_run_event(self._connection, run_id, f"mcp.tool.{outcome}", payload)
+            else:
+                self._connection.execute(
+                    insert(agent_event).values(
+                        correlation_id=correlation_id,
+                        event_type=f"mcp.tool.{outcome}",
+                        payload=payload,
+                    )
                 )
-            )
 
 
 class EngineMcpAuditSink:
@@ -300,6 +320,38 @@ def default_audit_sink() -> EngineMcpAuditSink:
 def request_fingerprint(tool_name: str, arguments: dict[str, Any]) -> str:
     canonical = json.dumps(arguments, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(f"{tool_name}\0{canonical}".encode()).hexdigest()
+
+
+_TOOL_BY_FEED = {feed: f"get_{feed.value}" for feed in FeedType}
+
+
+class McpProviderGateway:
+    """In-process MCP tool boundary used by graph workers in fixture and paper modes."""
+
+    def __init__(self, provider: ResearchDataProvider, audit_sink: McpAuditSink) -> None:
+        self._provider = provider
+        self._audit_sink = audit_sink
+        self.name = provider.name
+
+    def fetch(self, feed_type: FeedType, symbol: str, as_of: datetime) -> ProviderResponse:
+        tool_name = _TOOL_BY_FEED[feed_type]
+        fingerprint = request_fingerprint(
+            tool_name,
+            {"symbol": str(Symbol(symbol)), "as_of": require_aware(as_of).isoformat()},
+        )
+        try:
+            with operational_telemetry.span("mcp.tool", {"tool.name": tool_name}):
+                response = self._provider.fetch(feed_type, symbol, as_of)
+        except Exception:
+            self._audit_sink.record(tool_name, fingerprint, "denied")
+            platform_metrics.observe_tool(tool=tool_name, outcome="denied")
+            raise
+        self._audit_sink.record(tool_name, fingerprint, "completed")
+        platform_metrics.observe_tool(tool=tool_name, outcome="completed")
+        platform_metrics.observe_provider(
+            provider=response.provider.lower(), outcome=response.status.value
+        )
+        return response
 
 
 class AuditedFastMCP(FastMCP):

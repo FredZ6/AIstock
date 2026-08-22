@@ -72,6 +72,10 @@ normalized point-in-time records to PostgreSQL.
 - Authenticated Grafana, Prometheus, and OpenTelemetry Collector services bind only to localhost.
   Recovery runbooks cover provider outage, stuck runs, Redis loss, database restore, and human-only
   policy rollback with explicit RPO/RTO assumptions.
+- API, Celery, and MCP processes must inherit the same exported
+  `PROMETHEUS_MULTIPROC_DIR=$PWD/.runtime/prometheus`; `/metrics` aggregates those process-local
+  files for the single Prometheus API scrape target. Clear that directory only while every runtime
+  process is stopped.
 
 ## Safety boundary
 

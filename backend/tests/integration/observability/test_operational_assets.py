@@ -23,6 +23,11 @@ def test_compose_wires_otel_prometheus_and_grafana_with_pinned_configs() -> None
     assert "timescaledb_pre_restore()" in recovery_script
     assert "timescaledb_post_restore()" in recovery_script
     assert "restart redis" in recovery_script
+    assert "celery_app:celery_app worker" in recovery_script
+    assert "before_agent_events" in recovery_script
+    assert "after_agent_events" in recovery_script
+    assert "before_paper_fills" in recovery_script
+    assert "after_paper_fills" in recovery_script
     assert "test_replay_persists_one_append_only_fill" in recovery_script
 
 

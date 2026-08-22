@@ -27,6 +27,7 @@ from stock_platform.infrastructure.db.models.tables import (
     risk_policy_version,
     thesis_evidence_link,
 )
+from stock_platform.infrastructure.observability.context import maybe_current_correlation
 
 
 class ResearchStore(Protocol):
@@ -267,9 +268,12 @@ class PostgresResearchStore:
             )
             + 1
         )
+        context = maybe_current_correlation()
+        correlation_id = context.correlation_id if context is not None else run_uuid
         for sequence, node in enumerate(result.route, start=next_sequence):
             self.connection.execute(
                 insert(agent_event).values(
+                    correlation_id=correlation_id,
                     run_id=run_uuid,
                     sequence=sequence,
                     event_type="node.completed",

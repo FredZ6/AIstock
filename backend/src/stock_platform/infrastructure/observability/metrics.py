@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
+from pathlib import Path
 from typing import cast
 
-from prometheus_client import CollectorRegistry, Counter, Gauge, generate_latest
+from prometheus_client import CollectorRegistry, Counter, Gauge, generate_latest, multiprocess
 
 _UNBOUNDED_LABELS = frozenset({"symbol", "run_id", "correlation_id", "user_id"})
+_ALERT_RULES = frozenset({"market_anomaly", "market-anomaly-v1"})
 
 
 class PlatformMetrics:
-    def __init__(self) -> None:
+    def __init__(self, multiprocess_dir: str | None = None) -> None:
+        self._multiprocess_dir = multiprocess_dir
+        if multiprocess_dir is not None:
+            Path(multiprocess_dir).mkdir(parents=True, exist_ok=True)
         self._registry = CollectorRegistry()
         self._families = {
             "service_requests": Counter(
@@ -39,7 +45,11 @@ class PlatformMetrics:
                 "platform_alerts", "Alert outcomes", ("rule", "outcome"), registry=self._registry
             ),
             "queue": Gauge(
-                "platform_queue_depth", "Queue depth", ("queue",), registry=self._registry
+                "platform_queue_depth",
+                "Queue depth",
+                ("queue",),
+                registry=self._registry,
+                multiprocess_mode="livemostrecent",
             ),
             "cost": Counter(
                 "platform_cost", "Deterministic cost units", ("kind",), registry=self._registry
@@ -74,6 +84,8 @@ class PlatformMetrics:
         self.observe("graph_nodes", {"graph": graph, "node": node, "outcome": outcome})
 
     def observe_alert(self, *, rule: str, outcome: str) -> None:
+        if rule not in _ALERT_RULES:
+            raise ValueError("alert rule metric labels must use a bounded rule set")
         self.observe("alerts", {"rule": rule, "outcome": outcome})
 
     def set_queue(self, *, queue: str, depth: int) -> None:
@@ -86,7 +98,13 @@ class PlatformMetrics:
         self.observe("evaluation_runs", {"suite": suite, "outcome": outcome})
 
     def render(self) -> str:
+        if self._multiprocess_dir is not None:
+            registry = CollectorRegistry()
+            multiprocess.MultiProcessCollector(  # type: ignore[no-untyped-call]
+                registry, path=self._multiprocess_dir
+            )
+            return generate_latest(registry).decode()
         return generate_latest(self._registry).decode()
 
 
-platform_metrics = PlatformMetrics()
+platform_metrics = PlatformMetrics(os.getenv("PROMETHEUS_MULTIPROC_DIR"))

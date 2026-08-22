@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     minio_secure: bool = False
     redis_url: str = "redis://localhost:56379/0"
     otel_export_enabled: bool = False
+    prometheus_multiproc_dir: str | None = None
     admin_api_token: SecretStr | None = None
     admin_actor_id: str | None = None
     max_active_agent_runs: int = Field(default=2, ge=1)

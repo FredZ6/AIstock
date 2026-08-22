@@ -10,6 +10,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, func, insert, select, update
 from sqlalchemy.engine import Connection, Engine, RowMapping
 from sqlalchemy.exc import DBAPIError, IntegrityError
+from stock_platform.application.events.sse import load_events
 from stock_platform.application.runs import RetryableRunError, RunControl, execute_run
 from stock_platform.infrastructure.db.models.tables import (
     agent_event,
@@ -21,6 +22,7 @@ from stock_platform.infrastructure.db.models.tables import (
     paper_portfolio_config,
     risk_decision,
     risk_policy_version,
+    tool_call,
     weekly_review_run,
 )
 from stock_platform.workers.portfolio_tasks import execute_portfolio_run
@@ -431,6 +433,23 @@ def test_research_worker_runs_real_graph_once_with_ordered_events(
         assert events[-1][1] == "run.completed"
         assert [sequence for sequence, _ in events] == list(range(1, len(events) + 1))
         assert any(event_type == "node.completed" for _, event_type in events)
+        correlation_id = connection.execute(
+            select(agent_run.c.correlation_id).where(agent_run.c.id == run_id)
+        ).scalar_one()
+        assert set(
+            connection.execute(
+                select(agent_event.c.correlation_id).where(agent_event.c.run_id == run_id)
+            ).scalars()
+        ) == {correlation_id}
+        assert (
+            connection.execute(
+                select(func.count()).select_from(tool_call).where(tool_call.c.run_id == run_id)
+            ).scalar_one()
+            == 5
+        )
+        replay = load_events(connection, run_id)
+        assert sum(event["type"] == "mcp.tool.completed" for event in replay) == 5
+        assert {event["correlation_id"] for event in replay} == {correlation_id}
     engine.dispose()
 
 
