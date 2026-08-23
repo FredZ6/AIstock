@@ -1,0 +1,1 @@
+"""Canonical ingestion domain contracts."""

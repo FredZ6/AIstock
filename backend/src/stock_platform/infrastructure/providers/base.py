@@ -17,18 +17,8 @@ from urllib.request import Request, urlopen
 
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
+from stock_platform.domain.ingestion.models import FeedType as FeedType
 from stock_platform.infrastructure.recovery import CircuitBreaker
-
-
-class FeedType(StrEnum):
-    COMPANY_FACTS = "company_facts"
-    FILINGS = "filings"
-    FILING_SECTIONS = "filing_sections"
-    PRICE_BARS = "price_bars"
-    COMPANY_NEWS = "company_news"
-    OPTION_AGGREGATES = "option_aggregates"
-    ESTIMATES = "estimates"
-    TARGET_CONSENSUS = "target_consensus"
 
 
 class ProviderStatus(StrEnum):
