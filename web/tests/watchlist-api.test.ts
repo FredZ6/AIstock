@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { readApiBaseUrl, readWebDataMode } from '../lib/server/data-mode'
-import { listWatchlist, WatchlistApiError } from '../lib/server/watchlist-api'
+import {
+  addWatchlistItem,
+  deleteWatchlistItem,
+  listWatchlist,
+  patchWatchlistItem,
+  WatchlistApiError,
+} from '../lib/server/watchlist-api'
 
 const validRow = {
   symbol: 'NVDA',
@@ -113,5 +119,113 @@ describe('watchlist API read client', () => {
       kind: 'contract',
       message: 'Watchlist API returned an invalid response',
     })
+  })
+})
+
+describe('watchlist API mutations', () => {
+  const invalidSymbolFetch = vi.fn(async () => jsonResponse(validRow))
+
+  it('creates a watchlist item through the locked POST contract', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(validRow, 201))
+
+    const result = await addWatchlistItem(
+      { baseUrl: 'http://api.test', fetchImpl },
+      {
+        symbol: 'NVDA',
+        dailyResearch: true,
+        intradayMonitoring: true,
+        thresholds: {},
+      },
+    )
+
+    expect(result.symbol).toBe('NVDA')
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://api.test/api/v1/watchlist',
+      expect.objectContaining({
+        body: JSON.stringify({
+          symbol: 'NVDA',
+          daily_research: true,
+          intraday_monitoring: true,
+          thresholds: {},
+        }),
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        method: 'POST',
+      }),
+    )
+  })
+
+  it('updates a watchlist item through the locked PATCH contract', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      ...validRow,
+      daily_research: false,
+      thresholds: { return_5m: '0.03' },
+    }))
+
+    const result = await patchWatchlistItem(
+      { baseUrl: 'http://api.test', fetchImpl },
+      'NVDA',
+      { dailyResearch: false, thresholds: { return_5m: '0.03' } },
+    )
+
+    expect(result).toMatchObject({ dailyResearch: false, alertThreshold: '0.03' })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://api.test/api/v1/watchlist/NVDA',
+      expect.objectContaining({
+        body: JSON.stringify({
+          daily_research: false,
+          thresholds: { return_5m: '0.03' },
+        }),
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        method: 'PATCH',
+      }),
+    )
+  })
+
+  it('deletes a watchlist item only when the API confirms 204', async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }))
+
+    await expect(
+      deleteWatchlistItem({ baseUrl: 'http://api.test', fetchImpl }, 'AAPL.B'),
+    ).resolves.toBeUndefined()
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://api.test/api/v1/watchlist/AAPL.B',
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+  })
+
+  it('rejects a non-204 delete response', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(validRow))
+
+    await expect(
+      deleteWatchlistItem({ baseUrl: 'http://api.test', fetchImpl }, 'NVDA'),
+    ).rejects.toMatchObject({ kind: 'contract', status: 200 })
+  })
+
+  it.each([
+    ['add', () => addWatchlistItem(
+      { baseUrl: 'http://api.test', fetchImpl: invalidSymbolFetch },
+      { symbol: 'nvda!', dailyResearch: true, intradayMonitoring: true, thresholds: {} },
+    )],
+    ['patch', () => patchWatchlistItem(
+      { baseUrl: 'http://api.test', fetchImpl: invalidSymbolFetch },
+      'nvda!',
+      { dailyResearch: false },
+    )],
+    ['delete', () => deleteWatchlistItem(
+      { baseUrl: 'http://api.test', fetchImpl: invalidSymbolFetch },
+      'nvda!',
+    )],
+  ])('rejects an invalid symbol before %s reaches fetch', async (_operation, invoke) => {
+    await expect(invoke()).rejects.toMatchObject({ kind: 'contract' })
+    expect(invalidSymbolFetch).not.toHaveBeenCalled()
+  })
+
+  it('validates mutation response rows with the same strict contract', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ ...validRow, updated_at: 'naive' }, 201))
+
+    await expect(addWatchlistItem(
+      { baseUrl: 'http://api.test', fetchImpl },
+      { symbol: 'NVDA', dailyResearch: true, intradayMonitoring: true, thresholds: {} },
+    )).rejects.toMatchObject({ kind: 'contract' })
   })
 })
