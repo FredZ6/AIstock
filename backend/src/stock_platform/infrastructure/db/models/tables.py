@@ -467,6 +467,164 @@ Index(
     security_profile_version.c.security_id,
     security_profile_version.c.available_at,
 )
+ingestion_job = Table(
+    "ingestion_job",
+    metadata,
+    uuid_pk(),
+    Column("request_hash", Text, nullable=False),
+    Column("request_payload", JSONB, nullable=False),
+    Column("provider", Text, nullable=False),
+    Column("dataset", Text, nullable=False),
+    Column("security_id", UUID(as_uuid=True), ForeignKey("security.id")),
+    Column("window_start", DateTime(timezone=True), nullable=False),
+    Column("window_end", DateTime(timezone=True), nullable=False),
+    Column("purpose", Text, nullable=False),
+    Column("state", Text, nullable=False, server_default=text("'QUEUED'")),
+    Column("max_attempts", Integer, nullable=False),
+    Column("attempt_count", Integer, nullable=False, server_default=text("0")),
+    Column("lease_token", UUID(as_uuid=True)),
+    Column("lease_generation", Integer, nullable=False, server_default=text("0")),
+    Column("lease_owner", Text),
+    Column("lease_expires_at", DateTime(timezone=True)),
+    Column("attempt_started_at", DateTime(timezone=True)),
+    Column("next_attempt_at", DateTime(timezone=True)),
+    Column("policy_version", Text, nullable=False),
+    Column("completed_at", DateTime(timezone=True)),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    created_at(),
+    CheckConstraint("window_start <= window_end", name=conv("ck_ingestion_job_window")),
+    CheckConstraint(
+        "max_attempts > 0 AND attempt_count >= 0 AND attempt_count <= max_attempts "
+        "AND lease_generation >= 0",
+        name=conv("ck_ingestion_job_attempts"),
+    ),
+    CheckConstraint(
+        "state IN ('QUEUED', 'RUNNING', 'SUCCEEDED', 'COMPLETED_WITH_GAPS', "
+        "'RETRY_SCHEDULED', 'FAILED', 'DEAD_LETTER', 'CANCELLED')",
+        name=conv("ck_ingestion_job_state"),
+    ),
+    CheckConstraint(
+        "(state = 'RUNNING' AND lease_token IS NOT NULL AND lease_owner IS NOT NULL "
+        "AND lease_expires_at IS NOT NULL AND attempt_started_at IS NOT NULL) OR "
+        "(state <> 'RUNNING' AND lease_token IS NULL AND lease_owner IS NULL "
+        "AND lease_expires_at IS NULL AND attempt_started_at IS NULL)",
+        name=conv("ck_ingestion_job_running_lease"),
+    ),
+    CheckConstraint(
+        "(state = 'RETRY_SCHEDULED') = (next_attempt_at IS NOT NULL)",
+        name=conv("ck_ingestion_job_retry_time"),
+    ),
+    CheckConstraint(
+        "(state IN ('SUCCEEDED', 'COMPLETED_WITH_GAPS', 'FAILED', 'DEAD_LETTER', "
+        "'CANCELLED')) = (completed_at IS NOT NULL)",
+        name=conv("ck_ingestion_job_completion_time"),
+    ),
+)
+Index(
+    "uq_ingestion_job_active_request",
+    ingestion_job.c.request_hash,
+    unique=True,
+    postgresql_where=ingestion_job.c.state.in_(("QUEUED", "RUNNING", "RETRY_SCHEDULED")),
+)
+Index("ingestion_job_due_idx", ingestion_job.c.state, ingestion_job.c.next_attempt_at)
+ingestion_attempt = Table(
+    "ingestion_attempt",
+    metadata,
+    uuid_pk(),
+    Column("job_id", UUID(as_uuid=True), ForeignKey("ingestion_job.id"), nullable=False),
+    Column("attempt_number", Integer, nullable=False),
+    Column("lease_generation", Integer, nullable=False),
+    Column("worker_id", Text, nullable=False),
+    Column("started_at", DateTime(timezone=True), nullable=False),
+    Column("finished_at", DateTime(timezone=True), nullable=False),
+    Column("outcome", Text, nullable=False),
+    Column("error_class", Text),
+    Column("error_detail", JSONB),
+    created_at(),
+    CheckConstraint(
+        "attempt_number > 0 AND lease_generation > 0",
+        name=conv("ck_ingestion_attempt_number"),
+    ),
+    CheckConstraint("started_at <= finished_at", name=conv("ck_ingestion_attempt_time_order")),
+    CheckConstraint(
+        "outcome IN ('SUCCEEDED', 'COMPLETED_WITH_GAPS', 'RETRY_SCHEDULED', "
+        "'FAILED', 'DEAD_LETTER')",
+        name=conv("ck_ingestion_attempt_outcome"),
+    ),
+    UniqueConstraint("job_id", "attempt_number", name="uq_ingestion_attempt_number"),
+)
+ingestion_cursor = Table(
+    "ingestion_cursor",
+    metadata,
+    uuid_pk(),
+    Column("provider", Text, nullable=False),
+    Column("dataset", Text, nullable=False),
+    Column("scope_key", Text, nullable=False),
+    Column("cursor_payload", JSONB, nullable=False),
+    Column("watermark", DateTime(timezone=True), nullable=False),
+    Column("generation", Integer, nullable=False, server_default=text("0")),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    created_at(),
+    CheckConstraint("generation >= 0", name=conv("ck_ingestion_cursor_generation")),
+    UniqueConstraint("provider", "dataset", "scope_key", name="uq_ingestion_cursor_scope"),
+)
+ingestion_dead_letter = Table(
+    "ingestion_dead_letter",
+    metadata,
+    uuid_pk(),
+    Column("job_id", UUID(as_uuid=True), ForeignKey("ingestion_job.id"), nullable=False),
+    Column("attempt_number", Integer, nullable=False),
+    Column("error_class", Text, nullable=False),
+    Column("error_detail", JSONB, nullable=False),
+    created_at(),
+    UniqueConstraint("job_id", "attempt_number", name="uq_ingestion_dead_letter_attempt"),
+)
+ingestion_raw_link = Table(
+    "ingestion_raw_link",
+    metadata,
+    Column("job_id", UUID(as_uuid=True), ForeignKey("ingestion_job.id"), primary_key=True),
+    Column(
+        "raw_data_object_id",
+        UUID(as_uuid=True),
+        ForeignKey("raw_data_object.id"),
+        primary_key=True,
+    ),
+    created_at(),
+)
+normalization_dispatch = Table(
+    "normalization_dispatch",
+    metadata,
+    uuid_pk(),
+    Column(
+        "raw_data_object_id",
+        UUID(as_uuid=True),
+        ForeignKey("raw_data_object.id"),
+        nullable=False,
+    ),
+    Column("normalization_version", Text, nullable=False),
+    Column("state", Text, nullable=False, server_default=text("'PENDING'")),
+    Column("attempt_count", Integer, nullable=False, server_default=text("0")),
+    Column("lease_token", UUID(as_uuid=True)),
+    Column("lease_generation", Integer, nullable=False, server_default=text("0")),
+    Column("lease_expires_at", DateTime(timezone=True)),
+    Column("next_attempt_at", DateTime(timezone=True), nullable=False),
+    Column("last_error", JSONB),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    created_at(),
+    CheckConstraint(
+        "state IN ('PENDING', 'CLAIMED', 'DISPATCHED', 'FAILED')",
+        name=conv("ck_normalization_dispatch_state"),
+    ),
+    CheckConstraint(
+        "attempt_count >= 0 AND lease_generation >= 0",
+        name=conv("ck_normalization_dispatch_counts"),
+    ),
+    UniqueConstraint(
+        "raw_data_object_id",
+        "normalization_version",
+        name="uq_normalization_dispatch_version",
+    ),
+)
 watchlist_item = Table(
     "watchlist_item",
     metadata,

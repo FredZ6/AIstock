@@ -230,8 +230,214 @@ def upgrade() -> None:
             """
         )
 
+    op.create_table(
+        "ingestion_job",
+        _uuid_pk(),
+        sa.Column("request_hash", sa.Text(), nullable=False),
+        sa.Column("request_payload", postgresql.JSONB(), nullable=False),
+        sa.Column("provider", sa.Text(), nullable=False),
+        sa.Column("dataset", sa.Text(), nullable=False),
+        sa.Column(
+            "security_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("security.id"),
+        ),
+        sa.Column("window_start", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("window_end", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("purpose", sa.Text(), nullable=False),
+        sa.Column("state", sa.Text(), nullable=False, server_default=sa.text("'QUEUED'")),
+        sa.Column("max_attempts", sa.Integer(), nullable=False),
+        sa.Column("attempt_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        sa.Column("lease_token", postgresql.UUID(as_uuid=True)),
+        sa.Column("lease_generation", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        sa.Column("lease_owner", sa.Text()),
+        sa.Column("lease_expires_at", sa.DateTime(timezone=True)),
+        sa.Column("attempt_started_at", sa.DateTime(timezone=True)),
+        sa.Column("next_attempt_at", sa.DateTime(timezone=True)),
+        sa.Column("policy_version", sa.Text(), nullable=False),
+        sa.Column("completed_at", sa.DateTime(timezone=True)),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        _created_at(),
+        sa.CheckConstraint("window_start <= window_end", name=op.f("ck_ingestion_job_window")),
+        sa.CheckConstraint(
+            "max_attempts > 0 AND attempt_count >= 0 AND attempt_count <= max_attempts "
+            "AND lease_generation >= 0",
+            name=op.f("ck_ingestion_job_attempts"),
+        ),
+        sa.CheckConstraint(
+            "state IN ('QUEUED', 'RUNNING', 'SUCCEEDED', 'COMPLETED_WITH_GAPS', "
+            "'RETRY_SCHEDULED', 'FAILED', 'DEAD_LETTER', 'CANCELLED')",
+            name=op.f("ck_ingestion_job_state"),
+        ),
+        sa.CheckConstraint(
+            "(state = 'RUNNING' AND lease_token IS NOT NULL AND lease_owner IS NOT NULL "
+            "AND lease_expires_at IS NOT NULL AND attempt_started_at IS NOT NULL) OR "
+            "(state <> 'RUNNING' AND lease_token IS NULL AND lease_owner IS NULL "
+            "AND lease_expires_at IS NULL AND attempt_started_at IS NULL)",
+            name=op.f("ck_ingestion_job_running_lease"),
+        ),
+        sa.CheckConstraint(
+            "(state = 'RETRY_SCHEDULED') = (next_attempt_at IS NOT NULL)",
+            name=op.f("ck_ingestion_job_retry_time"),
+        ),
+        sa.CheckConstraint(
+            "(state IN ('SUCCEEDED', 'COMPLETED_WITH_GAPS', 'FAILED', 'DEAD_LETTER', "
+            "'CANCELLED')) = (completed_at IS NOT NULL)",
+            name=op.f("ck_ingestion_job_completion_time"),
+        ),
+    )
+    op.create_index(
+        "uq_ingestion_job_active_request",
+        "ingestion_job",
+        ["request_hash"],
+        unique=True,
+        postgresql_where=sa.text("state IN ('QUEUED', 'RUNNING', 'RETRY_SCHEDULED')"),
+    )
+    op.create_index("ingestion_job_due_idx", "ingestion_job", ["state", "next_attempt_at"])
+    op.create_table(
+        "ingestion_attempt",
+        _uuid_pk(),
+        sa.Column(
+            "job_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ingestion_job.id"),
+            nullable=False,
+        ),
+        sa.Column("attempt_number", sa.Integer(), nullable=False),
+        sa.Column("lease_generation", sa.Integer(), nullable=False),
+        sa.Column("worker_id", sa.Text(), nullable=False),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("finished_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("outcome", sa.Text(), nullable=False),
+        sa.Column("error_class", sa.Text()),
+        sa.Column("error_detail", postgresql.JSONB()),
+        _created_at(),
+        sa.CheckConstraint(
+            "attempt_number > 0 AND lease_generation > 0",
+            name=op.f("ck_ingestion_attempt_number"),
+        ),
+        sa.CheckConstraint(
+            "started_at <= finished_at", name=op.f("ck_ingestion_attempt_time_order")
+        ),
+        sa.CheckConstraint(
+            "outcome IN ('SUCCEEDED', 'COMPLETED_WITH_GAPS', 'RETRY_SCHEDULED', "
+            "'FAILED', 'DEAD_LETTER')",
+            name=op.f("ck_ingestion_attempt_outcome"),
+        ),
+        sa.UniqueConstraint("job_id", "attempt_number", name="uq_ingestion_attempt_number"),
+    )
+    op.create_table(
+        "ingestion_cursor",
+        _uuid_pk(),
+        sa.Column("provider", sa.Text(), nullable=False),
+        sa.Column("dataset", sa.Text(), nullable=False),
+        sa.Column("scope_key", sa.Text(), nullable=False),
+        sa.Column("cursor_payload", postgresql.JSONB(), nullable=False),
+        sa.Column("watermark", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("generation", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        _created_at(),
+        sa.CheckConstraint("generation >= 0", name=op.f("ck_ingestion_cursor_generation")),
+        sa.UniqueConstraint("provider", "dataset", "scope_key", name="uq_ingestion_cursor_scope"),
+    )
+    op.create_table(
+        "ingestion_dead_letter",
+        _uuid_pk(),
+        sa.Column(
+            "job_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ingestion_job.id"),
+            nullable=False,
+        ),
+        sa.Column("attempt_number", sa.Integer(), nullable=False),
+        sa.Column("error_class", sa.Text(), nullable=False),
+        sa.Column("error_detail", postgresql.JSONB(), nullable=False),
+        _created_at(),
+        sa.UniqueConstraint("job_id", "attempt_number", name="uq_ingestion_dead_letter_attempt"),
+    )
+    op.create_table(
+        "ingestion_raw_link",
+        sa.Column(
+            "job_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ingestion_job.id"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "raw_data_object_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("raw_data_object.id"),
+            primary_key=True,
+        ),
+        _created_at(),
+    )
+    op.create_table(
+        "normalization_dispatch",
+        _uuid_pk(),
+        sa.Column(
+            "raw_data_object_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("raw_data_object.id"),
+            nullable=False,
+        ),
+        sa.Column("normalization_version", sa.Text(), nullable=False),
+        sa.Column("state", sa.Text(), nullable=False, server_default=sa.text("'PENDING'")),
+        sa.Column("attempt_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        sa.Column("lease_token", postgresql.UUID(as_uuid=True)),
+        sa.Column("lease_generation", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        sa.Column("lease_expires_at", sa.DateTime(timezone=True)),
+        sa.Column("next_attempt_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("last_error", postgresql.JSONB()),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        _created_at(),
+        sa.CheckConstraint(
+            "state IN ('PENDING', 'CLAIMED', 'DISPATCHED', 'FAILED')",
+            name=op.f("ck_normalization_dispatch_state"),
+        ),
+        sa.CheckConstraint(
+            "attempt_count >= 0 AND lease_generation >= 0",
+            name=op.f("ck_normalization_dispatch_counts"),
+        ),
+        sa.UniqueConstraint(
+            "raw_data_object_id",
+            "normalization_version",
+            name="uq_normalization_dispatch_version",
+        ),
+    )
+    for table in ("ingestion_attempt", "ingestion_dead_letter", "ingestion_raw_link"):
+        op.execute(
+            f"""
+            CREATE TRIGGER enforce_append_only
+            BEFORE UPDATE OR DELETE ON {table}
+            FOR EACH ROW EXECUTE FUNCTION reject_append_only_mutation()
+            """
+        )
+
 
 def downgrade() -> None:
+    op.drop_table("normalization_dispatch")
+    op.drop_table("ingestion_raw_link")
+    op.drop_table("ingestion_dead_letter")
+    op.drop_table("ingestion_cursor")
+    op.drop_table("ingestion_attempt")
+    op.drop_index("ingestion_job_due_idx", table_name="ingestion_job")
+    op.drop_index("uq_ingestion_job_active_request", table_name="ingestion_job")
+    op.drop_table("ingestion_job")
     op.drop_constraint(
         op.f("fk_watchlist_item_security_id_security"), "watchlist_item", type_="foreignkey"
     )
