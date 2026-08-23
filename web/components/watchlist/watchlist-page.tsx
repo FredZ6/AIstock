@@ -15,11 +15,7 @@ import { WatchlistApiControls } from './watchlist-api-controls'
 
 const apiSummary = 'Persisted watchlist configuration from FastAPI. Market and research enrichment remains unavailable.'
 
-export function ApiWatchlistPage({ items }: { items: ApiWatchlistItem[] }) {
-  const asOf = items.reduce(
-    (latest, item) => item.updatedAt > latest ? item.updatedAt : latest,
-    items[0]?.updatedAt ?? new Date().toISOString(),
-  )
+export function ApiWatchlistPage({ asOf, items }: { asOf: string; items: ApiWatchlistItem[] }) {
   return (
     <AppShell currentPath="/watchlist">
       <PageHeading asOf={asOf} eyebrow="Discover · API Mode" title="Watchlist" summary={apiSummary} />

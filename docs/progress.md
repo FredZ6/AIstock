@@ -1619,3 +1619,21 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   add, Decimal-threshold update, reload persistence, delete, and exact cleanup all succeeded against
   FastAPI and PostgreSQL. The unreachable-API E2E also exited 0 with 1 passed / 1 intentionally
   skipped and proved explicit Failure with no Fixture substitution.
+
+#### PR #11 pre-merge review closure
+
+- The pre-landing review found one P1 data-integrity issue: re-adding an existing symbol through the
+  UI invoked the existing POST upsert and reset persisted monitoring/threshold configuration to add
+  defaults. A regression first failed 1/9; the Server Action now reads the persisted list and rejects
+  duplicates before POST, and the focused action suite passed 9/9.
+- The review also closed an empty-list hydration mismatch by generating the fallback `asOf` once in
+  the Server Component and passing it into the client page. Its regression first failed 1/5 and then
+  passed. New action feedback text was raised from approximately 11px to 16px for readable success
+  and failure states.
+- Fresh post-review `make verify` exited 0: backend 370 passed / 3 credential-gated skipped; Web 14
+  files / 94 passed; Ruff, strict Mypy, Alembic/MCP/OpenAPI drift, TypeScript, ESLint, and the Next.js
+  production build passed. The existing environment-level Node `--localstorage-file` warning remains
+  non-functional.
+- Fresh post-review persistence and unreachable-API Playwright commands each exited 0 with 1 passed /
+  1 intentionally skipped. The persistence run again proved add, update, reload, delete, and exact
+  cleanup against FastAPI/PostgreSQL; the failure run again proved no Fixture substitution.

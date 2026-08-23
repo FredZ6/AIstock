@@ -6,6 +6,7 @@ import { readWebDataConfig } from '../../lib/server/data-mode'
 import {
   addWatchlistItem,
   deleteWatchlistItem,
+  listWatchlist,
   patchWatchlistItem,
   type WatchlistClientOptions,
 } from '../../lib/server/watchlist-api'
@@ -46,7 +47,12 @@ export async function addWatchlistAction(
   if (invalid) return invalid
 
   try {
-    await addWatchlistItem(clientOptions(), {
+    const options = clientOptions()
+    const items = await listWatchlist(options)
+    if (items.some((item) => item.symbol === symbol)) {
+      return { message: `${symbol} is already in the watchlist.`, status: 'error', symbol }
+    }
+    await addWatchlistItem(options, {
       dailyResearch: formData.get('daily_research') === 'on',
       intradayMonitoring: formData.get('intraday_monitoring') === 'on',
       symbol,

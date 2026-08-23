@@ -17,7 +17,11 @@ export default async function WatchlistRoute() {
     }
 
     const items = await listWatchlist({ baseUrl: config.baseUrl })
-    return <ApiWatchlistPage items={items} />
+    const asOf = items.reduce(
+      (latest, item) => item.updatedAt > latest ? item.updatedAt : latest,
+      items[0]?.updatedAt ?? new Date().toISOString(),
+    )
+    return <ApiWatchlistPage asOf={asOf} items={items} />
   } catch {
     return <WatchlistFailurePage asOf={new Date().toISOString()} />
   }

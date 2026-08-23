@@ -9,6 +9,7 @@ import { initialWatchlistActionState } from '../lib/watchlist-action-state'
 import {
   addWatchlistItem,
   deleteWatchlistItem,
+  listWatchlist,
   patchWatchlistItem,
   WatchlistApiError,
 } from '../lib/server/watchlist-api'
@@ -20,6 +21,7 @@ vi.mock('../lib/server/watchlist-api', async (importOriginal) => {
     ...original,
     addWatchlistItem: vi.fn(),
     deleteWatchlistItem: vi.fn(),
+    listWatchlist: vi.fn(),
     patchWatchlistItem: vi.fn(),
   }
 })
@@ -28,6 +30,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 const addItem = vi.mocked(addWatchlistItem)
 const deleteItem = vi.mocked(deleteWatchlistItem)
+const listItems = vi.mocked(listWatchlist)
 const patchItem = vi.mocked(patchWatchlistItem)
 const revalidate = vi.mocked(revalidatePath)
 
@@ -39,6 +42,7 @@ function formData(values: Record<string, string>) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  listItems.mockResolvedValue([])
   process.env.WEB_DATA_MODE = 'api'
   process.env.API_BASE_URL = 'http://127.0.0.1:8000'
 })
@@ -78,6 +82,23 @@ describe('watchlist Server Actions', () => {
     )
     expect(revalidate).toHaveBeenCalledWith('/watchlist')
     expect(state).toEqual({ message: 'NVDA added.', status: 'success', symbol: 'NVDA' })
+  })
+
+  it('rejects an existing symbol without resetting its persisted configuration', async () => {
+    listItems.mockResolvedValue([{ symbol: 'NVDA' }] as never)
+
+    const state = await addWatchlistAction(
+      initialWatchlistActionState,
+      formData({ symbol: 'nvda' }),
+    )
+
+    expect(state).toEqual({
+      message: 'NVDA is already in the watchlist.',
+      status: 'error',
+      symbol: 'NVDA',
+    })
+    expect(addItem).not.toHaveBeenCalled()
+    expect(revalidate).not.toHaveBeenCalled()
   })
 
   it('updates explicit checkbox values and preserves a Decimal threshold string', async () => {

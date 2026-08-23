@@ -1,6 +1,8 @@
 import { render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { ApiWatchlistPage } from '../components/watchlist/watchlist-page'
+
 const apiRow = {
   alertThreshold: '0.025',
   createdAt: '2026-08-23T00:00:00+00:00',
@@ -30,6 +32,17 @@ afterEach(() => {
 })
 
 describe('Watchlist route data boundaries', () => {
+  it('uses the server-provided request time for an empty API watchlist', () => {
+    const asOf = '2026-08-23T08:30:00.000Z'
+
+    const { container } = render(<ApiWatchlistPage asOf={asOf} items={[]} />)
+
+    expect(Array.from(container.querySelectorAll('time'))).not.toHaveLength(0)
+    expect(Array.from(container.querySelectorAll('time')).every(
+      (element) => element.getAttribute('datetime') === asOf,
+    )).toBe(true)
+  })
+
   it('loads the frozen snapshot only in explicit Fixture mode', async () => {
     process.env.WEB_DATA_MODE = 'fixture'
     await mockWatchlistRead(() => {
