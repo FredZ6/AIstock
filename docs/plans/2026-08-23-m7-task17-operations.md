@@ -35,4 +35,3 @@ automatic policy activation, or Task 18 demo work is in scope.
 - Review the full diff for correctness, security, recovery semantics, and unnecessary complexity.
 - Fix all P0/P1/P2 findings, then commit, push, open PR, wait for CI, re-review remote diff, merge,
   and only then mark FRE-21 Done and append the final Notion merge record.
-
