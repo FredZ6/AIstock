@@ -1,6 +1,9 @@
 import 'server-only'
 
 export type WebDataMode = 'api' | 'fixture'
+export type WebDataConfig =
+  | { mode: 'fixture' }
+  | { baseUrl: string; mode: 'api' }
 
 type Environment = Readonly<Record<string, string | undefined>>
 
@@ -21,4 +24,11 @@ export function readApiBaseUrl(environment: Environment): string {
   } catch {
     throw new TypeError('API_BASE_URL must be an absolute HTTP(S) URL in API mode')
   }
+}
+
+export function readWebDataConfig(environment: Environment): WebDataConfig {
+  const mode = readWebDataMode(environment)
+  return mode === 'fixture'
+    ? { mode }
+    : { baseUrl: readApiBaseUrl(environment), mode }
 }

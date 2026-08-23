@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export UV_CACHE_DIR="${repo_root}/.uv-cache"
 export NEXT_TELEMETRY_DISABLED=1
+export WEB_DATA_MODE=fixture
 
 cd "${repo_root}"
 uv run ruff format --check backend scripts/export_mcp_contracts.py scripts/export_openapi.py scripts/generate_eval_datasets.py scripts/recovery_probe.py scripts/run_offline_eval.py

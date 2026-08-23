@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { readApiBaseUrl, readWebDataMode } from '../../lib/server/data-mode'
+import { readWebDataConfig } from '../../lib/server/data-mode'
 import {
   addWatchlistItem,
   deleteWatchlistItem,
@@ -16,10 +16,11 @@ const symbolPattern = /^[A-Z.]{1,10}$/
 const persistenceError = 'Unable to persist watchlist changes. Try again.'
 
 function clientOptions(): WatchlistClientOptions {
-  if (readWebDataMode(process.env) !== 'api') {
+  const config = readWebDataConfig(process.env)
+  if (config.mode !== 'api') {
     throw new TypeError('Watchlist persistence requires API mode')
   }
-  return { baseUrl: readApiBaseUrl(process.env) }
+  return { baseUrl: config.baseUrl }
 }
 
 function normalizedSymbol(value: FormDataEntryValue | null): string {

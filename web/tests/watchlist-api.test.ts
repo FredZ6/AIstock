@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { readApiBaseUrl, readWebDataMode } from '../lib/server/data-mode'
+import { readApiBaseUrl, readWebDataConfig, readWebDataMode } from '../lib/server/data-mode'
 import {
   addWatchlistItem,
   deleteWatchlistItem,
@@ -50,6 +50,26 @@ describe('web data mode', () => {
     expect(() => readApiBaseUrl({ API_BASE_URL: url })).toThrow(
       'API_BASE_URL must be an absolute HTTP(S) URL in API mode',
     )
+  })
+
+  it('builds Fixture configuration without accepting a public API URL', () => {
+    expect(readWebDataConfig({
+      API_BASE_URL: undefined,
+      NEXT_PUBLIC_API_BASE_URL: 'https://browser-visible.example',
+      WEB_DATA_MODE: 'fixture',
+    })).toEqual({ mode: 'fixture' })
+  })
+
+  it('requires the server-only API URL when building API configuration', () => {
+    expect(() => readWebDataConfig({
+      NEXT_PUBLIC_API_BASE_URL: 'https://browser-visible.example',
+      WEB_DATA_MODE: 'api',
+    })).toThrow('API_BASE_URL must be an absolute HTTP(S) URL in API mode')
+
+    expect(readWebDataConfig({
+      API_BASE_URL: 'http://127.0.0.1:8000',
+      WEB_DATA_MODE: 'api',
+    })).toEqual({ baseUrl: 'http://127.0.0.1:8000/', mode: 'api' })
   })
 })
 

@@ -15,7 +15,7 @@ export default defineConfig({
   ],
   use: { baseURL: 'http://127.0.0.1:3000' },
   webServer: {
-    command: 'pnpm dev --hostname 127.0.0.1',
+    command: 'WEB_DATA_MODE=fixture pnpm dev --hostname 127.0.0.1',
     reuseExistingServer: !process.env.CI,
     url: 'http://127.0.0.1:3000',
   },
