@@ -42,6 +42,10 @@ describe('watchlist API contract', () => {
     ['non-object thresholds', { ...validRow, thresholds: [] }],
     ['a non-string threshold', { ...validRow, thresholds: { return_5m: 0.025 } }],
     ['a non-decimal threshold', { ...validRow, thresholds: { return_5m: 'two percent' } }],
+    [
+      'a non-string secondary threshold',
+      { ...validRow, thresholds: { return_5m: '0.025', volume_ratio: 2 } },
+    ],
   ])('rejects %s', (_label, row) => {
     expect(() => parseWatchlistRows([row])).toThrow()
   })

@@ -44,12 +44,14 @@ function symbol(value: unknown, path: string): string {
 }
 
 function alertThreshold(thresholds: JsonRecord, path: string): string | null {
+  for (const [name, threshold] of Object.entries(thresholds)) {
+    if (typeof threshold !== 'string' || !decimalPattern.test(threshold)) {
+      throw new TypeError(`${path}.${name} must be a Decimal string`)
+    }
+  }
   const value = thresholds.return_5m
   if (value === undefined) return null
-  if (typeof value !== 'string' || !decimalPattern.test(value)) {
-    throw new TypeError(`${path}.return_5m must be a Decimal string`)
-  }
-  return value
+  return value as string
 }
 
 export function parseWatchlistRow(value: unknown, path = 'watchlist item'): ApiWatchlistItem {

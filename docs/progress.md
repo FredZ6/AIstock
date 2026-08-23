@@ -1602,3 +1602,20 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   Backend: 370 passed / 3 credential-gated skipped. Web: 14 files / 91 passed. Node emitted the same
   environment-level `--localstorage-file` warning seen in the untouched worktree baseline; there
   were no assertion, build, Python, Starlette/httpx, or Docker ownership warnings.
+
+#### Watchlist API final-review closure
+
+- Final code review found one contract gap: only `thresholds.return_5m` was validated, so another
+  persisted threshold could carry a JSON number and bypass the Decimal-string invariant. A new
+  regression first failed 1/12 because `{ "volume_ratio": 2 }` was accepted. The minimal parser
+  change validates every supplied threshold value as a Decimal string; the focused suite then passed
+  12/12.
+- Fresh `make verify` exited 0 after the review fix: Ruff format/lint, strict Mypy over 209 files,
+  Alembic/MCP/OpenAPI drift checks, TypeScript, ESLint, and the Next.js production build passed.
+  Backend: 370 passed / 3 credential-gated skipped. Web: 14 files / 92 passed. The existing Node
+  `--localstorage-file` environment warning remains non-functional; no application warning or test
+  failure was introduced.
+- Fresh real-browser persistence E2E exited 0 with 1 passed / 1 intentionally skipped: `QAWEBAPI`
+  add, Decimal-threshold update, reload persistence, delete, and exact cleanup all succeeded against
+  FastAPI and PostgreSQL. The unreachable-API E2E also exited 0 with 1 passed / 1 intentionally
+  skipped and proved explicit Failure with no Fixture substitution.
