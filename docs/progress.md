@@ -1637,3 +1637,44 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
 - Fresh post-review persistence and unreachable-API Playwright commands each exited 0 with 1 passed /
   1 intentionally skipped. The persistence run again proved add, update, reload, delete, and exact
   cleanup against FastAPI/PostgreSQL; the failure run again proved no Fixture substitution.
+
+### M7.5 RDB-1 canonical ingestion foundation — 2026-08-23
+
+- FRE-24 was implemented from `main@1ab9ec1` on `codex/fre-24-rdb-1`, strictly in the approved
+  RDB-1 order. Canonical ingestion contracts reject naive datetimes and binary floats, use aware UTC
+  timestamps and Decimal-safe values, classify retryable versus terminal failures, and derive an
+  immutable request hash from the normalized provider request.
+- The security master now uses stable `Security` identity plus append-only, effective-dated
+  identifier and profile facts. The locked eleven-symbol universe is seeded idempotently while
+  preserving existing Watchlist monitoring configuration and the public REST contract.
+- Durable PostgreSQL orchestration includes ingestion jobs, attempts, leases, cursors, dead letters,
+  raw links, and normalization dispatch. Partial uniqueness and compare-and-swap transitions prevent
+  concurrent duplicate work; expired leases recover within the bounded attempt budget. Immutable
+  control facts reject update/delete at the database layer.
+- Raw payloads are written to MinIO before one database transaction records the append-only
+  `RawDataObject`, job linkage, and durable normalization dispatch. The dispatcher and registered
+  Celery consumer are lease-based, retryable, idempotent, and deterministic; conflicting immutable
+  normalization results are retained as explicit rejections instead of overwritten.
+- Historical normalized reads enforce both `event_time <= decision_time` and
+  `available_at <= decision_time`, with deterministic ordering. Unit, integration, corrupt-legacy-row,
+  and Hypothesis regressions cover the dual predicate and prevent future-event leakage.
+- Final focused command `uv run pytest backend/tests/unit/ingestion
+  backend/tests/property/test_ingestion_point_in_time.py -q` exited 0: 75 passed / 0 failed /
+  0 skipped. Final related integration command `uv run pytest backend/tests/integration/ingestion
+  backend/tests/integration/db backend/tests/integration/market_data -q` exited 0: 44 passed /
+  0 failed / 0 skipped. An initial sandbox-only retry exited 2 because the user-level uv cache was
+  inaccessible; the identical authorized commands produced the recorded green results.
+- Migration acceptance command covering a fresh empty database and an existing 0024 fixture exited
+  0: 2 passed. The 0024-to-head regression preserved Watchlist identity/configuration. Against the
+  dedicated PostgreSQL instance on port 55432, two consecutive `make seed` commands each exited 0
+  and reported 0 new Watchlist securities, the same 31 raw objects, and 0 new normalized records;
+  the earlier first seed on that fresh database inserted the locked 11 Watchlist securities and 31
+  normalized records. No Provider credentials or live-broker capability were introduced.
+- Final `make verify` exited 0: 256 files format clean, Ruff clean, strict Mypy clean over 225 source
+  files, Alembic drift clean, backend 465 passed / 3 credential-gated skipped, Web 14 files / 94
+  passed, TypeScript and ESLint clean, and the nine-route Next.js production build passed. The only
+  emitted warning is the pre-existing Node/Vitest `--localstorage-file` environment warning.
+- Operational follow-up: the original post-reboot PostgreSQL volume remains preserved after its WAL
+  failure, and isolated RDB-1 verification volumes remain preserved for recovery/audit. Provider-
+  specific acquisition, licensed redistribution rules, and canonical vendor normalizers belong to
+  ordered RDB-2 and are intentionally not implemented in RDB-1.
