@@ -1678,3 +1678,38 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   failure, and isolated RDB-1 verification volumes remain preserved for recovery/audit. Provider-
   specific acquisition, licensed redistribution rules, and canonical vendor normalizers belong to
   ordered RDB-2 and are intentionally not implemented in RDB-1.
+
+#### PR #12 pre-merge review closure — 2026-08-24
+
+- Seven review findings were closed with regressions before implementation. Active-job identity now
+  includes provider, dataset, window, purpose, policy version, and attempt budget; both application
+  and database boundaries reject error classes outside the frozen enum. The first Job Store RED run
+  exited 1 with 3 failed / 8 passed; the corrected suite exited 0 with 11 passed.
+- Provider payloads can no longer override the canonical symbol, and a later observation of identical
+  raw bytes reuses the first authoritative timestamps instead of raising an immutable conflict. The
+  dispatcher now permits the worker to consume a synchronously published CLAIMED row, while transient
+  normalization failures return the durable row to PENDING and terminal immutable conflicts persist a
+  rejection and FAILED state. The staged Raw Dispatch RED runs failed only for each absent target
+  behavior; the final suite exited 0 with 11 passed.
+- Raw keys must be content-addressed by the exact SHA-256 filename. MinIO inventory can be compared
+  read-only against PostgreSQL lineage so a database failure after object storage commit reports the
+  orphan rather than silently losing it. A new MinIO protocol contract first failed because the fake
+  client lacked `list_objects`; its minimal implementation then passed, and strict Mypy passed over
+  225 source files. The combined concurrency and failure suite exited 0 with 22 passed.
+- Real MinIO verification exited 0 with 2 passed, proving raw bytes exist before database lineage and
+  out-of-order bars retain complete lineage. One diagnostic run exited 1 because a command-level
+  `DATABASE_URL` overrode the fixture's isolated Alembic URL; removing that external override made the
+  unchanged tests pass.
+- The isolated backup/restore and service-restart exercise exited 0. A fresh source database upgraded
+  through 0025, seeded 11 securities and 31 raw/normalized facts, restored with Timescale pre/post
+  hooks, and passed Alembic drift. After Redis and Celery worker restarts, replay retained exactly one
+  PaperFill, three CashLedger rows, 21 scoped AgentEvents, and five scoped ToolCalls; the focused
+  recovery/accounting suite passed 8/8. The stock recovery script's first environment preparation
+  exited 1 because an intentionally preserved legacy Compose container conflicted with the dedicated
+  RDB-1 database on port 55432; the equivalent isolated-container workflow avoided all legacy volumes.
+- Final clean-database acceptance exited 0. Alembic upgraded from empty to head, the first seed wrote
+  11 securities / 31 raw objects / 31 normalized records, and the second seed wrote 0 / 31 / 0.
+  `make verify` passed: 256 files format clean, Ruff clean, strict Mypy clean over 225 source files,
+  Alembic/MCP/OpenAPI drift clean, backend 475 passed / 3 credential-gated skipped, Web 14 files / 94
+  passed, TypeScript and ESLint clean, and the nine-route Next.js production build passed. The durable
+  PostgreSQL container was restored after every isolated verification attempt.

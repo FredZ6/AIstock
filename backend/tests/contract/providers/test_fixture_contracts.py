@@ -70,6 +70,10 @@ def test_fixture_provider_rejects_unknown_symbol_and_feed() -> None:
 
 
 def test_fixture_raw_payloads_are_written_to_versioned_object_keys() -> None:
+    class FakeMinioObject:
+        def __init__(self, object_name: str) -> None:
+            self.object_name: str | None = object_name
+
     class FakeMinioClient:
         def __init__(self) -> None:
             self.objects: dict[str, bytes] = {}
@@ -92,6 +96,16 @@ def test_fixture_raw_payloads_are_written_to_versioned_object_keys() -> None:
             assert content_type == "application/json"
             self.objects[object_key] = stream.read(length)  # type: ignore[attr-defined]
 
+        def list_objects(
+            self,
+            bucket: str,
+            prefix: str,
+            recursive: bool,
+        ) -> list[FakeMinioObject]:
+            assert bucket == "fixture-raw"
+            assert recursive is True
+            return [FakeMinioObject(key) for key in self.objects if key.startswith(prefix)]
+
     client = FakeMinioClient()
     store = MinioRawObjectStore(client=client, bucket="fixture-raw")
     catalog = FixtureCatalog.load(FIXTURE_ROOT)
@@ -101,6 +115,9 @@ def test_fixture_raw_payloads_are_written_to_versioned_object_keys() -> None:
     assert written == len(client.objects)
     assert written > 0
     assert all(key.startswith("m1-v1/") for key in client.objects)
+    assert store.list_keys("m1-v1/analyst/") == tuple(
+        sorted(key for key in client.objects if key.startswith("m1-v1/analyst/"))
+    )
     raw = json.loads(client.objects["m1-v1/analyst/aapl-target.json"])
     assert raw["symbol"] == "AAPL"
     assert raw["feed_type"] == "target_consensus"

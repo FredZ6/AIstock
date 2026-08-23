@@ -12,6 +12,10 @@ from stock_platform.infrastructure.db.models.tables import normalized_record, ra
 from stock_platform.infrastructure.providers.base import ProviderRecord
 
 
+def canonical_normalized_payload(record: ProviderRecord) -> dict[str, object]:
+    return {**record.payload, "symbol": str(record.symbol)}
+
+
 def persist_raw_object(connection: Connection, record: ProviderRecord) -> UUID:
     values = {
         "provider": record.provider,
@@ -43,7 +47,13 @@ def persist_raw_object(connection: Connection, record: ProviderRecord) -> UUID:
         .mappings()
         .one()
     )
-    if any(existing[key] != value for key, value in values.items()):
+    identity_conflict = (
+        existing["event_time"] != record.event_time
+        or existing["raw_object_key"] != record.raw_object_key
+        or existing["available_at"] > record.available_at
+        or existing["ingested_at"] > record.ingested_at
+    )
+    if identity_conflict:
         raise ValueError("immutable raw object conflict")
     return cast(UUID, existing["id"])
 
@@ -56,7 +66,7 @@ def persist_normalized_record(
     normalization_version: str,
 ) -> UUID:
     record_key = str(record.symbol)
-    payload = {"symbol": record_key, **record.payload}
+    payload = canonical_normalized_payload(record)
     inserted = connection.execute(
         insert(normalized_record)
         .values(

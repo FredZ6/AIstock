@@ -329,6 +329,12 @@ def upgrade() -> None:
             "'FAILED', 'DEAD_LETTER')",
             name=op.f("ck_ingestion_attempt_outcome"),
         ),
+        sa.CheckConstraint(
+            "error_class IS NULL OR error_class IN ('TIMEOUT', 'NETWORK', 'RATE_LIMIT', "
+            "'PROVIDER_5XX', 'TEMPORARY_DATABASE', 'TEMPORARY_OBJECT_STORE', 'INVALID_AUTH', "
+            "'MISSING_CREDENTIALS', 'UNSUPPORTED_DATASET', 'INVALID_SECURITY', 'SCHEMA_DRIFT')",
+            name=op.f("ck_ingestion_attempt_error_class"),
+        ),
         sa.UniqueConstraint("job_id", "attempt_number", name="uq_ingestion_attempt_number"),
     )
     op.create_table(
@@ -363,6 +369,12 @@ def upgrade() -> None:
         sa.Column("error_class", sa.Text(), nullable=False),
         sa.Column("error_detail", postgresql.JSONB(), nullable=False),
         _created_at(),
+        sa.CheckConstraint(
+            "error_class IN ('TIMEOUT', 'NETWORK', 'RATE_LIMIT', 'PROVIDER_5XX', "
+            "'TEMPORARY_DATABASE', 'TEMPORARY_OBJECT_STORE', 'INVALID_AUTH', "
+            "'MISSING_CREDENTIALS', 'UNSUPPORTED_DATASET', 'INVALID_SECURITY', 'SCHEMA_DRIFT')",
+            name=op.f("ck_ingestion_dead_letter_error_class"),
+        ),
         sa.UniqueConstraint("job_id", "attempt_number", name="uq_ingestion_dead_letter_attempt"),
     )
     op.create_table(

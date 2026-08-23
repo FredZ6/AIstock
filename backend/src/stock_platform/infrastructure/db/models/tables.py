@@ -569,6 +569,12 @@ ingestion_attempt = Table(
         "'FAILED', 'DEAD_LETTER')",
         name=conv("ck_ingestion_attempt_outcome"),
     ),
+    CheckConstraint(
+        "error_class IS NULL OR error_class IN ('TIMEOUT', 'NETWORK', 'RATE_LIMIT', "
+        "'PROVIDER_5XX', 'TEMPORARY_DATABASE', 'TEMPORARY_OBJECT_STORE', 'INVALID_AUTH', "
+        "'MISSING_CREDENTIALS', 'UNSUPPORTED_DATASET', 'INVALID_SECURITY', 'SCHEMA_DRIFT')",
+        name=conv("ck_ingestion_attempt_error_class"),
+    ),
     UniqueConstraint("job_id", "attempt_number", name="uq_ingestion_attempt_number"),
 )
 ingestion_cursor = Table(
@@ -595,6 +601,12 @@ ingestion_dead_letter = Table(
     Column("error_class", Text, nullable=False),
     Column("error_detail", JSONB, nullable=False),
     created_at(),
+    CheckConstraint(
+        "error_class IN ('TIMEOUT', 'NETWORK', 'RATE_LIMIT', 'PROVIDER_5XX', "
+        "'TEMPORARY_DATABASE', 'TEMPORARY_OBJECT_STORE', 'INVALID_AUTH', "
+        "'MISSING_CREDENTIALS', 'UNSUPPORTED_DATASET', 'INVALID_SECURITY', 'SCHEMA_DRIFT')",
+        name=conv("ck_ingestion_dead_letter_error_class"),
+    ),
     UniqueConstraint("job_id", "attempt_number", name="uq_ingestion_dead_letter_attempt"),
 )
 ingestion_raw_link = Table(

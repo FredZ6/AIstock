@@ -18,6 +18,8 @@ from stock_platform.infrastructure.db.models.tables import (
 from stock_platform.settings import Settings
 
 PublishNormalization = Callable[[UUID, str], None]
+NORMALIZATION_MAX_ATTEMPTS = 5
+NORMALIZATION_RETRY_AFTER = timedelta(minutes=1)
 
 
 def normalize_dispatched_record(
@@ -33,7 +35,7 @@ def normalize_dispatched_record(
                 select(normalization_dispatch).where(
                     normalization_dispatch.c.raw_data_object_id == raw_id,
                     normalization_dispatch.c.normalization_version == normalization_version,
-                    normalization_dispatch.c.state == "DISPATCHED",
+                    normalization_dispatch.c.state.in_(("PENDING", "CLAIMED", "DISPATCHED")),
                 )
             )
             .mappings()
@@ -79,6 +81,77 @@ def normalize_dispatched_record(
     if conflict:
         raise ValueError("immutable normalized record conflict")
     return False
+
+
+def record_normalization_failure(
+    engine: Engine,
+    *,
+    raw_id: UUID,
+    normalization_version: str,
+    error: Exception,
+    now: datetime,
+    retry_after: timedelta = NORMALIZATION_RETRY_AFTER,
+    max_attempts: int = NORMALIZATION_MAX_ATTEMPTS,
+    terminal: bool = False,
+) -> str:
+    failed_at = require_aware(now).astimezone(UTC)
+    if retry_after <= timedelta(0) or max_attempts < 1:
+        raise ValueError("normalization retry delay and attempt budget must be positive")
+    with engine.begin() as connection:
+        row = (
+            connection.execute(
+                select(normalization_dispatch)
+                .where(
+                    normalization_dispatch.c.raw_data_object_id == raw_id,
+                    normalization_dispatch.c.normalization_version == normalization_version,
+                    normalization_dispatch.c.state.in_(("PENDING", "CLAIMED", "DISPATCHED")),
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one()
+        )
+        state = "FAILED" if terminal or int(row["attempt_count"]) >= max_attempts else "PENDING"
+        connection.execute(
+            update(normalization_dispatch)
+            .where(normalization_dispatch.c.id == row["id"])
+            .values(
+                state=state,
+                lease_token=None,
+                lease_expires_at=None,
+                next_attempt_at=(
+                    row["next_attempt_at"] if state == "FAILED" else failed_at + retry_after
+                ),
+                last_error={"type": type(error).__name__},
+                updated_at=failed_at,
+            )
+        )
+    return state
+
+
+def run_normalization_task(
+    engine: Engine,
+    *,
+    raw_id: UUID,
+    normalization_version: str,
+    now: datetime,
+) -> bool:
+    try:
+        return normalize_dispatched_record(
+            engine,
+            raw_id=raw_id,
+            normalization_version=normalization_version,
+        )
+    except Exception as error:
+        record_normalization_failure(
+            engine,
+            raw_id=raw_id,
+            normalization_version=normalization_version,
+            error=error,
+            now=now,
+            terminal=isinstance(error, ValueError),
+        )
+        return False
 
 
 def dispatch_pending_normalization(
@@ -210,16 +283,20 @@ def dispatch_normalization_outbox() -> int:
 
 
 @celery_app.task(  # type: ignore[untyped-decorator]
-    name="stock_platform.workers.ingestion_tasks.normalize_raw_object"
+    name="stock_platform.workers.ingestion_tasks.normalize_raw_object",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=NORMALIZATION_MAX_ATTEMPTS,
 )
 def normalize_raw_object(raw_id: str, normalization_version: str) -> bool:
     settings = Settings()
     engine = create_engine(settings.database_url)
     try:
-        return normalize_dispatched_record(
+        return run_normalization_task(
             engine,
             raw_id=UUID(raw_id),
             normalization_version=normalization_version,
+            now=datetime.now(UTC),
         )
     finally:
         engine.dispose()

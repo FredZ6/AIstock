@@ -12,7 +12,12 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from stock_platform.application.ingestion.jobs import IngestionJobSpec, IngestionLease
 from stock_platform.domain.common.time import require_aware
-from stock_platform.domain.ingestion.models import FeedType, IngestionJobState
+from stock_platform.domain.ingestion.models import (
+    FeedType,
+    IngestionErrorClass,
+    IngestionJobState,
+    IngestionRequest,
+)
 from stock_platform.infrastructure.db.models.tables import (
     ingestion_attempt,
     ingestion_cursor,
@@ -29,20 +34,36 @@ def _plain_json(value: object) -> object:
     return value
 
 
+def _job_request(spec: IngestionJobSpec) -> IngestionRequest:
+    return IngestionRequest(
+        {
+            "request": spec.request.canonical_payload,
+            "provider": spec.provider,
+            "dataset": spec.dataset,
+            "window_start": spec.window_start,
+            "window_end": spec.window_end,
+            "purpose": spec.purpose,
+            "policy_version": spec.policy_version,
+            "max_attempts": spec.max_attempts,
+        }
+    )
+
+
 class IngestionJobStore:
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
 
     def enqueue(self, spec: IngestionJobSpec, *, now: datetime) -> UUID:
         queued_at = require_aware(now).astimezone(UTC)
+        job_request = _job_request(spec)
         with self._engine.begin() as connection:
             connection.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext(:request_hash))"),
-                {"request_hash": spec.request.request_hash},
+                {"request_hash": job_request.request_hash},
             )
             existing = connection.execute(
                 select(ingestion_job.c.id).where(
-                    ingestion_job.c.request_hash == spec.request.request_hash,
+                    ingestion_job.c.request_hash == job_request.request_hash,
                     ingestion_job.c.state.in_(("QUEUED", "RUNNING", "RETRY_SCHEDULED")),
                 )
             ).scalar_one_or_none()
@@ -53,8 +74,8 @@ class IngestionJobStore:
                 connection.execute(
                     insert(ingestion_job)
                     .values(
-                        request_hash=spec.request.request_hash,
-                        request_payload=_plain_json(spec.request.canonical_payload),
+                        request_hash=job_request.request_hash,
+                        request_payload=_plain_json(job_request.canonical_payload),
                         provider=spec.provider,
                         dataset=spec.dataset.value,
                         window_start=spec.window_start,
@@ -146,7 +167,7 @@ class IngestionJobStore:
         self,
         lease: IngestionLease,
         *,
-        error_class: str,
+        error_class: IngestionErrorClass | str,
         error_detail: dict[str, object],
         next_attempt_at: datetime,
         now: datetime,
@@ -159,7 +180,7 @@ class IngestionJobStore:
             lease,
             IngestionJobState.RETRY_SCHEDULED,
             now=finished_at,
-            error_class=error_class,
+            error_class=IngestionErrorClass(error_class).value,
             error_detail=error_detail,
             next_attempt_at=retry_at,
         )
@@ -168,7 +189,7 @@ class IngestionJobStore:
         self,
         lease: IngestionLease,
         *,
-        error_class: str,
+        error_class: IngestionErrorClass | str,
         error_detail: dict[str, object],
         now: datetime,
     ) -> bool:
@@ -176,7 +197,7 @@ class IngestionJobStore:
             lease,
             IngestionJobState.DEAD_LETTER,
             now=now,
-            error_class=error_class,
+            error_class=IngestionErrorClass(error_class).value,
             error_detail=error_detail,
             dead_letter=True,
         )
@@ -185,7 +206,7 @@ class IngestionJobStore:
         self,
         lease: IngestionLease,
         *,
-        error_class: str,
+        error_class: IngestionErrorClass | str,
         error_detail: dict[str, object],
         now: datetime,
     ) -> bool:
@@ -193,7 +214,7 @@ class IngestionJobStore:
             lease,
             IngestionJobState.FAILED,
             now=now,
-            error_class=error_class,
+            error_class=IngestionErrorClass(error_class).value,
             error_detail=error_detail,
         )
 

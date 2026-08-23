@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
@@ -9,10 +10,15 @@ from uuid import UUID
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, func, select, text
+from sqlalchemy import create_engine, func, insert, select, text
 from sqlalchemy.exc import DBAPIError
 from stock_platform.application.ingestion.jobs import IngestionJobSpec
-from stock_platform.domain.ingestion.models import DataPurpose, FeedType, IngestionRequest
+from stock_platform.domain.ingestion.models import (
+    DataPurpose,
+    FeedType,
+    IngestionErrorClass,
+    IngestionRequest,
+)
 from stock_platform.infrastructure.db.models.tables import (
     ingestion_attempt,
     ingestion_cursor,
@@ -78,6 +84,77 @@ def test_concurrent_enqueue_and_claim_have_one_winner(isolated_database_url: str
     assert sum(lease is not None for lease in leases) == 1
     with engine.connect() as connection:
         assert connection.execute(select(func.count()).select_from(ingestion_job)).scalar_one() == 1
+    engine.dispose()
+
+
+def test_active_job_identity_includes_purpose_policy_and_window(
+    isolated_database_url: str,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    store = IngestionJobStore(engine)
+    base = _spec()
+
+    job_ids = {
+        store.enqueue(base, now=NOW),
+        store.enqueue(replace(base, purpose=DataPurpose.PAPER_EXECUTION), now=NOW),
+        store.enqueue(replace(base, policy_version="ingestion-v2"), now=NOW),
+        store.enqueue(replace(base, window_start=base.window_start - timedelta(days=1)), now=NOW),
+    }
+
+    assert len(job_ids) == 4
+    with engine.connect() as connection:
+        assert connection.execute(select(func.count()).select_from(ingestion_job)).scalar_one() == 4
+    engine.dispose()
+
+
+def test_store_rejects_unknown_error_class(isolated_database_url: str) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    store = IngestionJobStore(engine)
+    job_id = store.enqueue(_spec(), now=NOW)
+    lease = store.claim(job_id, worker_id="worker-a", now=NOW, lease_for=timedelta(minutes=5))
+    assert lease is not None
+
+    with pytest.raises(ValueError, match="not a valid IngestionErrorClass"):
+        store.fail(
+            lease,
+            error_class="RATE_LIMITED",
+            error_detail={"reason": "typo"},
+            now=NOW + timedelta(minutes=1),
+        )
+
+    assert store.fail(
+        lease,
+        error_class=IngestionErrorClass.INVALID_AUTH,
+        error_detail={"reason": "credential_rejected"},
+        now=NOW + timedelta(minutes=1),
+    )
+    engine.dispose()
+
+
+def test_database_rejects_unknown_attempt_error_class(isolated_database_url: str) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    store = IngestionJobStore(engine)
+    job_id = store.enqueue(_spec(), now=NOW)
+    lease = store.claim(job_id, worker_id="worker-a", now=NOW, lease_for=timedelta(minutes=5))
+    assert lease is not None
+
+    with engine.connect() as connection, pytest.raises(DBAPIError):
+        connection.execute(
+            insert(ingestion_attempt).values(
+                job_id=job_id,
+                attempt_number=1,
+                lease_generation=lease.generation,
+                worker_id="worker-a",
+                started_at=NOW,
+                finished_at=NOW + timedelta(seconds=1),
+                outcome="FAILED",
+                error_class="RATE_LIMITED",
+                error_detail={},
+            )
+        )
     engine.dispose()
 
 

@@ -214,7 +214,7 @@ class FixtureCatalog:
                             )
                         )
                     ).scalar_one()
-            normalized_payload = {"symbol": str(entry.symbol), **entry.payload}
+            normalized_payload = {**entry.payload, "symbol": str(entry.symbol)}
             existing_normalized = (
                 connection.execute(
                     select(normalized_record).where(
