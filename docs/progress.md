@@ -1535,3 +1535,22 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   files format clean, Ruff clean, strict Mypy clean over 208 files, Alembic/MCP/OpenAPI drift clean,
   backend 368 passed / 3 explicit credential-gated skips / 1 existing warning, Web 10 files / 41
   passed, TypeScript/ESLint clean, and all ten Next.js routes built.
+
+#### Task 17 non-vacuous fill-recovery closure
+
+- A final standards review identified that the recovery gate's global non-zero PaperFill assertion
+  depended on ambient restored data and did not prove that the fill under test survived restart and
+  replay. A RED integration test first failed because no scoped durable fill probe existed.
+- `persist_paper_fill_probe` now uses fixed paper-only identities, aware UTC timestamps, Decimal
+  economics, a deterministic approved RiskDecision, frozen MarketContextSnapshot, and the existing
+  `PostgresPaperAccountingStore`. Repeating the probe persists exactly one PaperFill and exactly
+  three fill-sourced CashLedger entries; it cannot create a live order or contact a broker.
+- `scripts/verify-recovery.sh` runs that probe before Redis/worker restart and again afterward, then
+  checks the same fill ID still has count 1 and the same source ID still has ledger count 3. The
+  ambient `paper_fill > 0` precondition was removed. The real backup/restore/restart/replay command
+  exited 0, including 8/8 focused recovery/accounting tests.
+- Fresh locked Task 17 gate exited 0 with 36 passed / 0 failed / 0 skipped and one existing warning;
+  JUnit: `reports/verification/task17-focused.xml`. Fresh `make verify` exited 0: 239 files format
+  clean, Ruff clean, strict Mypy clean over 209 files, Alembic/MCP/OpenAPI drift clean, backend 369
+  passed / 3 explicit credential-gated skips / 1 existing warning, Web 10 files / 41 passed,
+  TypeScript/ESLint clean, and all ten Next.js routes built.

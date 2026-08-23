@@ -12,7 +12,8 @@ Five minutes for restart and worker resubscription.
 ./scripts/verify-recovery.sh
 ```
 
-The script restores a separate TimescaleDB copy, snapshots AgentEvent and PaperFill counts, starts a
-real Celery worker, restarts Redis, restarts the worker under a fresh node name, compares the durable
-counts, and runs the replay/idempotency regressions. Recover queued runs from PostgreSQL. Never
-reconstruct PaperFill or CashLedger from Redis.
+The script restores a separate TimescaleDB copy, dispatches a real research run, and persists one
+deterministically identified paper fill with its balanced ledger. It then restarts Redis and the
+worker, replays both probes, and verifies the scoped AgentEvent, ToolCall, PaperFill, and CashLedger
+counts do not change. Recover queued runs from PostgreSQL. Never reconstruct PaperFill or CashLedger
+from Redis.

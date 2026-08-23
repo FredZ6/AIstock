@@ -70,6 +70,16 @@ DATABASE_URL="postgresql+psycopg://postgres:postgres@localhost:55432/${restore_d
   .venv/bin/alembic -c backend/alembic.ini check
 
 probe_database_url="postgresql+psycopg://postgres:postgres@localhost:55432/${restore_db}"
+probe_fill_id="$(PYTHONPATH="${repo_root}/backend/src" .venv/bin/python \
+  scripts/recovery_probe.py paper-fill --database-url "${probe_database_url}")"
+probe_fill_count="$(docker compose -p "${compose_project}" exec -T postgres \
+  psql -U postgres -d "${restore_db}" -Atc \
+  "SELECT count(*) FROM paper_fill WHERE id = '${probe_fill_id}'")"
+probe_ledger_count="$(docker compose -p "${compose_project}" exec -T postgres \
+  psql -U postgres -d "${restore_db}" -Atc \
+  "SELECT count(*) FROM cash_ledger WHERE source_id = '${probe_fill_id}'")"
+test "${probe_fill_count}" = "1"
+test "${probe_ledger_count}" = "3"
 probe_run_id="$(PYTHONPATH="${repo_root}/backend/src" .venv/bin/python \
   scripts/recovery_probe.py prepare --database-url "${probe_database_url}")"
 start_worker
@@ -89,10 +99,7 @@ test "${probe_event_count}" -gt 0
 test "${probe_tool_count}" -gt 0
 before_agent_events="$(docker compose -p "${compose_project}" exec -T postgres \
   psql -U postgres -d "${restore_db}" -Atc "SELECT count(*) FROM agent_event")"
-before_paper_fills="$(docker compose -p "${compose_project}" exec -T postgres \
-  psql -U postgres -d "${restore_db}" -Atc "SELECT count(*) FROM paper_fill")"
 test "${before_agent_events}" -gt 0
-test "${before_paper_fills}" -gt 0
 docker compose -p "${compose_project}" restart redis
 docker compose -p "${compose_project}" exec -T redis redis-cli ping | rg -x PONG
 stop_worker
@@ -111,12 +118,18 @@ for _attempt in {1..30}; do
 done
 test "${replay_queue_depth}" = "0"
 sleep 1
+replayed_fill_id="$(PYTHONPATH="${repo_root}/backend/src" .venv/bin/python \
+  scripts/recovery_probe.py paper-fill --database-url "${probe_database_url}")"
 after_agent_events="$(docker compose -p "${compose_project}" exec -T postgres \
   psql -U postgres -d "${restore_db}" -Atc "SELECT count(*) FROM agent_event")"
-after_paper_fills="$(docker compose -p "${compose_project}" exec -T postgres \
-  psql -U postgres -d "${restore_db}" -Atc "SELECT count(*) FROM paper_fill")"
 test "${before_agent_events}" = "${after_agent_events}"
-test "${before_paper_fills}" = "${after_paper_fills}"
+test "${replayed_fill_id}" = "${probe_fill_id}"
+test "${probe_fill_count}" = "$(docker compose -p "${compose_project}" exec -T postgres \
+  psql -U postgres -d "${restore_db}" -Atc \
+  "SELECT count(*) FROM paper_fill WHERE id = '${probe_fill_id}'")"
+test "${probe_ledger_count}" = "$(docker compose -p "${compose_project}" exec -T postgres \
+  psql -U postgres -d "${restore_db}" -Atc \
+  "SELECT count(*) FROM cash_ledger WHERE source_id = '${probe_fill_id}'")"
 test "${probe_event_count}" = "$(docker compose -p "${compose_project}" exec -T postgres \
   psql -U postgres -d "${restore_db}" -Atc \
   "SELECT count(*) FROM agent_event WHERE run_id = '${probe_run_id}'")"

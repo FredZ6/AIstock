@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import create_engine, select
 from stock_platform.application.runs import admit_run
 from stock_platform.infrastructure.db.models.tables import agent_run
+from stock_platform.infrastructure.recovery_probe import persist_paper_fill_probe
 
 
 def prepare(database_url: str) -> UUID:
@@ -55,7 +56,7 @@ def wait_for_status(database_url: str, run_id: UUID, expected: str, timeout: flo
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("prepare", "wait"))
+    parser.add_argument("action", choices=("prepare", "wait", "paper-fill"))
     parser.add_argument("--database-url", required=True)
     parser.add_argument("--run-id")
     parser.add_argument("--status", default="COMPLETED")
@@ -63,6 +64,9 @@ def main() -> None:
     args = parser.parse_args()
     if args.action == "prepare":
         print(prepare(args.database_url))
+        return
+    if args.action == "paper-fill":
+        print(persist_paper_fill_probe(args.database_url))
         return
     if args.run_id is None:
         parser.error("--run-id is required for wait")

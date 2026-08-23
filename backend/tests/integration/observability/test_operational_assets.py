@@ -26,8 +26,10 @@ def test_compose_wires_otel_prometheus_and_grafana_with_pinned_configs() -> None
     assert "celery_app:celery_app worker" in recovery_script
     assert "before_agent_events" in recovery_script
     assert "after_agent_events" in recovery_script
-    assert "before_paper_fills" in recovery_script
-    assert "after_paper_fills" in recovery_script
+    assert "paper-fill" in recovery_script
+    assert "probe_fill_count" in recovery_script
+    assert "probe_ledger_count" in recovery_script
+    assert "before_paper_fills" not in recovery_script
     assert "stock_platform.workers.research_tasks.run_research" in recovery_script
     assert "probe_event_count" in recovery_script
     assert "probe_tool_count" in recovery_script

@@ -4,17 +4,23 @@ from uuid import uuid4
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, insert, select
+from sqlalchemy import create_engine, func, insert, select
 from stock_platform.application.alerting.features import MinuteBar
 from stock_platform.application.runs import append_run_event
 from stock_platform.domain.common.ids import Symbol
-from stock_platform.infrastructure.db.models.tables import agent_event, agent_run
+from stock_platform.infrastructure.db.models.tables import (
+    agent_event,
+    agent_run,
+    cash_ledger,
+    paper_fill,
+)
 from stock_platform.infrastructure.messaging.market_stream import RedisMarketStream
 from stock_platform.infrastructure.recovery import (
     CircuitBreaker,
     RecoveryDecision,
     recover_expired_run,
 )
+from stock_platform.infrastructure.recovery_probe import persist_paper_fill_probe
 from stock_platform.workers.schedules import recover_queued_runs
 
 
@@ -70,6 +76,30 @@ def test_recovery_identity_is_not_derived_from_redis_delivery_ids() -> None:
     first = uuid4()
     replay = first
     assert replay == first
+
+
+def test_paper_fill_recovery_probe_is_nonempty_and_idempotent(
+    isolated_database_url: str,
+) -> None:
+    config = Config("backend/alembic.ini")
+    config.set_main_option("sqlalchemy.url", isolated_database_url)
+    command.upgrade(config, "head")
+
+    first = persist_paper_fill_probe(isolated_database_url)
+    replay = persist_paper_fill_probe(isolated_database_url)
+
+    engine = create_engine(isolated_database_url)
+    with engine.connect() as connection:
+        fill_count = connection.execute(
+            select(func.count()).select_from(paper_fill).where(paper_fill.c.id == first)
+        ).scalar_one()
+        ledger_count = connection.execute(
+            select(func.count()).select_from(cash_ledger).where(cash_ledger.c.source_id == first)
+        ).scalar_one()
+    engine.dispose()
+    assert replay == first
+    assert fill_count == 1
+    assert ledger_count == 3
 
 
 def test_redis_stream_loss_keeps_authoritative_events_and_requeues_expired_work(
