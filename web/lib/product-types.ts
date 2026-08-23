@@ -18,6 +18,32 @@ export type WatchlistSnapshot = {
   }>
 }
 
+export type WatchlistEnrichment =
+  | {
+      kind: 'available'
+      dailyReturn: string
+      dataQuality: DataQuality
+      lastResearchAt: string
+      nextEarningsAt: string | null
+      portfolioAction: PortfolioAction
+      price: string
+      researchOpinion: ResearchOpinion
+    }
+  | {
+      kind: 'unavailable'
+      missing: readonly string[]
+    }
+
+export type ApiWatchlistItem = {
+  alertThreshold: string | null
+  createdAt: string
+  dailyResearch: boolean
+  enrichment: WatchlistEnrichment
+  intradayMonitoring: boolean
+  symbol: string
+  updatedAt: string
+}
+
 export type ResearchSnapshot = {
   asOf: string
   report: { generatedAt: string; id: string }
