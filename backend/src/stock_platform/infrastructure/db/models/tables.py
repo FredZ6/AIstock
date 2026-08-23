@@ -384,10 +384,94 @@ paper_portfolio_config = Table(
     CheckConstraint("initial_cash > 0", name=conv("ck_paper_portfolio_config_cash")),
     CheckConstraint("currency = 'USD'", name=conv("ck_paper_portfolio_config_currency")),
 )
+security = Table(
+    "security",
+    metadata,
+    uuid_pk(),
+    Column("instrument_type", Text, nullable=False),
+    created_at(),
+)
+security_identifier_version = Table(
+    "security_identifier_version",
+    metadata,
+    uuid_pk(),
+    Column("security_id", UUID(as_uuid=True), ForeignKey("security.id"), nullable=False),
+    Column("identifier_type", Text, nullable=False),
+    Column("identifier_value", Text, nullable=False),
+    Column("exchange", Text),
+    Column("provider_identifiers", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    Column("effective_from", DateTime(timezone=True), nullable=False),
+    Column("effective_to", DateTime(timezone=True)),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("supersedes_id", UUID(as_uuid=True), ForeignKey("security_identifier_version.id")),
+    created_at(),
+    CheckConstraint(
+        "effective_to IS NULL OR effective_from < effective_to",
+        name=conv("ck_security_identifier_effective_range"),
+    ),
+    CheckConstraint(
+        "supersedes_id IS NULL OR supersedes_id <> id",
+        name=conv("ck_security_identifier_supersedes_self"),
+    ),
+    UniqueConstraint(
+        "security_id",
+        "identifier_type",
+        "identifier_value",
+        "available_at",
+        name="uq_security_identifier_version",
+    ),
+)
+Index(
+    "security_identifier_lookup_idx",
+    security_identifier_version.c.identifier_type,
+    security_identifier_version.c.identifier_value,
+    security_identifier_version.c.available_at,
+)
+security_profile_version = Table(
+    "security_profile_version",
+    metadata,
+    uuid_pk(),
+    Column("security_id", UUID(as_uuid=True), ForeignKey("security.id"), nullable=False),
+    Column("company_name", Text),
+    Column("currency", Text),
+    Column("cik", Text),
+    Column("filing_regime", Text),
+    Column("industry_role", Text),
+    Column("country_of_incorporation", Text),
+    Column("exchange_timezone", Text),
+    Column("is_adr", Boolean, nullable=False, server_default=text("false")),
+    Column("adr_ratio", Numeric),
+    Column("primary_market", Text),
+    Column("source_currency", Text),
+    Column("effective_from", DateTime(timezone=True), nullable=False),
+    Column("effective_to", DateTime(timezone=True)),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("supersedes_id", UUID(as_uuid=True), ForeignKey("security_profile_version.id")),
+    created_at(),
+    CheckConstraint(
+        "effective_to IS NULL OR effective_from < effective_to",
+        name=conv("ck_security_profile_effective_range"),
+    ),
+    CheckConstraint(
+        "supersedes_id IS NULL OR supersedes_id <> id",
+        name=conv("ck_security_profile_supersedes_self"),
+    ),
+    CheckConstraint(
+        "adr_ratio IS NULL OR adr_ratio > 0",
+        name=conv("ck_security_profile_adr_ratio"),
+    ),
+    UniqueConstraint("security_id", "available_at", name="uq_security_profile_version"),
+)
+Index(
+    "security_profile_pit_idx",
+    security_profile_version.c.security_id,
+    security_profile_version.c.available_at,
+)
 watchlist_item = Table(
     "watchlist_item",
     metadata,
-    Column("symbol", Text, primary_key=True),
+    Column("security_id", UUID(as_uuid=True), ForeignKey("security.id"), primary_key=True),
+    Column("symbol", Text, nullable=False, unique=True),
     Column("daily_research", Boolean, nullable=False, server_default=text("true")),
     Column("intraday_monitoring", Boolean, nullable=False, server_default=text("true")),
     Column("thresholds", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
