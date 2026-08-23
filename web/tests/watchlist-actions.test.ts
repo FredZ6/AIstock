@@ -114,6 +114,23 @@ describe('watchlist Server Actions', () => {
     expect(revalidate).not.toHaveBeenCalled()
   })
 
+  it('clears an optional threshold without fabricating a Decimal value', async () => {
+    patchItem.mockResolvedValue({} as never)
+
+    const state = await updateWatchlistAction(
+      'NVDA',
+      initialWatchlistActionState,
+      formData({ alert_threshold: '' }),
+    )
+
+    expect(patchItem).toHaveBeenCalledWith(
+      expect.anything(),
+      'NVDA',
+      expect.objectContaining({ thresholds: {} }),
+    )
+    expect(state.status).toBe('success')
+  })
+
   it('deletes through FastAPI and revalidates after confirmation', async () => {
     deleteItem.mockResolvedValue(undefined)
 

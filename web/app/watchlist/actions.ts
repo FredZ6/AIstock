@@ -68,7 +68,7 @@ export async function updateWatchlistAction(
   const invalid = invalidSymbol(symbol)
   if (invalid) return invalid
   const threshold = formData.get('alert_threshold')
-  if (typeof threshold !== 'string' || !decimalPattern.test(threshold)) {
+  if (typeof threshold !== 'string' || (threshold !== '' && !decimalPattern.test(threshold))) {
     return { message: 'Alert threshold must be a Decimal string', status: 'error', symbol }
   }
 
@@ -76,7 +76,7 @@ export async function updateWatchlistAction(
     await patchWatchlistItem(clientOptions(), symbol, {
       dailyResearch: formData.get('daily_research') === 'on',
       intradayMonitoring: formData.get('intraday_monitoring') === 'on',
-      thresholds: { return_5m: threshold },
+      thresholds: threshold === '' ? {} : { return_5m: threshold },
     })
   } catch {
     return failed(symbol)
@@ -91,6 +91,8 @@ export async function deleteWatchlistAction(
   _previousState: WatchlistActionState,
   _formData: FormData,
 ): Promise<WatchlistActionState> {
+  void _previousState
+  void _formData
   const symbol = symbolValue.trim().toUpperCase()
   const invalid = invalidSymbol(symbol)
   if (invalid) return invalid
