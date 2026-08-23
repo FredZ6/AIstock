@@ -34,6 +34,7 @@ include = ["stock_platform*"]
 [dependency-groups]
 dev = [
   "hypothesis>=6.138,<7",
+  "httpx2>=2,<3",
   "mypy>=1.17,<2",
   "pytest>=8.4,<9",
   "ruff>=0.12,<1",

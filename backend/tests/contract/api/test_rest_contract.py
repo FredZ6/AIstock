@@ -1,12 +1,11 @@
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, Protocol, cast
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import Response
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from stock_platform.api.dependencies import get_connection, get_human_actor
@@ -41,6 +40,10 @@ LOCKED_OPERATIONS = {
 }
 
 
+class JsonResponse(Protocol):
+    def json(self) -> Any: ...
+
+
 @pytest.fixture(scope="session")
 def api_engine() -> Iterator[Engine]:
     engine = create_engine(
@@ -67,7 +70,7 @@ def client(api_engine: Engine) -> Iterator[TestClient]:
             transaction.rollback()
 
 
-def error(response: Response) -> dict[str, object]:
+def error(response: JsonResponse) -> dict[str, object]:
     payload: dict[str, Any] = response.json()
     UUID(payload["error"]["correlation_id"])
     return cast(dict[str, object], payload["error"])
