@@ -1,4 +1,28 @@
-import { WatchlistPage } from '../../components/watchlist/watchlist-page'
-import { fixtureWatchlistSnapshot } from '../../lib/fixtures'
+import {
+  ApiWatchlistPage,
+  WatchlistFailurePage,
+  WatchlistPage,
+} from '../../components/watchlist/watchlist-page'
+import { readWebDataConfig } from '../../lib/server/data-mode'
+import { listWatchlist } from '../../lib/server/watchlist-api'
 
-export default function WatchlistRoute() { return <WatchlistPage snapshot={fixtureWatchlistSnapshot} /> }
+export const dynamic = 'force-dynamic'
+
+export default async function WatchlistRoute() {
+  try {
+    const config = readWebDataConfig(process.env)
+    if (config.mode === 'fixture') {
+      const { fixtureWatchlistSnapshot } = await import('../../lib/fixtures')
+      return <WatchlistPage snapshot={fixtureWatchlistSnapshot} />
+    }
+
+    const items = await listWatchlist({ baseUrl: config.baseUrl })
+    const asOf = items.reduce(
+      (latest, item) => item.updatedAt > latest ? item.updatedAt : latest,
+      items[0]?.updatedAt ?? new Date().toISOString(),
+    )
+    return <ApiWatchlistPage asOf={asOf} items={items} />
+  } catch {
+    return <WatchlistFailurePage asOf={new Date().toISOString()} />
+  }
+}

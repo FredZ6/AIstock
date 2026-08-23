@@ -3,13 +3,47 @@
 import Link from 'next/link'
 import { FormEvent, useState } from 'react'
 
-import type { WatchlistSnapshot } from '../../lib/product-types'
+import type { ApiWatchlistItem, WatchlistSnapshot } from '../../lib/product-types'
 import { formatMoney, formatPercent } from '../../lib/format'
 import { parseAwareInstant } from '../../lib/time'
 import { formatDualTime } from '../../lib/time'
 import { AppShell } from '../layout/app-shell'
 import { TradingViewWidget } from '../market/tradingview-widget'
+import { StateBoundary } from '../states/state-boundary'
 import { FixtureNotice, PageHeading, QualityFacts, Signal } from '../ui/product-ui'
+import { WatchlistApiControls } from './watchlist-api-controls'
+
+const apiSummary = 'Persisted watchlist configuration from FastAPI. Market and research enrichment remains unavailable.'
+
+export function ApiWatchlistPage({ asOf, items }: { asOf: string; items: ApiWatchlistItem[] }) {
+  return (
+    <AppShell currentPath="/watchlist">
+      <PageHeading asOf={asOf} eyebrow="Discover · API Mode" title="Watchlist" summary={apiSummary} />
+      <StateBoundary state={{
+        kind: 'degraded',
+        title: 'Market and research data unavailable',
+        message: 'Persisted schedules and thresholds remain usable. Missing facts are never replaced with Fixture data.',
+        providers: ['Market', 'Research', 'Earnings', 'Data quality'],
+      }}>
+        <WatchlistApiControls items={items} />
+      </StateBoundary>
+    </AppShell>
+  )
+}
+
+export function WatchlistFailurePage({ asOf }: { asOf: string }) {
+  return (
+    <AppShell currentPath="/watchlist">
+      <PageHeading asOf={asOf} eyebrow="Discover · API Mode" title="Watchlist" summary="Persisted Watchlist data could not be loaded." />
+      <StateBoundary state={{
+        kind: 'failure',
+        title: 'Watchlist unavailable',
+        message: 'FastAPI did not return a valid Watchlist response. Fixture data was not substituted.',
+        retryHref: '/watchlist',
+      }} />
+    </AppShell>
+  )
+}
 
 export function WatchlistPage({ snapshot }: { snapshot: WatchlistSnapshot }) {
   const [symbols, setSymbols] = useState(snapshot.symbols)

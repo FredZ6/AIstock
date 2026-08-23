@@ -26,6 +26,22 @@ Copy `.env.example` to `.env` only when overriding local defaults. Provider cred
 required for fixture-mode M1. `make seed` idempotently writes frozen raw objects to MinIO and
 normalized point-in-time records to PostgreSQL.
 
+### Frontend data modes
+
+The Next.js frontend requires an explicit server-side `WEB_DATA_MODE`:
+
+- `WEB_DATA_MODE=fixture` renders only the frozen synthetic demonstration data.
+- `WEB_DATA_MODE=api` requires `API_BASE_URL`, reads persisted Watchlist configuration from FastAPI,
+  and shows explicit `Failure` or `Degraded` states when the service or enrichment is unavailable.
+
+API mode never falls back to Fixture data. `API_BASE_URL` is server-only; do not create a
+`NEXT_PUBLIC_API_BASE_URL` variable. To run the current API-backed Watchlist slice locally, start
+FastAPI and PostgreSQL, then start Next.js with:
+
+```bash
+WEB_DATA_MODE=api API_BASE_URL=http://127.0.0.1:8000 pnpm --dir web dev
+```
+
 ## M1 data plane
 
 - Five-symbol frozen fixtures cover normal, delayed, missing, conflict, filing, split, and anomaly
