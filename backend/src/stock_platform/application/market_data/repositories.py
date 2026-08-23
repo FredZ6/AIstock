@@ -24,6 +24,13 @@ class PointInTimeRepository(Protocol):
     ) -> ProviderResponse: ...
 
 
+def is_visible_at(*, event_time: datetime, available_at: datetime, decision_time: datetime) -> bool:
+    event = require_aware(event_time)
+    available = require_aware(available_at)
+    cutoff = require_aware(decision_time)
+    return event <= cutoff and available <= cutoff
+
+
 class PostgresMarketDataRepository:
     def __init__(self, connection: Connection) -> None:
         self._connection = connection
@@ -53,6 +60,7 @@ class PostgresMarketDataRepository:
                 and_(
                     normalized_record.c.record_type == feed_type.value,
                     normalized_record.c.payload["symbol"].astext == str(normalized_symbol),
+                    raw_data_object.c.event_time <= query_as_of,
                     raw_data_object.c.available_at <= query_as_of,
                 )
             )
@@ -60,6 +68,7 @@ class PostgresMarketDataRepository:
                 raw_data_object.c.available_at,
                 raw_data_object.c.event_time,
                 raw_data_object.c.content_hash,
+                normalized_record.c.id,
             )
         )
         records = tuple(
