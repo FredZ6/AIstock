@@ -10,6 +10,7 @@ from stock_platform.agents.harness.checkpoint import InMemoryCheckpointStore
 from stock_platform.agents.harness.trace import TraceRecorder
 from stock_platform.domain.common.errors import BudgetExceeded
 from stock_platform.domain.common.time import require_aware
+from stock_platform.infrastructure.observability.metrics import platform_metrics
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +98,7 @@ class ExecutionController:
             self._exhaust("tokens")
         self.state.llm_calls += 1
         self.state.tokens += tokens
+        platform_metrics.observe_cost(kind="tokens", amount=tokens)
         self._save("llm.completed", {"tokens": tokens})
 
     def record_tool_result(self, fingerprint: str, *, made_progress: bool) -> None:

@@ -42,6 +42,7 @@ def load_events(
     return [
         {
             "event_id": row["id"],
+            "correlation_id": row["correlation_id"],
             "run_id": row["run_id"],
             "sequence": row["sequence"],
             "event_time": row["created_at"],

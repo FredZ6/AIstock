@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from uuid import UUID
 
 import pytest
 from sqlalchemy import func, select
@@ -108,6 +109,11 @@ def test_offline_daily_research_persists_decision_and_complete_lineage(
     assert persisted_events == [
         ("node.completed", {"node": node, "status": result.status.value}) for node in result.route
     ]
+    assert set(
+        connection.execute(
+            select(agent_event.c.correlation_id).where(agent_event.c.run_id == run_id)
+        ).scalars()
+    ) == {UUID(run_id)}
 
 
 def test_two_runs_reuse_stable_evidence_without_duplicate_facts(

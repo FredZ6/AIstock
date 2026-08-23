@@ -9,7 +9,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
+from stock_platform.infrastructure.recovery import CircuitBreaker
 
 
 class FeedType(StrEnum):
@@ -193,6 +194,8 @@ class GovernedHttpProvider:
         timeout_seconds: float = 5.0,
         max_attempts: int = 3,
         max_concurrency: int = 4,
+        circuit_failure_threshold: int = 2,
+        circuit_recovery_timeout: timedelta = timedelta(minutes=5),
     ) -> None:
         if not 0 < timeout_seconds <= 10:
             raise ValueError("provider timeout must be in (0, 10] seconds")
@@ -210,6 +213,10 @@ class GovernedHttpProvider:
         self._max_attempts = max_attempts
         self._semaphore = threading.BoundedSemaphore(max_concurrency)
         self._validators: dict[str, dict[str, str]] = {}
+        self._circuit = CircuitBreaker(
+            failure_threshold=circuit_failure_threshold,
+            recovery_timeout=circuit_recovery_timeout,
+        )
 
     def _configured(self) -> bool:
         return True
@@ -281,6 +288,9 @@ class GovernedHttpProvider:
             return self._unavailable(
                 feed_type, normalized_symbol, query_as_of, "record_store_not_configured"
             )
+        observed_at = require_aware(self._clock())
+        if not self._circuit.allow_request(at=observed_at):
+            return self._unavailable(feed_type, normalized_symbol, query_as_of, "circuit_open")
 
         url = self._url(feed_type, normalized_symbol, query_as_of)
         headers = self._headers() | self._validators.get(url, {})
@@ -301,10 +311,12 @@ class GovernedHttpProvider:
             break
 
         if response is None or response.status_code in {429} or response.status_code >= 500:
+            self._circuit.record_failure(at=require_aware(self._clock()))
             return self._unavailable(
                 feed_type, normalized_symbol, query_as_of, "provider_unavailable"
             )
         if response.status_code == 404:
+            self._circuit.record_success()
             return ProviderResponse(
                 status=ProviderStatus.NOT_FOUND,
                 provider=self.name,
@@ -391,6 +403,7 @@ class GovernedHttpProvider:
                 query_as_of,
                 "future_data_rejected",
             )
+        self._circuit.record_success()
         return ProviderResponse(
             status=ProviderStatus.OK,
             provider=self.name,

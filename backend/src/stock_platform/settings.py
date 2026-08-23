@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     minio_bucket: str = "fixture-raw"
     minio_secure: bool = False
     redis_url: str = "redis://localhost:56379/0"
+    otel_export_enabled: bool = False
+    prometheus_multiproc_dir: str | None = None
+    admin_api_token: SecretStr | None = None
+    admin_actor_id: str | None = None
     max_active_agent_runs: int = Field(default=2, ge=1)
     sec_user_agent: str | None = None
     alpaca_data_key: str | None = None
@@ -33,3 +37,11 @@ class Settings(BaseSettings):
     @property
     def fixture_mode(self) -> bool:
         return self.environment in {"fixture", "test"}
+
+    @model_validator(mode="after")
+    def complete_admin_identity(self) -> "Settings":
+        if (self.admin_api_token is None) != (self.admin_actor_id is None):
+            raise ValueError("admin_api_token and admin_actor_id must be configured together")
+        if self.admin_actor_id is not None and not self.admin_actor_id.strip():
+            raise ValueError("admin_actor_id cannot be blank")
+        return self

@@ -1396,3 +1396,161 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   `null` is canonicalized out before hashing, all four Policy pins reject empty strings, and the
   Fixture manifest rejects any calibrated-LLM judge even if all hashes are resealed. The final
   focused and full-gate counts above include these regressions.
+
+### Task 17 — local implementation complete; awaiting PR review
+
+- Baseline: `make bootstrap` initially exited 2 because sandbox DNS blocked the locked wheel download;
+  the authorized identical rerun exited 0. The untouched `make verify` then exited 0 with 336 backend
+  passed / 3 credential-gated skipped and 41 Web tests, establishing a clean `main@2e84e21` baseline.
+- Security/context RED: the first focused collection exited 2 because the observability and recovery
+  modules did not exist. GREEN exited 0 with 10 tests for recursive credential/prompt/address/provider
+  text redaction, validated UUID correlation headers, all eight required low-cardinality Prometheus
+  families, explicit rejection of symbol/run labels, bounded worker recovery, and provider circuit
+  opening/recovery.
+- Correlation RED/GREEN: HTTP/log/span tests first exited 2 on the absent telemetry module, then passed
+  8/8. The PostgreSQL/SSE test first exited 1 because run admission had no correlation pin; migration
+  `0024_observability_correlation` now persists and indexes one ID across AgentRun, AgentEvent,
+  ToolCall, and AlertEvent. A worker/graph test then failed because the context was not restored and
+  passed after `execute_run` installed the persisted context around graph work.
+- Recovery: a real Redis stream was deleted to simulate transient loss; PostgreSQL AgentEvent and its
+  correlation ID remained authoritative, the expired non-exhausted worker lease requeued exactly one
+  task, and existing idempotency/append-only fill and ledger guards remained covered by the full suite.
+  The recovery directory passed 5/5 after an actual Redis container replacement.
+- Operations assets RED/GREEN: the contract first failed 3/3 on absent Compose services, dashboard,
+  security guide, and runbooks. OTel Collector 0.132.0, Prometheus 3.5.0, and authenticated Grafana
+  12.1.0 are now provisioned with eight SLO/failure panels. Provider outage, stuck run, Redis loss,
+  database restore, and human-only policy rollback runbooks contain exact commands and RPO/RTO.
+- Security remediation: an initial anonymous-Grafana proposal was rejected before any write. The
+  accepted configuration keeps login enabled and binds Grafana, Prometheus, OTel, PostgreSQL, Redis,
+  and MinIO only to `127.0.0.1`. The focused test first failed on the legacy `0.0.0.0` bindings and
+  passed after hardening. All six services then ran successfully; Prometheus and Grafana health
+  endpoints succeeded and OTel reported ready.
+- Migration/idempotency: applying `alembic upgrade head` twice and `alembic current` exited 0 at
+  `0024_observability_correlation`. The first post-migration repository gate exposed four metadata-
+  missing indexes; after declaring them, `alembic check` reported no operations and the focused DB
+  migration/schema/model suite passed 14/14.
+- Locked Task 17 gate: `pytest backend/tests/security backend/tests/integration/observability
+  backend/tests/integration/recovery -q --junitxml=reports/verification/task17-focused.xml` exited 0,
+  24 passed / 0 failed / 0 skipped with one existing Starlette-httpx warning. Report:
+  `reports/verification/task17-focused.xml`.
+- Full repository gate: final `make verify` exited 0. Ruff format/lint and strict Mypy over 208 files,
+  Alembic/MCP/OpenAPI drift checks, and Next.js production build passed. Backend: 354 passed / 3
+  credential-gated skipped / 1 existing warning. Web: 10 files / 41 passed. No live broker, real-money
+  execution, automatic policy activation, naive datetime, binary-float money, or Task 18 work was
+  added.
+
+#### Task 17 pre-PR review remediation
+
+- The first two-axis standards/specification review found release blockers in generic secret
+  redaction, historical correlation backfill, production OTel export/log wiring, runtime metric call
+  sites, authenticated human policy rollback, exact recovery commands, and real recovery evidence.
+  Each behavior was covered by a failing regression before the minimal correction.
+- Redaction once again covers generic `key` and `private_key` fields. Migration 0024 now backfills
+  AgentEvent and ToolCall from their owning AgentRun while temporarily disabling and restoring the
+  append-only trigger; the 0023-to-head historical migration regression passed and the local database
+  reports zero correlation mismatches for both tables.
+- OTel uses an opt-in, loopback-only OTLP/HTTP exporter and structured correlated JSON logs. HTTP,
+  worker, MCP, Provider, DB-audit, graph, alert, queue, cost, and evaluation paths now invoke the
+  shared low-cardinality observability boundary. A real local export produced one collector resource
+  span and one `m7.acceptance` span.
+- Human policy actions require a constant-time checked bearer token and a fixed server-configured
+  human actor; partial configuration and request-supplied identity are rejected. No Provider or live
+  broker credential/path was introduced.
+- `scripts/verify-recovery.sh` performs a full TimescaleDB custom-format backup/restore into an
+  isolated temporary database, Alembic drift validation, a real Redis restart, bounded worker
+  recovery, and append-only PaperFill/CashLedger idempotency tests. The first real run exited 1 and
+  exposed missing Timescale pre/post-restore state. Its RED regression failed as expected; adding
+  `timescaledb_pre_restore()` and `timescaledb_post_restore()` fixed the root cause. The corrected
+  real run exited 0 with 7 passed and cleaned its temporary database.
+- Corrected focused gate: `pytest backend/tests/security backend/tests/integration/observability
+  backend/tests/integration/recovery -q --junitxml=reports/verification/task17-focused.xml` exited 0,
+  29 passed / 0 failed / 0 skipped with the existing Starlette-httpx warning. The first corrected
+  full gate then exited 2 solely because the newly explicit Authorization header made the locked
+  OpenAPI artifact stale; the generated diff contained only those five human-only endpoints. After
+  deterministic regeneration, `make verify` exited 0: 237 files format clean, Ruff clean, strict
+  Mypy clean over 208 files, Alembic/MCP/OpenAPI drift clean, backend 359 passed / 3 explicit
+  credential-gated skips / 1 existing warning, Web 10 files / 41 passed, TypeScript/ESLint clean,
+  and the ten-route Next.js production build passed.
+
+#### Task 17 second-review remediation
+
+- The second standards/specification pass found disconnected runtime correlation, a production
+  Provider circuit that was not yet wired, recovery checks that did not span worker/Redis restart,
+  process-local-only metrics, an INFO logger that could drop JSON, a dynamic alert-rule label, and
+  unredacted span attributes. RED tests reproduced all owned behaviors; the real worker regression
+  additionally exposed and prevented an advisory-lock deadlock between MCP audit and graph events.
+- Research workers now pass every allowed feed through `McpProviderGateway`; ToolCall and
+  `mcp.tool.completed` AgentEvent rows carry both the owning run ID and its correlation ID, and the
+  worker uses the existing independent `RunControl.emit` persistence boundary. A complete
+  HTTP-admission → worker → Research Graph → MCP gateway → Fixture Provider → PostgreSQL → durable
+  SSE test passed with one correlation ID, five audited tools, contiguous event sequences, and
+  idempotent second execution.
+- `GovernedHttpProvider` now owns the bounded circuit breaker. Two terminal upstream failures open
+  it, subsequent calls skip transport with `circuit_open`, and a request is retried after the aware
+  recovery timeout. The production adapter contract passed. Alert metrics accept only the locked
+  bounded rule set, and span attributes pass through the same recursive redaction boundary as logs.
+- Operational JSON writes directly and synchronously to stderr, so container collection does not
+  depend on Python logger levels or third-party `logging.disable` state. A real FastAPI request
+  regression verifies its event and correlation. Prometheus uses the official multiprocess file
+  collector when every API/Celery/MCP process inherits one deployment-local
+  `PROMETHEUS_MULTIPROC_DIR`; two independent producer processes aggregate to one API scrape value.
+- The recovery gate snapshots AgentEvent and PaperFill counts in the restored database, starts a
+  real named Celery worker, restarts Redis, stops and restarts the worker under a fresh node name,
+  compares durable counts, and then runs bounded recovery plus append-only fill/ledger replay tests.
+  A `pipefail`/early-exit readiness false negative was diagnosed and fixed by consuming the complete
+  Celery inspect output. Final `scripts/verify-recovery.sh` exited 0; Timescale pre/post restore and
+  Alembic drift passed, both workers answered ping, Redis returned PONG, counts matched, and 7/7
+  recovery/idempotency tests passed.
+- Final locked Task 17 command exited 0 with 34 passed / 0 failed / 0 skipped and one existing
+  warning; JUnit: `reports/verification/task17-focused.xml`. The expanded affected suite passed 59
+  with three credential-gated provider skips. Final `make verify` exited 0: 237 files format clean,
+  Ruff clean, strict Mypy clean over 208 files, Alembic/MCP/OpenAPI drift clean, backend 367 passed /
+  3 explicit credential-gated skips / 1 existing warning, Web 10 files / 41 passed, TypeScript/
+  ESLint clean, and all ten Next.js routes built.
+
+#### Task 17 final-review closure
+
+- The third specification review cleared all P0/P1/P2 findings. The standards review retained one
+  P1: ToolCall could roll back with the Research business transaction while its independently
+  committed MCP AgentEvent survived; and one P2: the service restart gate could pass without work
+  crossing the broker/worker boundary. Both findings were reproduced and corrected before delivery.
+- MCP ToolCall and its durable AgentEvent now commit together through one independent
+  `EngineMcpAuditSink` transaction. Research business persistence remains separate, so a later graph
+  failure cannot erase the already-authoritative tool audit pair. The new failure-path regression
+  intentionally raises after a successful tool audit and proves exactly one ToolCall and one matching
+  append-only event remain.
+- `scripts/recovery_probe.py` admits a frozen, cutoff-safe Research run in the isolated restored
+  database and waits on its durable status. The recovery script starts a real solo Celery worker,
+  dispatches `stock_platform.workers.research_tasks.run_research`, asserts non-zero run events and
+  tool calls, snapshots non-zero AgentEvent/PaperFill totals, restarts Redis and the worker, and then
+  redispatches the same completed run. Queue drain plus exact before/after run-event, ToolCall,
+  AgentEvent, and PaperFill counts prove the replay is a no-op rather than a duplicate execution.
+- The first final recovery run exited 2 because Celery 5.6 `call` has no `--id` option. Local CLI
+  help confirmed the contract; removing the unsupported flag retained application-level run
+  idempotency. The corrected full recovery command exited 0: Timescale pre/post restore and Alembic
+  drift passed, the real Research task completed, Redis and worker restarted, replay counts stayed
+  identical, and the seven focused recovery/accounting tests passed.
+- Fresh final gates: the locked Task 17 command exited 0 with 35 passed / 0 failed / 0 skipped and one
+  existing warning; JUnit: `reports/verification/task17-focused.xml`. `make verify` exited 0 with 238
+  files format clean, Ruff clean, strict Mypy clean over 208 files, Alembic/MCP/OpenAPI drift clean,
+  backend 368 passed / 3 explicit credential-gated skips / 1 existing warning, Web 10 files / 41
+  passed, TypeScript/ESLint clean, and all ten Next.js routes built.
+
+#### Task 17 non-vacuous fill-recovery closure
+
+- A final standards review identified that the recovery gate's global non-zero PaperFill assertion
+  depended on ambient restored data and did not prove that the fill under test survived restart and
+  replay. A RED integration test first failed because no scoped durable fill probe existed.
+- `persist_paper_fill_probe` now uses fixed paper-only identities, aware UTC timestamps, Decimal
+  economics, a deterministic approved RiskDecision, frozen MarketContextSnapshot, and the existing
+  `PostgresPaperAccountingStore`. Repeating the probe persists exactly one PaperFill and exactly
+  three fill-sourced CashLedger entries; it cannot create a live order or contact a broker.
+- `scripts/verify-recovery.sh` runs that probe before Redis/worker restart and again afterward, then
+  checks the same fill ID still has count 1 and the same source ID still has ledger count 3. The
+  ambient `paper_fill > 0` precondition was removed. The real backup/restore/restart/replay command
+  exited 0, including 8/8 focused recovery/accounting tests.
+- Fresh locked Task 17 gate exited 0 with 36 passed / 0 failed / 0 skipped and one existing warning;
+  JUnit: `reports/verification/task17-focused.xml`. Fresh `make verify` exited 0: 239 files format
+  clean, Ruff clean, strict Mypy clean over 209 files, Alembic/MCP/OpenAPI drift clean, backend 369
+  passed / 3 explicit credential-gated skips / 1 existing warning, Web 10 files / 41 passed,
+  TypeScript/ESLint clean, and all ten Next.js routes built.

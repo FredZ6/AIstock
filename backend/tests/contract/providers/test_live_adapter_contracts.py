@@ -176,6 +176,37 @@ def test_rate_limit_retries_with_exponential_backoff_and_jitter() -> None:
     assert sleeps == [1.25, 2.25]
 
 
+def test_governed_provider_opens_circuit_and_skips_transport_until_timeout() -> None:
+    requests: list[HttpRequest] = []
+    now = [AS_OF]
+
+    def unavailable(request: HttpRequest) -> HttpResponse:
+        requests.append(request)
+        return HttpResponse(status_code=503, headers={}, body=b"{}")
+
+    provider = SecProvider(
+        user_agent="research@example.com",
+        transport=unavailable,
+        raw_store=RecordingStore(),
+        record_store=RecordingRecordStore(),
+        clock=lambda: now[0],
+        sleep=lambda _: None,
+        max_attempts=1,
+        circuit_failure_threshold=2,
+        circuit_recovery_timeout=timedelta(seconds=30),
+    )
+
+    provider.fetch(FeedType.COMPANY_FACTS, "NVDA", AS_OF)
+    provider.fetch(FeedType.COMPANY_FACTS, "NVDA", AS_OF)
+    blocked = provider.fetch(FeedType.COMPANY_FACTS, "NVDA", AS_OF)
+    assert len(requests) == 2
+    assert "circuit_open" in blocked.warnings
+
+    now[0] += timedelta(seconds=31)
+    provider.fetch(FeedType.COMPANY_FACTS, "NVDA", AS_OF)
+    assert len(requests) == 3
+
+
 def test_adapter_timeout_flows_through_fallback_policy() -> None:
     store = RecordingStore()
 

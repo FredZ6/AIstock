@@ -6,12 +6,18 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any, Literal, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import Connection, create_engine, func, insert, select, text, update
 from sqlalchemy.engine import RowMapping
 
 from stock_platform.infrastructure.db.models.tables import agent_event, agent_run, policy_control
+from stock_platform.infrastructure.observability.context import (
+    CorrelationContext,
+    correlation_scope,
+)
+from stock_platform.infrastructure.observability.metrics import platform_metrics
+from stock_platform.infrastructure.observability.telemetry import operational_telemetry
 
 RunType = Literal["RESEARCH", "PORTFOLIO", "ALERT_MONITOR", "WEEKLY_REVIEW"]
 RunWork = Callable[[Connection, RowMapping, "RunControl"], None]
@@ -77,6 +83,7 @@ def admit_run(
     symbol: str | None,
     decision_time: datetime,
     data_cutoff: datetime,
+    correlation_id: UUID | None = None,
 ) -> AdmittedRun:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     request_hash = sha256(encoded.encode()).hexdigest()
@@ -109,6 +116,7 @@ def admit_run(
             insert(agent_run)
             .values(
                 run_type=run_type,
+                correlation_id=correlation_id or uuid4(),
                 idempotency_key=idempotency_key,
                 request_hash=request_hash,
                 request_payload=payload,
@@ -161,9 +169,13 @@ def append_run_event(
     event_type: str,
     payload: dict[str, Any],
 ) -> None:
+    correlation_id = connection.execute(
+        select(agent_run.c.correlation_id).where(agent_run.c.id == run_id)
+    ).scalar_one()
     connection.execute(
         insert(agent_event).values(
             run_id=run_id,
+            correlation_id=correlation_id,
             sequence=_next_event_sequence(connection, run_id),
             event_type=event_type,
             payload=payload,
@@ -174,10 +186,11 @@ def append_run_event(
 class RunControl:
     """Small durable boundary used by graph nodes for events and cancellation."""
 
-    def __init__(self, database_url: str, run_id: UUID, attempt: int) -> None:
+    def __init__(self, database_url: str, run_id: UUID, attempt: int, run_type: RunType) -> None:
         self._engine = create_engine(database_url)
         self._run_id = run_id
         self._attempt = attempt
+        self._run_type = run_type
 
     def close(self) -> None:
         self._engine.dispose()
@@ -197,6 +210,7 @@ class RunControl:
 
     def node_completed(self, node: str) -> None:
         self.emit("node.completed", {"node": node, "status": "COMPLETED"})
+        platform_metrics.observe_graph(graph=self._run_type.lower(), node=node, outcome="completed")
 
 
 def _claim_run(engine: Any, run_id: UUID, expected_type: RunType) -> tuple[RowMapping, int] | None:
@@ -280,10 +294,22 @@ def execute_run(
         if claim is None:
             return False
         row, attempt = claim
-        control = RunControl(database_url, run_id, attempt)
+        control = RunControl(database_url, run_id, attempt, expected_type)
         try:
             with engine.begin() as connection:
-                work(connection, row, control)
+                context = CorrelationContext(
+                    correlation_id=row["correlation_id"],
+                    run_id=run_id,
+                )
+                with correlation_scope(context):
+                    with operational_telemetry.span(
+                        "worker.run", {"run.type": expected_type.lower()}
+                    ):
+                        operational_telemetry.log(
+                            "worker.run.started",
+                            {"run_type": expected_type, "attempt": attempt},
+                        )
+                        work(connection, row, control)
                 completed = connection.execute(
                     update(agent_run)
                     .where(

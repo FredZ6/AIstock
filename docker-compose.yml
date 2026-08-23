@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "55432:5432"
+      - "127.0.0.1:55432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-stock_platform}"]
       interval: 2s
@@ -18,7 +18,7 @@ services:
   redis:
     image: redis:8-alpine
     ports:
-      - "56379:6379"
+      - "127.0.0.1:56379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s
@@ -32,8 +32,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
     ports:
-      - "59000:9000"
-      - "59001:9001"
+      - "127.0.0.1:59000:9000"
+      - "127.0.0.1:59001:9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 2s
@@ -42,8 +42,46 @@ services:
     volumes:
       - stock_platform_minio:/data
 
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.132.0
+    command: ["--config=/etc/otelcol-contrib/config.yml"]
+    volumes:
+      - ./infra/otel/collector.yml:/etc/otelcol-contrib/config.yml:ro
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - stock_platform_prometheus:/prometheus
+    ports:
+      - "127.0.0.1:59090:9090"
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-fixture-admin-change-me}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL: ""
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - stock_platform_grafana:/var/lib/grafana
+    ports:
+      - "127.0.0.1:53000:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   stock_platform_postgres:
     name: ai_stock_m0_postgres
   stock_platform_minio:
     name: ai_stock_m1_minio
+  stock_platform_prometheus:
+    name: ai_stock_m7_prometheus
+  stock_platform_grafana:
+    name: ai_stock_m7_grafana

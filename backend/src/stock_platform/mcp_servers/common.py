@@ -20,10 +20,19 @@ from stock_platform.application.market_data.repositories import (
     EngineMarketDataRepository,
     PointInTimeRepository,
 )
+from stock_platform.application.runs import append_run_event
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
 from stock_platform.infrastructure.db.models.tables import agent_event, tool_call
-from stock_platform.infrastructure.providers.base import FeedType, ProviderResponse, ProviderStatus
+from stock_platform.infrastructure.observability.context import maybe_current_correlation
+from stock_platform.infrastructure.observability.metrics import platform_metrics
+from stock_platform.infrastructure.observability.telemetry import operational_telemetry
+from stock_platform.infrastructure.providers.base import (
+    FeedType,
+    ProviderResponse,
+    ProviderStatus,
+    ResearchDataProvider,
+)
 from stock_platform.settings import Settings
 
 FastMcpSettings.model_rebuild()
@@ -157,22 +166,26 @@ class McpResearchService:
     def query(self, feed_type: FeedType, symbol: str, as_of: datetime) -> ResearchToolEnvelope:
         normalized_symbol = Symbol(symbol)
         query_as_of = require_aware(as_of)
-        try:
-            response = self._repository.as_of(
-                symbol=str(normalized_symbol),
-                feed_type=feed_type,
-                decision_time=query_as_of,
-            )
-        except Exception:
-            response = ProviderResponse(
-                status=ProviderStatus.ERROR,
-                provider="REDACTED",
-                feed_type=feed_type,
-                symbol=normalized_symbol,
-                query_as_of=query_as_of,
-                warnings=("repository_error",),
-                missingness="UNAVAILABLE",
-            )
+        with operational_telemetry.span("provider.query", {"feed.type": feed_type.value}):
+            try:
+                response = self._repository.as_of(
+                    symbol=str(normalized_symbol),
+                    feed_type=feed_type,
+                    decision_time=query_as_of,
+                )
+            except Exception:
+                response = ProviderResponse(
+                    status=ProviderStatus.ERROR,
+                    provider="REDACTED",
+                    feed_type=feed_type,
+                    symbol=normalized_symbol,
+                    query_as_of=query_as_of,
+                    warnings=("repository_error",),
+                    missingness="UNAVAILABLE",
+                )
+        platform_metrics.observe_provider(
+            provider=response.provider.lower(), outcome=response.status.value
+        )
         records = list(response.records)
         data_as_of = max((record.event_time for record in records), default=None)
         available_at = max((record.available_at for record in records), default=None)
@@ -192,6 +205,7 @@ class McpResearchService:
             for record in records
         ]
         missingness = cast(Missingness | None, response.missingness)
+        context = maybe_current_correlation()
         return ResearchToolEnvelope(
             status=response.status.value,
             provider=response.provider,
@@ -212,7 +226,11 @@ class McpResearchService:
             citations=citations,
             warnings=list(response.warnings),
             pagination=Pagination(next_cursor=None),
-            trace_id=response.trace_id or uuid4().hex,
+            trace_id=(
+                str(context.correlation_id)
+                if context is not None
+                else response.trace_id or uuid4().hex
+            ),
         )
 
 
@@ -243,22 +261,33 @@ class PostgresMcpAuditSink:
         request_fingerprint: str,
         outcome: AuditOutcome,
     ) -> None:
-        self._connection.execute(
-            insert(tool_call).values(
-                tool_name=tool_name,
-                request_fingerprint=request_fingerprint,
+        context = maybe_current_correlation()
+        correlation_id = context.correlation_id if context is not None else uuid4()
+        run_id = context.run_id if context is not None else None
+        with operational_telemetry.span("db.mcp_audit"):
+            self._connection.execute(
+                insert(tool_call).values(
+                    correlation_id=correlation_id,
+                    run_id=run_id,
+                    tool_name=tool_name,
+                    request_fingerprint=request_fingerprint,
+                )
             )
-        )
-        self._connection.execute(
-            insert(agent_event).values(
-                event_type=f"mcp.tool.{outcome}",
-                payload={
-                    "tool_name": tool_name,
-                    "request_fingerprint": request_fingerprint,
-                    "outcome": outcome,
-                },
-            )
-        )
+            payload = {
+                "tool_name": tool_name,
+                "request_fingerprint": request_fingerprint,
+                "outcome": outcome,
+            }
+            if run_id is not None:
+                append_run_event(self._connection, run_id, f"mcp.tool.{outcome}", payload)
+            else:
+                self._connection.execute(
+                    insert(agent_event).values(
+                        correlation_id=correlation_id,
+                        event_type=f"mcp.tool.{outcome}",
+                        payload=payload,
+                    )
+                )
 
 
 class EngineMcpAuditSink:
@@ -274,6 +303,13 @@ class EngineMcpAuditSink:
         with self._engine.begin() as connection:
             PostgresMcpAuditSink(connection).record(tool_name, request_fingerprint, outcome)
 
+    def close(self) -> None:
+        self._engine.dispose()
+
+
+def durable_mcp_audit_sink(database_url: str) -> EngineMcpAuditSink:
+    return EngineMcpAuditSink(create_engine(database_url))
+
 
 @lru_cache(maxsize=1)
 def default_audit_sink() -> EngineMcpAuditSink:
@@ -283,6 +319,38 @@ def default_audit_sink() -> EngineMcpAuditSink:
 def request_fingerprint(tool_name: str, arguments: dict[str, Any]) -> str:
     canonical = json.dumps(arguments, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(f"{tool_name}\0{canonical}".encode()).hexdigest()
+
+
+_TOOL_BY_FEED = {feed: f"get_{feed.value}" for feed in FeedType}
+
+
+class McpProviderGateway:
+    """In-process MCP tool boundary used by graph workers in fixture and paper modes."""
+
+    def __init__(self, provider: ResearchDataProvider, audit_sink: McpAuditSink) -> None:
+        self._provider = provider
+        self._audit_sink = audit_sink
+        self.name = provider.name
+
+    def fetch(self, feed_type: FeedType, symbol: str, as_of: datetime) -> ProviderResponse:
+        tool_name = _TOOL_BY_FEED[feed_type]
+        fingerprint = request_fingerprint(
+            tool_name,
+            {"symbol": str(Symbol(symbol)), "as_of": require_aware(as_of).isoformat()},
+        )
+        try:
+            with operational_telemetry.span("mcp.tool", {"tool.name": tool_name}):
+                response = self._provider.fetch(feed_type, symbol, as_of)
+        except Exception:
+            self._audit_sink.record(tool_name, fingerprint, "denied")
+            platform_metrics.observe_tool(tool=tool_name, outcome="denied")
+            raise
+        self._audit_sink.record(tool_name, fingerprint, "completed")
+        platform_metrics.observe_tool(tool=tool_name, outcome="completed")
+        platform_metrics.observe_provider(
+            provider=response.provider.lower(), outcome=response.status.value
+        )
+        return response
 
 
 class AuditedFastMCP(FastMCP):
@@ -297,11 +365,14 @@ class AuditedFastMCP(FastMCP):
     ) -> Sequence[ContentBlock] | dict[str, Any]:
         fingerprint = request_fingerprint(name, arguments)
         try:
-            result = await super().call_tool(name, arguments)
+            with operational_telemetry.span("mcp.tool", {"tool.name": name}):
+                result = await super().call_tool(name, arguments)
         except Exception:
             self._audit_sink.record(name, fingerprint, "denied")
+            platform_metrics.observe_tool(tool=name, outcome="denied")
             raise
         self._audit_sink.record(name, fingerprint, "completed")
+        platform_metrics.observe_tool(tool=name, outcome="completed")
         return result
 
 

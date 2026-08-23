@@ -1,7 +1,8 @@
 # AI Agent 美股科技研究与模拟投资平台
 
 Evidence-grounded US technology research and paper-trading simulation. The repository is implemented
-through **M7 Quality Task 16**; Task 17 operational hardening remains in progress for the milestone.
+through **M7 Quality Task 17** with correlated observability, security hardening, and tested recovery
+runbooks.
 It runs in **Fixture Mode** without provider credentials and cannot connect to a live broker.
 
 ## Requirements
@@ -60,6 +61,21 @@ normalized point-in-time records to PostgreSQL.
   Weekly Review, and Eval/Admin workflows with explicit loading and failure-state components.
 - Fixture-mode decisions remain traceable through Report, Claim, Evidence, ToolCall, provider, and
   aware timestamps; paper fills and cash-ledger fixtures reconcile from opening cash to current cash.
+
+## M7 quality gates
+
+- A frozen 200-case offline evaluation suite enforces deterministic release gates and reproducible
+  evidence artifacts.
+- Correlation IDs persist from HTTP admission through worker/graph execution, MCP audit, PostgreSQL
+  AgentEvent, and durable SSE replay. Logs redact sensitive content and metrics forbid unbounded
+  symbol/run labels.
+- Authenticated Grafana, Prometheus, and OpenTelemetry Collector services bind only to localhost.
+  Recovery runbooks cover provider outage, stuck runs, Redis loss, database restore, and human-only
+  policy rollback with explicit RPO/RTO assumptions.
+- API, Celery, and MCP processes must inherit the same exported
+  `PROMETHEUS_MULTIPROC_DIR=$PWD/.runtime/prometheus`; `/metrics` aggregates those process-local
+  files for the single Prometheus API scrape target. Clear that directory only while every runtime
+  process is stopped.
 
 ## Safety boundary
 

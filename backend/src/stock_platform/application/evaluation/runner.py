@@ -22,6 +22,7 @@ from stock_platform.application.evaluation.metrics import (
 from stock_platform.application.evaluation.report import load_baseline, write_reports
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.evaluation import EvalCase, load_corpus
+from stock_platform.infrastructure.observability.metrics import platform_metrics
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,4 +240,7 @@ def run_evaluation(
     evidence = _metric_evidence(cases, metrics)
     baseline = load_baseline(baseline_path) if baseline_path is not None else None
     write_reports(output_dir, cases, metrics, decision, evidence, baseline)
+    platform_metrics.observe_evaluation(
+        suite="offline", outcome="passed" if decision.passed else "failed"
+    )
     return EvaluationRun(cases=cases, metrics=metrics, release_decision=decision)
