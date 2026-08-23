@@ -1,4 +1,5 @@
 import json
+import tomllib
 from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
@@ -6,9 +7,18 @@ import yaml  # type: ignore[import-untyped]
 ROOT = Path(__file__).resolve().parents[4]
 
 
+def test_testclient_uses_starlette_supported_http_transport() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())
+
+    assert "httpx2>=2,<3" in project["dependency-groups"]["dev"]
+
+
 def test_compose_wires_otel_prometheus_and_grafana_with_pinned_configs() -> None:
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+    assert compose["name"] == "aistock"
     services = compose["services"]
+    assert "name" not in compose["volumes"]["stock_platform_prometheus"]
+    assert "name" not in compose["volumes"]["stock_platform_grafana"]
 
     assert {"otel-collector", "prometheus", "grafana"} <= services.keys()
     assert services["otel-collector"]["volumes"]

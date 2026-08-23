@@ -1554,3 +1554,18 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   clean, Ruff clean, strict Mypy clean over 209 files, Alembic/MCP/OpenAPI drift clean, backend 369
   passed / 3 explicit credential-gated skips / 1 existing warning, Web 10 files / 41 passed,
   TypeScript/ESLint clean, and all ten Next.js routes built.
+
+### M7 post-merge warning cleanup — 2026-08-23
+
+- Starlette 1.6 deprecated its legacy `httpx` TestClient fallback. A RED dependency contract first
+  failed because `httpx2>=2,<3` was absent; the locked dev environment now uses `httpx2 2.12.0`.
+  The resulting strict-Mypy RED exposed one test helper nominally tied to `httpx.Response`; its
+  actual `.json()` boundary is now represented by a small structural Protocol. The API contract
+  passed 11/11 with `StarletteDeprecationWarning` promoted to an error.
+- Docker Compose now has the fixed project name `aistock`. Prometheus and Grafana use project-scoped
+  volumes instead of cross-project hard-coded names, eliminating ownership warnings across worktree
+  paths. The new volumes have `project=aistock` labels; both old `ai_stock_m7_*` volumes were retained
+  unchanged for recovery. Prometheus readiness and Grafana database health both returned success.
+- Fresh `make verify` exited 0: Ruff clean, strict Mypy clean over 209 files, Alembic/MCP/OpenAPI
+  drift clean, backend 370 passed / 3 explicit credential-gated skips with no warning, Web 10 files /
+  41 passed, TypeScript/ESLint clean, and all ten Next.js routes built.

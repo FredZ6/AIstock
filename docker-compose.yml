@@ -1,3 +1,5 @@
+name: aistock
+
 services:
   postgres:
     image: timescale/timescaledb-ha:pg17
@@ -81,7 +83,5 @@ volumes:
     name: ai_stock_m0_postgres
   stock_platform_minio:
     name: ai_stock_m1_minio
-  stock_platform_prometheus:
-    name: ai_stock_m7_prometheus
-  stock_platform_grafana:
-    name: ai_stock_m7_grafana
+  stock_platform_prometheus: {}
+  stock_platform_grafana: {}
