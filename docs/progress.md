@@ -1507,3 +1507,31 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   Ruff clean, strict Mypy clean over 208 files, Alembic/MCP/OpenAPI drift clean, backend 367 passed /
   3 explicit credential-gated skips / 1 existing warning, Web 10 files / 41 passed, TypeScript/
   ESLint clean, and all ten Next.js routes built.
+
+#### Task 17 final-review closure
+
+- The third specification review cleared all P0/P1/P2 findings. The standards review retained one
+  P1: ToolCall could roll back with the Research business transaction while its independently
+  committed MCP AgentEvent survived; and one P2: the service restart gate could pass without work
+  crossing the broker/worker boundary. Both findings were reproduced and corrected before delivery.
+- MCP ToolCall and its durable AgentEvent now commit together through one independent
+  `EngineMcpAuditSink` transaction. Research business persistence remains separate, so a later graph
+  failure cannot erase the already-authoritative tool audit pair. The new failure-path regression
+  intentionally raises after a successful tool audit and proves exactly one ToolCall and one matching
+  append-only event remain.
+- `scripts/recovery_probe.py` admits a frozen, cutoff-safe Research run in the isolated restored
+  database and waits on its durable status. The recovery script starts a real solo Celery worker,
+  dispatches `stock_platform.workers.research_tasks.run_research`, asserts non-zero run events and
+  tool calls, snapshots non-zero AgentEvent/PaperFill totals, restarts Redis and the worker, and then
+  redispatches the same completed run. Queue drain plus exact before/after run-event, ToolCall,
+  AgentEvent, and PaperFill counts prove the replay is a no-op rather than a duplicate execution.
+- The first final recovery run exited 2 because Celery 5.6 `call` has no `--id` option. Local CLI
+  help confirmed the contract; removing the unsupported flag retained application-level run
+  idempotency. The corrected full recovery command exited 0: Timescale pre/post restore and Alembic
+  drift passed, the real Research task completed, Redis and worker restarted, replay counts stayed
+  identical, and the seven focused recovery/accounting tests passed.
+- Fresh final gates: the locked Task 17 command exited 0 with 35 passed / 0 failed / 0 skipped and one
+  existing warning; JUnit: `reports/verification/task17-focused.xml`. `make verify` exited 0 with 238
+  files format clean, Ruff clean, strict Mypy clean over 208 files, Alembic/MCP/OpenAPI drift clean,
+  backend 368 passed / 3 explicit credential-gated skips / 1 existing warning, Web 10 files / 41
+  passed, TypeScript/ESLint clean, and all ten Next.js routes built.

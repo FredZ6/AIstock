@@ -13,7 +13,7 @@ from stock_platform.domain.common.time import require_aware
 from stock_platform.infrastructure.db.models.tables import market_bar
 from stock_platform.infrastructure.providers.base import FeedType
 from stock_platform.infrastructure.providers.fixture.loader import FixtureCatalog
-from stock_platform.mcp_servers.common import McpProviderGateway, PostgresMcpAuditSink
+from stock_platform.mcp_servers.common import McpProviderGateway, durable_mcp_audit_sink
 from stock_platform.settings import Settings
 from stock_platform.workers.celery_app import celery_app
 
@@ -52,16 +52,17 @@ def execute_research_run(
                 row["model_version"],
             ),
         )
-        DailyResearchGraph(
-            provider=McpProviderGateway(
-                catalog.provider(),
-                PostgresMcpAuditSink(connection, event_emitter=control.emit),
-            ),
-            store=PostgresResearchStore(
-                connection, available_at=completion_time, record_events=False
-            ),
-            on_node_completed=control.node_completed,
-        ).run(run_id=run_id, specification=specification)
+        audit_sink = durable_mcp_audit_sink(database_url)
+        try:
+            DailyResearchGraph(
+                provider=McpProviderGateway(catalog.provider(), audit_sink),
+                store=PostgresResearchStore(
+                    connection, available_at=completion_time, record_events=False
+                ),
+                on_node_completed=control.node_completed,
+            ).run(run_id=run_id, specification=specification)
+        finally:
+            audit_sink.close()
 
     return execute_run(database_url, UUID(run_id), "RESEARCH", work)
 

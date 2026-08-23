@@ -252,14 +252,8 @@ class McpAuditSink(Protocol):
 
 
 class PostgresMcpAuditSink:
-    def __init__(
-        self,
-        connection: Connection,
-        *,
-        event_emitter: Callable[[str, dict[str, Any]], None] | None = None,
-    ) -> None:
+    def __init__(self, connection: Connection) -> None:
         self._connection = connection
-        self._event_emitter = event_emitter
 
     def record(
         self,
@@ -284,9 +278,7 @@ class PostgresMcpAuditSink:
                 "request_fingerprint": request_fingerprint,
                 "outcome": outcome,
             }
-            if run_id is not None and self._event_emitter is not None:
-                self._event_emitter(f"mcp.tool.{outcome}", payload)
-            elif run_id is not None:
+            if run_id is not None:
                 append_run_event(self._connection, run_id, f"mcp.tool.{outcome}", payload)
             else:
                 self._connection.execute(
@@ -310,6 +302,13 @@ class EngineMcpAuditSink:
     ) -> None:
         with self._engine.begin() as connection:
             PostgresMcpAuditSink(connection).record(tool_name, request_fingerprint, outcome)
+
+    def close(self) -> None:
+        self._engine.dispose()
+
+
+def durable_mcp_audit_sink(database_url: str) -> EngineMcpAuditSink:
+    return EngineMcpAuditSink(create_engine(database_url))
 
 
 @lru_cache(maxsize=1)

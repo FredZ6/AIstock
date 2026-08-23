@@ -30,6 +30,7 @@ from stock_platform.infrastructure.observability.telemetry import (
     OperationalTelemetry,
     create_in_memory_tracer,
 )
+from stock_platform.mcp_servers.common import durable_mcp_audit_sink
 from stock_platform.settings import Settings
 from stock_platform.workers.research_tasks import execute_research_run
 
@@ -342,6 +343,62 @@ def test_http_worker_graph_mcp_provider_db_and_sse_share_one_correlation(
     assert calls and set(calls) == {correlation_id}
     assert any(event["type"] == "mcp.tool.completed" for event in events)
     assert {event["correlation_id"] for event in events} == {correlation_id}
+
+
+def test_mcp_tool_call_and_event_survive_later_run_failure_atomically(
+    isolated_database_url: str,
+) -> None:
+    config = Config("backend/alembic.ini")
+    config.set_main_option("sqlalchemy.url", isolated_database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(isolated_database_url)
+    run_id = uuid4()
+    correlation_id = uuid4()
+    now = datetime(2026, 8, 23, tzinfo=UTC)
+    with engine.begin() as connection:
+        connection.execute(
+            insert(agent_run).values(
+                id=run_id,
+                correlation_id=correlation_id,
+                run_type="RESEARCH",
+                idempotency_key=f"audit-failure-{run_id}",
+                request_hash="f" * 64,
+                request_payload={},
+                decision_time=now,
+                data_cutoff=now,
+                status="QUEUED",
+            )
+        )
+
+    def fail_after_tool(_connection: object, _row: object, _control: object) -> None:
+        sink = durable_mcp_audit_sink(isolated_database_url)
+        try:
+            sink.record("get_price_bars", "f" * 64, "completed")
+        finally:
+            sink.close()
+        raise RuntimeError("later graph failure")
+
+    with pytest.raises(RuntimeError, match="later graph failure"):
+        execute_run(isolated_database_url, run_id, "RESEARCH", fail_after_tool)
+    with engine.connect() as connection:
+        calls = (
+            connection.execute(select(tool_call.c.id).where(tool_call.c.run_id == run_id))
+            .scalars()
+            .all()
+        )
+        events = (
+            connection.execute(
+                select(agent_event.c.id).where(
+                    agent_event.c.run_id == run_id,
+                    agent_event.c.event_type == "mcp.tool.completed",
+                )
+            )
+            .scalars()
+            .all()
+        )
+    engine.dispose()
+
+    assert len(calls) == len(events) == 1
 
 
 def test_0024_backfills_existing_event_and_tool_rows_from_their_run(

@@ -69,21 +69,60 @@ docker compose -p "${compose_project}" exec -T postgres \
 DATABASE_URL="postgresql+psycopg://postgres:postgres@localhost:55432/${restore_db}" \
   .venv/bin/alembic -c backend/alembic.ini check
 
+probe_database_url="postgresql+psycopg://postgres:postgres@localhost:55432/${restore_db}"
+probe_run_id="$(PYTHONPATH="${repo_root}/backend/src" .venv/bin/python \
+  scripts/recovery_probe.py prepare --database-url "${probe_database_url}")"
+start_worker
+PYTHONPATH="${repo_root}/backend/src" REDIS_URL="redis://localhost:56379/0" \
+  .venv/bin/celery -A stock_platform.workers.celery_app:celery_app call \
+  stock_platform.workers.research_tasks.run_research \
+  --args="[\"${probe_run_id}\"]" >/dev/null
+PYTHONPATH="${repo_root}/backend/src" .venv/bin/python scripts/recovery_probe.py wait \
+  --database-url "${probe_database_url}" --run-id "${probe_run_id}"
+probe_event_count="$(docker compose -p "${compose_project}" exec -T postgres \
+  psql -U postgres -d "${restore_db}" -Atc \
+  "SELECT count(*) FROM agent_event WHERE run_id = '${probe_run_id}'")"
+probe_tool_count="$(docker compose -p "${compose_project}" exec -T postgres \
+  psql -U postgres -d "${restore_db}" -Atc \
+  "SELECT count(*) FROM tool_call WHERE run_id = '${probe_run_id}'")"
+test "${probe_event_count}" -gt 0
+test "${probe_tool_count}" -gt 0
 before_agent_events="$(docker compose -p "${compose_project}" exec -T postgres \
   psql -U postgres -d "${restore_db}" -Atc "SELECT count(*) FROM agent_event")"
 before_paper_fills="$(docker compose -p "${compose_project}" exec -T postgres \
   psql -U postgres -d "${restore_db}" -Atc "SELECT count(*) FROM paper_fill")"
-start_worker
+test "${before_agent_events}" -gt 0
+test "${before_paper_fills}" -gt 0
 docker compose -p "${compose_project}" restart redis
 docker compose -p "${compose_project}" exec -T redis redis-cli ping | rg -x PONG
 stop_worker
 start_worker
+PYTHONPATH="${repo_root}/backend/src" REDIS_URL="redis://localhost:56379/0" \
+  .venv/bin/celery -A stock_platform.workers.celery_app:celery_app call \
+  stock_platform.workers.research_tasks.run_research \
+  --args="[\"${probe_run_id}\"]" >/dev/null
+for _attempt in {1..30}; do
+  replay_queue_depth="$(docker compose -p "${compose_project}" exec -T redis \
+    redis-cli llen celery)"
+  if [[ "${replay_queue_depth}" == "0" ]]; then
+    break
+  fi
+  sleep 0.2
+done
+test "${replay_queue_depth}" = "0"
+sleep 1
 after_agent_events="$(docker compose -p "${compose_project}" exec -T postgres \
   psql -U postgres -d "${restore_db}" -Atc "SELECT count(*) FROM agent_event")"
 after_paper_fills="$(docker compose -p "${compose_project}" exec -T postgres \
   psql -U postgres -d "${restore_db}" -Atc "SELECT count(*) FROM paper_fill")"
 test "${before_agent_events}" = "${after_agent_events}"
 test "${before_paper_fills}" = "${after_paper_fills}"
+test "${probe_event_count}" = "$(docker compose -p "${compose_project}" exec -T postgres \
+  psql -U postgres -d "${restore_db}" -Atc \
+  "SELECT count(*) FROM agent_event WHERE run_id = '${probe_run_id}'")"
+test "${probe_tool_count}" = "$(docker compose -p "${compose_project}" exec -T postgres \
+  psql -U postgres -d "${restore_db}" -Atc \
+  "SELECT count(*) FROM tool_call WHERE run_id = '${probe_run_id}'")"
 stop_worker
 .venv/bin/pytest \
   backend/tests/integration/recovery \

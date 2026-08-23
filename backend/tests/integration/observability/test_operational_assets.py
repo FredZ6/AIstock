@@ -28,6 +28,9 @@ def test_compose_wires_otel_prometheus_and_grafana_with_pinned_configs() -> None
     assert "after_agent_events" in recovery_script
     assert "before_paper_fills" in recovery_script
     assert "after_paper_fills" in recovery_script
+    assert "stock_platform.workers.research_tasks.run_research" in recovery_script
+    assert "probe_event_count" in recovery_script
+    assert "probe_tool_count" in recovery_script
     assert "test_replay_persists_one_append_only_fill" in recovery_script
 
 
