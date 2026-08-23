@@ -84,6 +84,7 @@ normalized_record = Table(
         "raw_data_object_id", UUID(as_uuid=True), ForeignKey("raw_data_object.id"), nullable=False
     ),
     Column("record_type", Text),
+    Column("record_key", Text, nullable=False),
     Column(
         "normalization_version",
         Text,
@@ -96,8 +97,25 @@ normalized_record = Table(
         "raw_data_object_id",
         "record_type",
         "normalization_version",
+        "record_key",
         name="uq_normalized_record_version",
     ),
+)
+normalization_rejection = Table(
+    "normalization_rejection",
+    metadata,
+    uuid_pk(),
+    Column(
+        "raw_data_object_id",
+        UUID(as_uuid=True),
+        ForeignKey("raw_data_object.id"),
+        nullable=False,
+    ),
+    Column("record_key", Text),
+    Column("normalization_version", Text, nullable=False),
+    Column("error_class", Text, nullable=False),
+    Column("error_detail", JSONB, nullable=False),
+    created_at(),
 )
 derived_metric = Table(
     "derived_metric",
@@ -602,6 +620,9 @@ normalization_dispatch = Table(
         nullable=False,
     ),
     Column("normalization_version", Text, nullable=False),
+    Column("record_type", Text, nullable=False),
+    Column("record_key", Text, nullable=False),
+    Column("normalized_payload", JSONB, nullable=False),
     Column("state", Text, nullable=False, server_default=text("'PENDING'")),
     Column("attempt_count", Integer, nullable=False, server_default=text("0")),
     Column("lease_token", UUID(as_uuid=True)),
@@ -618,6 +639,11 @@ normalization_dispatch = Table(
     CheckConstraint(
         "attempt_count >= 0 AND lease_generation >= 0",
         name=conv("ck_normalization_dispatch_counts"),
+    ),
+    CheckConstraint(
+        "(state = 'CLAIMED' AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL) OR "
+        "(state <> 'CLAIMED' AND lease_token IS NULL AND lease_expires_at IS NULL)",
+        name=conv("ck_normalization_dispatch_lease"),
     ),
     UniqueConstraint(
         "raw_data_object_id",

@@ -11,6 +11,12 @@ APPEND_ONLY_TABLES = {
     "tool_call",
     "agent_event",
     "risk_decision",
+    "raw_data_object",
+    "normalized_record",
+    "normalization_rejection",
+    "ingestion_attempt",
+    "ingestion_dead_letter",
+    "ingestion_raw_link",
 }
 
 
@@ -85,6 +91,75 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
         risk_decision_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         market_context_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         transaction_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
+        raw_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
+        ingestion_job_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
+        ingestion_fixtures = (
+            """
+                INSERT INTO raw_data_object (
+                    id, provider, feed_type, event_time, available_at, ingested_at,
+                    content_hash, raw_object_key
+                ) VALUES (
+                    :raw_id, 'FIXTURE', 'price_bars', now() - interval '2 minutes',
+                    now() - interval '1 minute', now(), repeat('a', 64),
+                    'append-only/raw.json'
+                )
+            """,
+            """
+                INSERT INTO normalized_record (
+                    raw_data_object_id, record_type, record_key,
+                    normalization_version, payload
+                ) VALUES (
+                    :raw_id, 'price_bars', 'FIXTURE', 'append-only-v1',
+                    '{"symbol":"FIXTURE"}'::jsonb
+                )
+            """,
+            """
+                INSERT INTO normalization_rejection (
+                    raw_data_object_id, record_key, normalization_version,
+                    error_class, error_detail
+                ) VALUES (
+                    :raw_id, 'FIXTURE:rejected', 'append-only-v1',
+                    'SCHEMA_DRIFT', '{"field":"fixture"}'::jsonb
+                )
+            """,
+            """
+                INSERT INTO ingestion_job (
+                    id, request_hash, request_payload, provider, dataset,
+                    window_start, window_end, purpose, state, max_attempts,
+                    attempt_count, lease_generation, policy_version, completed_at
+                ) VALUES (
+                    :ingestion_job_id, repeat('b', 64), '{}'::jsonb, 'FIXTURE',
+                    'price_bars', now() - interval '2 minutes', now(), 'RESEARCH',
+                    'DEAD_LETTER', 1, 1, 1, 'append-only-v1', now()
+                )
+            """,
+            """
+                INSERT INTO ingestion_attempt (
+                    job_id, attempt_number, lease_generation, worker_id,
+                    started_at, finished_at, outcome, error_class, error_detail
+                ) VALUES (
+                    :ingestion_job_id, 1, 1, 'fixture-worker',
+                    now() - interval '2 minutes', now() - interval '1 minute',
+                    'DEAD_LETTER', 'SCHEMA_DRIFT', '{"field":"fixture"}'::jsonb
+                )
+            """,
+            """
+                INSERT INTO ingestion_dead_letter (
+                    job_id, attempt_number, error_class, error_detail
+                ) VALUES (
+                    :ingestion_job_id, 1, 'SCHEMA_DRIFT', '{"field":"fixture"}'::jsonb
+                )
+            """,
+            """
+                INSERT INTO ingestion_raw_link (job_id, raw_data_object_id)
+                VALUES (:ingestion_job_id, :raw_id)
+            """,
+        )
+        for statement in ingestion_fixtures:
+            connection.execute(
+                text(statement),
+                {"raw_id": raw_id, "ingestion_job_id": ingestion_job_id},
+            )
         connection.execute(
             text(
                 """
@@ -197,6 +272,12 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
             "paper_fill",
             "cash_ledger",
             "risk_decision",
+            "raw_data_object",
+            "normalized_record",
+            "normalization_rejection",
+            "ingestion_attempt",
+            "ingestion_dead_letter",
+            "ingestion_raw_link",
         }:
             connection.execute(text(f"INSERT INTO {table_name} DEFAULT VALUES"))
 

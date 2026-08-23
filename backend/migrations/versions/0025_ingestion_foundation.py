@@ -391,6 +391,9 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("normalization_version", sa.Text(), nullable=False),
+        sa.Column("record_type", sa.Text(), nullable=False),
+        sa.Column("record_key", sa.Text(), nullable=False),
+        sa.Column("normalized_payload", postgresql.JSONB(), nullable=False),
         sa.Column("state", sa.Text(), nullable=False, server_default=sa.text("'PENDING'")),
         sa.Column("attempt_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("lease_token", postgresql.UUID(as_uuid=True)),
@@ -413,6 +416,12 @@ def upgrade() -> None:
             "attempt_count >= 0 AND lease_generation >= 0",
             name=op.f("ck_normalization_dispatch_counts"),
         ),
+        sa.CheckConstraint(
+            "(state = 'CLAIMED' AND lease_token IS NOT NULL "
+            "AND lease_expires_at IS NOT NULL) OR "
+            "(state <> 'CLAIMED' AND lease_token IS NULL AND lease_expires_at IS NULL)",
+            name=op.f("ck_normalization_dispatch_lease"),
+        ),
         sa.UniqueConstraint(
             "raw_data_object_id",
             "normalization_version",
@@ -428,8 +437,61 @@ def upgrade() -> None:
             """
         )
 
+    op.add_column("normalized_record", sa.Column("record_key", sa.Text(), nullable=True))
+    op.execute(
+        """
+        UPDATE normalized_record
+        SET record_key = COALESCE(payload->>'symbol', 'legacy:' || id::text)
+        """
+    )
+    op.alter_column(
+        "normalized_record",
+        "record_key",
+        existing_type=sa.Text(),
+        nullable=False,
+    )
+    op.drop_constraint("uq_normalized_record_version", "normalized_record", type_="unique")
+    op.create_unique_constraint(
+        "uq_normalized_record_version",
+        "normalized_record",
+        ["raw_data_object_id", "record_type", "normalization_version", "record_key"],
+    )
+    op.create_table(
+        "normalization_rejection",
+        _uuid_pk(),
+        sa.Column(
+            "raw_data_object_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("raw_data_object.id"),
+            nullable=False,
+        ),
+        sa.Column("record_key", sa.Text()),
+        sa.Column("normalization_version", sa.Text(), nullable=False),
+        sa.Column("error_class", sa.Text(), nullable=False),
+        sa.Column("error_detail", postgresql.JSONB(), nullable=False),
+        _created_at(),
+    )
+    for table in ("raw_data_object", "normalized_record", "normalization_rejection"):
+        op.execute(
+            f"""
+            CREATE TRIGGER enforce_append_only
+            BEFORE UPDATE OR DELETE ON {table}
+            FOR EACH ROW EXECUTE FUNCTION reject_append_only_mutation()
+            """
+        )
+
 
 def downgrade() -> None:
+    op.drop_table("normalization_rejection")
+    op.execute("DROP TRIGGER enforce_append_only ON normalized_record")
+    op.execute("DROP TRIGGER enforce_append_only ON raw_data_object")
+    op.drop_constraint("uq_normalized_record_version", "normalized_record", type_="unique")
+    op.create_unique_constraint(
+        "uq_normalized_record_version",
+        "normalized_record",
+        ["raw_data_object_id", "record_type", "normalization_version"],
+    )
+    op.drop_column("normalized_record", "record_key")
     op.drop_table("normalization_dispatch")
     op.drop_table("ingestion_raw_link")
     op.drop_table("ingestion_dead_letter")

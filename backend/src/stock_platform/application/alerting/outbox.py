@@ -382,6 +382,7 @@ class PostgresAlertStore:
                     .values(
                         raw_data_object_id=raw_id,
                         record_type="market_bar",
+                        record_key=f"{item.symbol}:{item.event_time.isoformat()}",
                         normalization_version="alpaca-stream-v1",
                         payload=_json_safe(item.raw_payload),
                     )
