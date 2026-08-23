@@ -1569,3 +1569,36 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
 - Fresh `make verify` exited 0: Ruff clean, strict Mypy clean over 209 files, Alembic/MCP/OpenAPI
   drift clean, backend 370 passed / 3 explicit credential-gated skips with no warning, Web 10 files /
   41 passed, TypeScript/ESLint clean, and all ten Next.js routes built.
+
+### Watchlist persisted API vertical slice — 2026-08-23
+
+- Scope: connected only the Watchlist page to the existing FastAPI GET/POST/PATCH/DELETE contract.
+  `WEB_DATA_MODE=api` is fail-closed: unavailable, timed-out, non-success, invalid-JSON, or invalid-
+  contract responses render explicit Failure and never load Fixture data. Valid persisted Watchlist
+  configuration with unavailable market/research/earnings/quality enrichment renders Degraded and
+  labels each missing fact `Unavailable`; no zero price, ABSTAIN, NO_ACTION, or TradingView chart is
+  fabricated. No Provider ingestion, new public endpoint, live broker, or real-money path was added.
+- TDD unit/component evidence: parser RED failed because `watchlist-contract` was absent; client RED
+  failed because the server modules were absent; mutation RED failed eight tests because the locked
+  write functions were absent; route RED showed the fixture-only page; configuration RED failed two
+  tests because `readWebDataConfig` was absent. Final focused Web command exited 0 with 14 files and
+  91 tests passed. TypeScript and ESLint each exited 0.
+- Real persistence RED: `WEB_DATA_MODE=api API_BASE_URL=http://127.0.0.1:8000 pnpm --dir web exec
+  playwright test e2e/watchlist-api.spec.ts --project=desktop-chrome` initially exited 1 because the
+  Playwright web-server command hard-coded Fixture mode. The corrected config passes the caller's
+  explicit server-only mode and URL to Next.js.
+- Real persistence GREEN: with local FastAPI on `127.0.0.1:8000` and healthy PostgreSQL on
+  `127.0.0.1:55432`, the desktop Playwright run on port 3100 exited 0: 1 passed / 1 controlled-failure
+  case skipped. It added only `QAWEBAPI`, persisted schedule controls and Decimal threshold `0.031`,
+  proved both after page reload, deleted the row, and performed exact-symbol cleanup.
+- Fail-closed browser GREEN: the same test file with `API_BASE_URL=http://127.0.0.1:9`,
+  `EXPECT_API_FAILURE=1`, and web port 3101 exited 0: 1 Failure-path case passed / 1 persistence case
+  skipped. The page contained no Fixture notice, fixture provider, or fixture Watchlist table.
+- Backend focused evidence: the first command exited 2 because the sandbox denied the default uv
+  cache; the repository-cache retry exited 1 because the sandbox denied localhost PostgreSQL. The
+  authorized identical test with repository cache exited 0: 1 passed / 10 deselected in 0.49s.
+- Full repository gate: `make verify` exited 0. Ruff format/lint, strict Mypy over 209 files,
+  Alembic/MCP/OpenAPI drift checks, TypeScript, ESLint, and the Next.js production build passed.
+  Backend: 370 passed / 3 credential-gated skipped. Web: 14 files / 91 passed. Node emitted the same
+  environment-level `--localstorage-file` warning seen in the untouched worktree baseline; there
+  were no assertion, build, Python, Starlette/httpx, or Docker ownership warnings.
