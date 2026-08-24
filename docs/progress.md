@@ -1850,3 +1850,25 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
 - Boundaries preserved: the scheduling surface is GET/read-only data ingestion. It adds no public
   endpoint, UI, Fixture API fallback, MarketTrade table, broker credential, order execution, or
   real-money capability.
+
+#### Task 10 — RDB-2 acceptance
+
+- The first full acceptance attempt exited 2 before tests because MCP snapshots exposed the new
+  internal WebSocket Trade/Quote/Status feed labels as public `FeedType` values. Root-cause review
+  classified this as an unintended public-contract expansion. Commit `a00a1e2` introduced an
+  internal-only `ProviderEventFeed`; the recorded stream behavior remained intact while MCP contract
+  drift returned to zero. Its focused verification exited 0 with 35 passed / 3 live credential-gated
+  skipped; Ruff, strict Mypy, and MCP snapshot check also exited 0.
+- Corrected `make verify` run 1 — exit 0: 267 files format clean; Ruff clean; strict Mypy clean over
+  235 source files; Alembic reported no new upgrade operations; MCP and OpenAPI snapshots matched;
+  backend 511 passed / 3 credential-gated live tests skipped; Web TypeScript and ESLint clean;
+  Vitest 14 files / 94 tests passed; Next.js 15.4.6 production build completed for 9 routes.
+- Corrected `make verify` run 2 — exit 0 with the same gates and counts: backend 511 passed / 3
+  credential-gated skipped, Web 14 files / 94 tests passed, and the nine-route production build
+  succeeded. This proves the full verification loop is repeatable.
+- Live Alpaca smoke was not executed because this environment has no real Provider credentials or
+  verified entitlements. The three opt-in live contracts were explicitly skipped; no result,
+  entitlement, response, performance number, or market datum was fabricated.
+- RDB-2 acceptance is satisfied locally. FRE-25 remains `In Progress` until this final evidence
+  commit is pushed and the issue is moved to `In Review`; it must not be marked Done before PR/CI,
+  review, and merge.
