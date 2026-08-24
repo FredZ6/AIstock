@@ -642,7 +642,10 @@ def _normalize_alpaca_dispatched_record(
             .mappings()
             .one()
         )
-    envelope = json.loads(raw_store.get(str(source["raw_object_key"])))
+    envelope_bytes = raw_store.get(str(source["raw_object_key"]))
+    if hashlib.sha256(envelope_bytes).hexdigest() != source["content_hash"]:
+        raise ValueError("Alpaca raw envelope content hash mismatch")
+    envelope = json.loads(envelope_bytes)
     if not isinstance(envelope, dict):
         raise ValueError("Alpaca raw envelope must be an object")
     try:
@@ -650,8 +653,18 @@ def _normalize_alpaca_dispatched_record(
         feed_type = FeedType(str(envelope["feed_type"]))
         symbol = Symbol(str(envelope["symbol"]))
         provider = str(envelope["provider"])
+        body_sha256 = str(envelope["body_sha256"])
     except (KeyError, ValueError) as error:
         raise ValueError("Alpaca raw envelope identity is invalid") from error
+    if hashlib.sha256(body).hexdigest() != body_sha256:
+        raise ValueError("Alpaca raw body content hash mismatch")
+    expected_symbol = str(source["normalized_payload"].get("symbol"))
+    if (
+        provider != source["provider"]
+        or feed_type.value != source["feed_type"]
+        or str(symbol) != expected_symbol
+    ):
+        raise ValueError("Alpaca raw envelope identity mismatch")
     coverage = envelope.get("coverage")
     timeframe = envelope.get("timeframe")
     headers = ({"X-AIStock-Verified-Coverage": str(coverage)} if coverage is not None else {}) | (

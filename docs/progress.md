@@ -2049,3 +2049,10 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   skipped, Web 14 files / 94 tests passed, and the nine-route Next.js build succeeded.
 - Repeatability run 2: `make verify` exited 0 with the same gates and counts. Alpaca credentials remain
   pending account approval; no live request or result was fabricated.
+- A final standards pass identified a MinIO overwrite integrity boundary. Recovery now verifies the
+  archived envelope against `RawDataObject.content_hash`, verifies decoded bytes against
+  `body_sha256`, and matches provider/feed/symbol to frozen PostgreSQL identity before creating facts.
+  Missing-identity and valid-schema body-tamper regressions exited 0 with 2 passed and no typed fact;
+  the expanded related suite exited 0 with 87 passed. The final post-fix `make verify` exited 0 with
+  backend 559 passed / 3 credential-gated live tests skipped and Web 94 passed; all other gates and
+  the nine-route build remained clean.

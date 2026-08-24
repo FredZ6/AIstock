@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+from base64 import b64encode
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -192,10 +194,12 @@ def test_rest_semantic_schema_drift_keeps_raw_object_and_rejection(
     engine.dispose()
 
 
-def test_recovery_envelope_missing_provider_records_schema_drift_rejection(
+@pytest.mark.parametrize("tamper", ["missing-provider", "valid-body"])
+def test_recovery_rejects_tampered_envelope_and_records_schema_drift(
     isolated_database_url: str,
     isolated_minio_store: MinioRawObjectStore,
     monkeypatch: pytest.MonkeyPatch,
+    tamper: str,
 ) -> None:
     command.upgrade(_alembic_config(isolated_database_url), "head")
     engine = create_engine(isolated_database_url)
@@ -222,7 +226,12 @@ def test_recovery_envelope_missing_provider_records_schema_drift_rejection(
     with engine.connect() as connection:
         raw_row = connection.execute(select(raw_data_object)).mappings().one()
     envelope = json.loads(isolated_minio_store.get(raw_row["raw_object_key"]))
-    envelope.pop("provider")
+    if tamper == "missing-provider":
+        envelope.pop("provider")
+    else:
+        replacement = PAGE_1.body.replace(b'"c":"180.5"', b'"c":"999.0"')
+        envelope["body_base64"] = b64encode(replacement).decode("ascii")
+        envelope["body_sha256"] = hashlib.sha256(replacement).hexdigest()
     isolated_minio_store.put(
         raw_row["raw_object_key"],
         json.dumps(envelope).encode(),
@@ -243,6 +252,7 @@ def test_recovery_envelope_missing_provider_records_schema_drift_rejection(
             ).scalar_one()
             == 1
         )
+        assert connection.execute(select(func.count()).select_from(market_bar)).scalar_one() == 0
     engine.dispose()
 
 
