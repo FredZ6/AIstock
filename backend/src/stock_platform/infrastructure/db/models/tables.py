@@ -1201,8 +1201,16 @@ market_bar = time_series_table(
     Column(
         "raw_data_object_id", UUID(as_uuid=True), ForeignKey("raw_data_object.id"), nullable=False
     ),
+    Column(
+        "normalized_record_id",
+        UUID(as_uuid=True),
+        ForeignKey("normalized_record.id"),
+        nullable=True,
+    ),
     Column("provider", Text, nullable=False),
     Column("feed_type", Text, nullable=False),
+    Column("coverage", Text),
+    Column("session", Text),
     Column("content_hash", Text, nullable=False),
     Column("raw_object_key", Text, nullable=False),
     Column("available_at", DateTime(timezone=True), nullable=False),
@@ -1218,6 +1226,14 @@ market_bar = time_series_table(
     CheckConstraint(
         "event_time <= available_at AND available_at <= ingested_at",
         name=conv("ck_market_bar_times"),
+    ),
+    CheckConstraint(
+        "coverage IS NULL OR coverage IN ('IEX', 'SIP')",
+        name=conv("ck_market_bar_coverage"),
+    ),
+    CheckConstraint(
+        "session IS NULL OR session IN ('PRE_MARKET', 'REGULAR', 'AFTER_HOURS', 'OVERNIGHT')",
+        name=conv("ck_market_bar_session"),
     ),
 )
 Index(
@@ -1236,6 +1252,44 @@ Index(
     market_bar.c.available_at.desc(),
     market_bar.c.ingested_at.desc(),
 )
+news_article = Table(
+    "news_article",
+    metadata,
+    uuid_pk(),
+    Column(
+        "raw_data_object_id", UUID(as_uuid=True), ForeignKey("raw_data_object.id"), nullable=False
+    ),
+    Column(
+        "normalized_record_id",
+        UUID(as_uuid=True),
+        ForeignKey("normalized_record.id"),
+        nullable=False,
+    ),
+    Column("provider", Text, nullable=False),
+    Column("article_id", Text, nullable=False),
+    Column("symbols", JSONB, nullable=False),
+    Column("headline", Text, nullable=False),
+    Column("source", Text, nullable=False),
+    Column("summary", Text, nullable=False),
+    Column("published_at", DateTime(timezone=True), nullable=False),
+    Column("observed_at", DateTime(timezone=True)),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("ingested_at", DateTime(timezone=True), nullable=False),
+    Column("pit_eligible", Boolean, nullable=False),
+    Column("payload", JSONB, nullable=False),
+    created_at(),
+    CheckConstraint(
+        "published_at <= available_at AND available_at <= ingested_at",
+        name=conv("ck_news_article_times"),
+    ),
+    UniqueConstraint(
+        "provider",
+        "article_id",
+        "normalized_record_id",
+        name="uq_news_article_version",
+    ),
+)
+Index("news_article_pit_idx", news_article.c.published_at, news_article.c.available_at)
 option_snapshot = time_series_table(
     "option_snapshot",
     Column("symbol", Text, nullable=False),

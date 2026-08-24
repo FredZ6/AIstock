@@ -588,6 +588,11 @@ def test_out_of_order_bar_still_has_complete_database_lineage(
         ).scalar_one()
         == 1
     )
+    assert connection.execute(
+        select(market_bar.c.coverage, market_bar.c.session).where(
+            market_bar.c.raw_data_object_id == raw_id
+        )
+    ).one() == ("IEX", "REGULAR")
 
 
 def test_alpaca_raw_bytes_exist_in_minio_before_database_lineage(

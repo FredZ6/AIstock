@@ -17,6 +17,13 @@ APPEND_ONLY_TABLES = {
     "ingestion_attempt",
     "ingestion_dead_letter",
     "ingestion_raw_link",
+    "market_bar",
+    "news_article",
+}
+
+UPDATE_PROBE_COLUMNS = {
+    "market_bar": "event_time",
+    "news_article": "published_at",
 }
 
 
@@ -163,6 +170,41 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
         connection.execute(
             text(
                 """
+                INSERT INTO market_bar (
+                    event_time, symbol, raw_data_object_id, normalized_record_id,
+                    provider, feed_type, coverage, session, content_hash,
+                    raw_object_key, available_at, ingested_at, close, volume
+                ) VALUES (
+                    now() - interval '2 minutes', 'FIXTURE', :raw_id,
+                    (SELECT id FROM normalized_record WHERE raw_data_object_id = :raw_id LIMIT 1),
+                    'FIXTURE', 'price_bars', 'IEX', 'REGULAR', repeat('a', 64),
+                    'append-only/raw.json', now() - interval '1 minute', now(), 1, 1
+                )
+                """
+            ),
+            {"raw_id": raw_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO news_article (
+                    raw_data_object_id, normalized_record_id, provider, article_id,
+                    symbols, headline, source, summary, published_at, available_at,
+                    ingested_at, pit_eligible, payload
+                ) VALUES (
+                    :raw_id,
+                    (SELECT id FROM normalized_record WHERE raw_data_object_id = :raw_id LIMIT 1),
+                    'FIXTURE', 'append-only-news', '["FIXTURE"]'::jsonb,
+                    'Append-only fixture', 'fixture', '', now() - interval '2 minutes',
+                    now() - interval '1 minute', now(), false, '{}'::jsonb
+                )
+                """
+            ),
+            {"raw_id": raw_id},
+        )
+        connection.execute(
+            text(
+                """
                 INSERT INTO market_context_snapshot (
                     id, as_of, available_at, algorithm_version, source_lineage
                 ) VALUES (
@@ -278,13 +320,17 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
             "ingestion_attempt",
             "ingestion_dead_letter",
             "ingestion_raw_link",
+            "market_bar",
+            "news_article",
         }:
             connection.execute(text(f"INSERT INTO {table_name} DEFAULT VALUES"))
 
         for operation in ("UPDATE", "DELETE"):
             for table_name in sorted(APPEND_ONLY_TABLES):
                 statement = (
-                    f"{operation} {table_name} SET created_at = created_at"
+                    f"{operation} {table_name} SET "
+                    f"{UPDATE_PROBE_COLUMNS.get(table_name, 'created_at')} = "
+                    f"{UPDATE_PROBE_COLUMNS.get(table_name, 'created_at')}"
                     if operation == "UPDATE"
                     else f"{operation} FROM {table_name}"
                 )

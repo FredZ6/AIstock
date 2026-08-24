@@ -1792,3 +1792,32 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   exited 0: 20 passed. The post-refactor stream unit/integration command exited 0: 13 passed.
 - Boundaries preserved: no public API/UI, MarketTrade table, Fixture fallback, live broker, order
   execution, or real-money path was added. Provider-specific fact normalization remains Task 8.
+
+#### Task 8 — normalize and persist Alpaca bars and news
+
+- TDD RED evidence: recorded Alpaca REST bars/news and WebSocket event fixtures initially failed
+  because the provider-specific normalizer and fact store did not exist, trade messages were not
+  decoded, historical news incorrectly inferred observation time, and persisted stream bars omitted
+  coverage/session. The database integration initially failed because `news_article` and normalized
+  market-bar lineage were absent. Each RED exited 1 for the targeted missing behavior.
+- GREEN implementation: `AlpacaNormalizer` parses JSON decimals without binary floats, requires
+  aware UTC timestamps, assigns explicit IEX/SIP coverage and New York session labels, and marks
+  historical news without provider-observed time as not point-in-time eligible. The stream decoder
+  now recognizes bar, updated-bar, trade, quote, and market-status envelopes while the compatibility
+  alert path persists only supported bars.
+- Migration `0026_alpaca_market_news` adds normalized lineage, coverage/session constraints and
+  append-only protection to `market_bar`, creates append-only `news_article`, and backfills existing
+  bar lineage without deleting or rewriting historical facts. A dedicated 0025-to-head test proves
+  an existing market bar survives and receives its matching NormalizedRecord ID. No `market_trade`
+  table was added; unsupported trade/quote/status facts remain RawDataObject/NormalizedRecord only.
+- `PostgresAlpacaFactStore` owns idempotent append-only bar/news persistence and verifies every
+  NormalizedRecord belongs to the same RawDataObject. Duplicate delivery performs deterministic
+  reread/equality checks and never UPDATEs historical facts. The existing alert replay store now
+  persists normalized lineage plus IEX/session metadata.
+- Final related command exited 0 with 23 passed across recorded provider contracts, stream decoding,
+  Alpaca fact persistence, alert replay, database append-only checks, and 0025-to-0026 migration
+  preservation. Ruff formatting/lint exited 0 over 264 files, strict Mypy exited 0 over 232 source
+  files, `alembic check` exited 0 with no upgrade operations, and `git diff --check` exited 0.
+- Boundaries preserved: no UI/public API, live broker, order path, Fixture fallback, invented
+  provider response, or binary-float money path was added. Holiday/half-day entitlement handling,
+  bounded backfill, gap recovery, and reconciliation remain ordered Task 9 work.

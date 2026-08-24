@@ -28,8 +28,15 @@ class AlpacaStreamDecoder:
             decoded = json.loads(raw)
         except (json.JSONDecodeError, UnicodeDecodeError) as error:
             raise ValueError("Alpaca stream payload is invalid JSON") from error
-        if not isinstance(decoded, dict) or decoded.get("T") not in {"b", "u"}:
-            raise ValueError("Alpaca stream payload must be a minute bar")
+        event_types = {
+            "b": (FeedType.PRICE_BARS, "bar"),
+            "u": (FeedType.PRICE_BARS, "updated_bar"),
+            "t": (FeedType.TRADES, "trade"),
+            "q": (FeedType.QUOTES, "quote"),
+            "s": (FeedType.MARKET_STATUS, "status"),
+        }
+        if not isinstance(decoded, dict) or decoded.get("T") not in event_types:
+            raise ValueError("Alpaca stream payload must be a supported event")
         try:
             event_time = datetime.fromisoformat(str(decoded["t"]).replace("Z", "+00:00"))
             symbol = Symbol(str(decoded["S"]))
@@ -38,11 +45,12 @@ class AlpacaStreamDecoder:
         event_time = require_aware(event_time).astimezone(UTC)
         if event_time > observed_at:
             raise ValueError("Alpaca event_time cannot be in the future")
+        feed_type, event_kind = event_types[str(decoded["T"])]
         return ProviderEvent(
             provider="ALPACA",
-            feed_type=FeedType.PRICE_BARS,
+            feed_type=feed_type,
             symbol=symbol,
-            event_kind="bar" if decoded["T"] == "b" else "updated_bar",
+            event_kind=event_kind,
             event_time=event_time,
             observed_at=observed_at,
             body=raw,
@@ -56,6 +64,8 @@ class AlpacaStreamNormalizer:
 
     def normalize(self, raw: bytes, *, received_at: datetime) -> MinuteBar:
         event = self._decoder.decode(raw, received_at=received_at)
+        if event.feed_type is not FeedType.PRICE_BARS:
+            raise ValueError("Alpaca stream payload must be a minute bar")
         try:
             decoded = json.loads(raw, parse_float=Decimal, parse_int=Decimal)
         except (json.JSONDecodeError, UnicodeDecodeError) as error:
