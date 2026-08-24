@@ -138,10 +138,17 @@ class ProviderBatch:
         require_aware(self.observed_at)
 
 
+class ProviderEventFeed(StrEnum):
+    PRICE_BARS = "price_bars"
+    TRADES = "trades"
+    QUOTES = "quotes"
+    MARKET_STATUS = "market_status"
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderEvent:
     provider: str
-    feed_type: FeedType
+    feed_type: ProviderEventFeed
     symbol: Symbol
     event_kind: str
     event_time: datetime

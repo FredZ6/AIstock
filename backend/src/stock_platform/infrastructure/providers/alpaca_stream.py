@@ -11,7 +11,11 @@ from typing import cast
 from stock_platform.application.alerting.features import MinuteBar
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
-from stock_platform.infrastructure.providers.base import FeedType, ProviderEvent, RawObjectStore
+from stock_platform.infrastructure.providers.base import (
+    ProviderEvent,
+    ProviderEventFeed,
+    RawObjectStore,
+)
 
 
 def _decimal(payload: dict[str, object], key: str) -> Decimal:
@@ -29,11 +33,11 @@ class AlpacaStreamDecoder:
         except (json.JSONDecodeError, UnicodeDecodeError) as error:
             raise ValueError("Alpaca stream payload is invalid JSON") from error
         event_types = {
-            "b": (FeedType.PRICE_BARS, "bar"),
-            "u": (FeedType.PRICE_BARS, "updated_bar"),
-            "t": (FeedType.TRADES, "trade"),
-            "q": (FeedType.QUOTES, "quote"),
-            "s": (FeedType.MARKET_STATUS, "status"),
+            "b": (ProviderEventFeed.PRICE_BARS, "bar"),
+            "u": (ProviderEventFeed.PRICE_BARS, "updated_bar"),
+            "t": (ProviderEventFeed.TRADES, "trade"),
+            "q": (ProviderEventFeed.QUOTES, "quote"),
+            "s": (ProviderEventFeed.MARKET_STATUS, "status"),
         }
         if not isinstance(decoded, dict) or decoded.get("T") not in event_types:
             raise ValueError("Alpaca stream payload must be a supported event")
@@ -64,7 +68,7 @@ class AlpacaStreamNormalizer:
 
     def normalize(self, raw: bytes, *, received_at: datetime) -> MinuteBar:
         event = self._decoder.decode(raw, received_at=received_at)
-        if event.feed_type is not FeedType.PRICE_BARS:
+        if event.feed_type is not ProviderEventFeed.PRICE_BARS:
             raise ValueError("Alpaca stream payload must be a minute bar")
         try:
             decoded = json.loads(raw, parse_float=Decimal, parse_int=Decimal)

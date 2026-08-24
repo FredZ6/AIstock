@@ -24,9 +24,6 @@ class FeedType(StrEnum):
     OPTION_AGGREGATES = "option_aggregates"
     ESTIMATES = "estimates"
     TARGET_CONSENSUS = "target_consensus"
-    TRADES = "trades"
-    QUOTES = "quotes"
-    MARKET_STATUS = "market_status"
 
 
 class IngestionJobState(StrEnum):
