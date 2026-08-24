@@ -1713,3 +1713,28 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   Alembic/MCP/OpenAPI drift clean, backend 475 passed / 3 credential-gated skipped, Web 14 files / 94
   passed, TypeScript and ESLint clean, and the nine-route Next.js production build passed. The durable
   PostgreSQL container was restored after every isolated verification attempt.
+
+#### PR #12 second-review closure — 2026-08-24
+
+- The independent Standards review reported no P0/P1/P2 findings. The Spec review found two remaining
+  gaps: the read-only orphan detector had no operational entrypoint, and the point-in-time property
+  suite did not generate revised records. Both were reproduced before implementation: the focused RED
+  command exited 1 with 2 failed because the Beat entry and revision selector were absent.
+- Celery Beat now runs `report_minio_orphans` hourly. The task compares MinIO inventory with committed
+  RawDataObject keys, writes one warning per unreferenced object, returns only the count, and never
+  deletes objects. A real invocation exited 0 and reported 20 preserved `alpaca-stream/*` test objects
+  from the shared development bucket, demonstrating that the operational path is reachable and
+  non-destructive.
+- `select_latest_visible_revisions` enforces both time predicates and groups logical revisions by
+  symbol, feed, and event time. It deterministically selects the latest version visible at the cutoff
+  using availability, ingestion, content hash, and object key as stable ordering. The Hypothesis test
+  covers no-visible-version, original-visible, revised-visible, and exact cutoff behavior. The focused
+  GREEN command exited 0 with 2 passed; the expanded market-data/property/ingestion/schedule suite
+  exited 0 with 34 passed, and Ruff plus strict Mypy remained clean.
+- Fresh runtime evidence after both fixes: real MinIO lineage, recovery, concurrency, and failure tests
+  exited 0 with 32 passed. Final clean-database acceptance exited 0: empty-to-head migration and
+  Alembic drift passed; Seed remained idempotent at 11/31/31 then 0/31/0; `make verify` passed with 256
+  files format clean, Ruff clean, strict Mypy clean over 225 source files, backend 476 passed / 3
+  credential-gated skipped, Web 14 files / 94 passed, TypeScript/ESLint clean, and the nine-route
+  production build successful. The existing Node `--localstorage-file` environment warning remains
+  non-functional, and the long-lived PostgreSQL container was restored by the verification trap.

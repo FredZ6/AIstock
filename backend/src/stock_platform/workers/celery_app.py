@@ -28,4 +28,8 @@ celery_app.conf.beat_schedule = {
         "task": "stock_platform.workers.ingestion_tasks.dispatch_normalization_outbox",
         "schedule": 30.0,
     },
+    "report-minio-orphans": {
+        "task": "stock_platform.workers.ingestion_tasks.report_minio_orphans",
+        "schedule": 3600.0,
+    },
 }

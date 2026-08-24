@@ -56,3 +56,7 @@ def test_celery_is_at_least_once_without_authoritative_result_backend() -> None:
     assert beat_schedule["daily-research-after-close"]["schedule"].hour == {20, 21}
     assert beat_schedule["portfolio-fixed-cutoff"]["schedule"].hour == {20, 21}
     assert 21 in beat_schedule["intraday-market-monitor"]["schedule"].hour
+    assert celery_app.conf.beat_schedule["report-minio-orphans"] == {
+        "task": "stock_platform.workers.ingestion_tasks.report_minio_orphans",
+        "schedule": 3600.0,
+    }

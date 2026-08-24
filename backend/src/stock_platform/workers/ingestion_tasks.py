@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
@@ -9,17 +10,20 @@ from uuid import UUID, uuid4
 from sqlalchemy import Engine, and_, create_engine, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 
+from stock_platform.application.ingestion.raw_writer import report_orphaned_raw_objects
 from stock_platform.domain.common.time import require_aware
 from stock_platform.infrastructure.db.models.tables import (
     normalization_dispatch,
     normalization_rejection,
     normalized_record,
 )
+from stock_platform.infrastructure.providers.object_store import MinioRawObjectStore
 from stock_platform.settings import Settings
 
 PublishNormalization = Callable[[UUID, str], None]
 NORMALIZATION_MAX_ATTEMPTS = 5
 NORMALIZATION_RETRY_AFTER = timedelta(minutes=1)
+logger = logging.getLogger(__name__)
 
 
 def normalize_dispatched_record(
@@ -278,6 +282,22 @@ def dispatch_normalization_outbox() -> int:
             ),
             now=datetime.now(UTC),
         )
+    finally:
+        engine.dispose()
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
+    name="stock_platform.workers.ingestion_tasks.report_minio_orphans"
+)
+def report_minio_orphans() -> int:
+    settings = Settings()
+    engine = create_engine(settings.database_url)
+    try:
+        inventory = MinioRawObjectStore.from_settings(settings)
+        orphaned_keys = report_orphaned_raw_objects(engine, inventory)
+        for object_key in orphaned_keys:
+            logger.warning("unreferenced MinIO raw object: %s", object_key)
+        return len(orphaned_keys)
     finally:
         engine.dispose()
 

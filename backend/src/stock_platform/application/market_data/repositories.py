@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Protocol
 
@@ -29,6 +30,49 @@ def is_visible_at(*, event_time: datetime, available_at: datetime, decision_time
     available = require_aware(available_at)
     cutoff = require_aware(decision_time)
     return event <= cutoff and available <= cutoff
+
+
+def select_latest_visible_revisions(
+    records: Iterable[ProviderRecord],
+    *,
+    decision_time: datetime,
+) -> tuple[ProviderRecord, ...]:
+    cutoff = require_aware(decision_time)
+    latest: dict[tuple[Symbol, FeedType, datetime], ProviderRecord] = {}
+    for record in records:
+        if not is_visible_at(
+            event_time=record.event_time,
+            available_at=record.available_at,
+            decision_time=cutoff,
+        ):
+            continue
+        key = (record.symbol, record.feed_type, record.event_time)
+        existing = latest.get(key)
+        rank = (
+            record.available_at,
+            record.ingested_at,
+            record.content_hash,
+            record.raw_object_key,
+        )
+        if existing is None or rank > (
+            existing.available_at,
+            existing.ingested_at,
+            existing.content_hash,
+            existing.raw_object_key,
+        ):
+            latest[key] = record
+    return tuple(
+        sorted(
+            latest.values(),
+            key=lambda record: (
+                record.event_time,
+                record.available_at,
+                record.ingested_at,
+                record.content_hash,
+                record.raw_object_key,
+            ),
+        )
+    )
 
 
 class PostgresMarketDataRepository:
@@ -71,7 +115,7 @@ class PostgresMarketDataRepository:
                 normalized_record.c.id,
             )
         )
-        records = tuple(
+        candidates = tuple(
             ProviderRecord(
                 symbol=normalized_symbol,
                 feed_type=feed_type,
@@ -85,6 +129,7 @@ class PostgresMarketDataRepository:
             )
             for row in self._connection.execute(statement)
         )
+        records = select_latest_visible_revisions(candidates, decision_time=query_as_of)
         return ProviderResponse(
             status=ProviderStatus.OK if records else ProviderStatus.NOT_FOUND,
             provider=records[0].provider if records else "NONE",
