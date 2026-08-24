@@ -1987,3 +1987,18 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   tests skipped; Web TypeScript and ESLint clean; Vitest 14 files / 94 tests passed; and the nine-route
   Next.js production build succeeded. The existing Node `--localstorage-file` warning remains
   non-functional. No live Alpaca request was fabricated or attempted without credentials.
+
+#### PR #13 independent acceptance rerun — 2026-08-24
+
+- The focused Celery/MinIO/PostgreSQL, pagination/lease recovery, WebSocket replay, orphan recovery,
+  IEX/SIP isolation, point-in-time, append-only, API admission, and migration command exited 0 with
+  131 passed / 3 credential-gated live contracts skipped. Alpaca credentials remain unavailable
+  while the account application is under review; no live response or entitlement was fabricated.
+- Required repeatability run 1: `make verify` exited 0 with 272 files format clean, Ruff clean,
+  strict Mypy clean over 238 source files, no Alembic/MCP/OpenAPI drift, backend 550 passed / 3
+  credential-gated live contracts skipped, Web 14 files / 94 tests passed, and all nine Next.js
+  routes built successfully.
+- Required repeatability run 2: `make verify` exited 0 with the same gates and counts: backend
+  550 passed / 3 credential-gated live contracts skipped, Web 14 files / 94 tests passed, and the
+  nine-route production build succeeded. The existing Node `--localstorage-file` warning is
+  unchanged and non-functional.
