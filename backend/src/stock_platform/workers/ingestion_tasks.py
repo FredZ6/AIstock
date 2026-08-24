@@ -17,12 +17,14 @@ from stock_platform.infrastructure.db.models.tables import (
     normalization_rejection,
     normalized_record,
 )
+from stock_platform.infrastructure.observability.metrics import platform_metrics
 from stock_platform.infrastructure.providers.object_store import MinioRawObjectStore
 from stock_platform.settings import Settings
 
 PublishNormalization = Callable[[UUID, str], None]
 NORMALIZATION_MAX_ATTEMPTS = 5
 NORMALIZATION_RETRY_AFTER = timedelta(minutes=1)
+ORPHAN_LOG_SAMPLE_LIMIT = 20
 logger = logging.getLogger(__name__)
 
 
@@ -286,6 +288,22 @@ def dispatch_normalization_outbox() -> int:
         engine.dispose()
 
 
+def record_orphan_inventory(
+    orphaned_keys: tuple[str, ...],
+    *,
+    warning: Callable[..., None] = logger.warning,
+) -> int:
+    count = len(orphaned_keys)
+    platform_metrics.set_queue(queue="minio_orphans", depth=count)
+    if count:
+        warning(
+            "unreferenced MinIO raw objects: count=%d sample=%s",
+            count,
+            orphaned_keys[:ORPHAN_LOG_SAMPLE_LIMIT],
+        )
+    return count
+
+
 @celery_app.task(  # type: ignore[untyped-decorator]
     name="stock_platform.workers.ingestion_tasks.report_minio_orphans"
 )
@@ -295,9 +313,7 @@ def report_minio_orphans() -> int:
     try:
         inventory = MinioRawObjectStore.from_settings(settings)
         orphaned_keys = report_orphaned_raw_objects(engine, inventory)
-        for object_key in orphaned_keys:
-            logger.warning("unreferenced MinIO raw object: %s", object_key)
-        return len(orphaned_keys)
+        return record_orphan_inventory(orphaned_keys)
     finally:
         engine.dispose()
 

@@ -38,7 +38,9 @@ def select_latest_visible_revisions(
     decision_time: datetime,
 ) -> tuple[ProviderRecord, ...]:
     cutoff = require_aware(decision_time)
-    latest: dict[tuple[Symbol, FeedType, datetime], ProviderRecord] = {}
+    latest: dict[
+        tuple[Symbol, FeedType, datetime, str, str | None, str | None], ProviderRecord
+    ] = {}
     for record in records:
         if not is_visible_at(
             event_time=record.event_time,
@@ -46,7 +48,16 @@ def select_latest_visible_revisions(
             decision_time=cutoff,
         ):
             continue
-        key = (record.symbol, record.feed_type, record.event_time)
+        coverage = record.payload.get("coverage")
+        session = record.payload.get("session")
+        key = (
+            record.symbol,
+            record.feed_type,
+            record.event_time,
+            record.provider,
+            str(coverage) if coverage is not None else None,
+            str(session) if session is not None else None,
+        )
         existing = latest.get(key)
         rank = (
             record.available_at,
@@ -130,9 +141,10 @@ class PostgresMarketDataRepository:
             for row in self._connection.execute(statement)
         )
         records = select_latest_visible_revisions(candidates, decision_time=query_as_of)
+        providers = {record.provider for record in records}
         return ProviderResponse(
             status=ProviderStatus.OK if records else ProviderStatus.NOT_FOUND,
-            provider=records[0].provider if records else "NONE",
+            provider=next(iter(providers)) if len(providers) == 1 else "MULTIPLE",
             feed_type=feed_type,
             symbol=normalized_symbol,
             query_as_of=query_as_of,

@@ -51,24 +51,46 @@ def test_latest_revision_is_selected_only_after_it_becomes_visible(
         ProviderRecord(
             symbol=Symbol("NVDA"),
             feed_type=FeedType.PRICE_BARS,
-            provider="FIXTURE",
+            provider="ALPACA",
             event_time=event_time,
             available_at=first_available,
             ingested_at=first_available,
             content_hash="a" * 64,
             raw_object_key="fixture/original.json",
-            payload={"close": "100.00"},
+            payload={"close": "100.00", "coverage": "IEX", "session": "REGULAR"},
+        ),
+        ProviderRecord(
+            symbol=Symbol("NVDA"),
+            feed_type=FeedType.PRICE_BARS,
+            provider="ALPACA",
+            event_time=event_time,
+            available_at=revised_available,
+            ingested_at=revised_available,
+            content_hash="b" * 64,
+            raw_object_key="fixture/revised.json",
+            payload={"close": "101.00", "coverage": "IEX", "session": "REGULAR"},
+        ),
+        ProviderRecord(
+            symbol=Symbol("NVDA"),
+            feed_type=FeedType.PRICE_BARS,
+            provider="ALPACA",
+            event_time=event_time,
+            available_at=first_available,
+            ingested_at=first_available,
+            content_hash="c" * 64,
+            raw_object_key="fixture/sip.json",
+            payload={"close": "100.50", "coverage": "SIP", "session": "REGULAR"},
         ),
         ProviderRecord(
             symbol=Symbol("NVDA"),
             feed_type=FeedType.PRICE_BARS,
             provider="FIXTURE",
             event_time=event_time,
-            available_at=revised_available,
-            ingested_at=revised_available,
-            content_hash="b" * 64,
-            raw_object_key="fixture/revised.json",
-            payload={"close": "101.00"},
+            available_at=first_available,
+            ingested_at=first_available,
+            content_hash="d" * 64,
+            raw_object_key="fixture/provider.json",
+            payload={"close": "99.50", "coverage": "IEX", "session": "REGULAR"},
         ),
     )
 
@@ -77,6 +99,6 @@ def test_latest_revision_is_selected_only_after_it_becomes_visible(
     if decision_time < first_available:
         assert selected == ()
     elif decision_time < revised_available:
-        assert tuple(item.content_hash for item in selected) == ("a" * 64,)
+        assert {item.content_hash for item in selected} == {"a" * 64, "c" * 64, "d" * 64}
     else:
-        assert tuple(item.content_hash for item in selected) == ("b" * 64,)
+        assert {item.content_hash for item in selected} == {"b" * 64, "c" * 64, "d" * 64}

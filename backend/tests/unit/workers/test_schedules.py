@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime, time
 
 import pytest
+from stock_platform.workers import ingestion_tasks
 from stock_platform.workers.celery_app import celery_app
 from stock_platform.workers.schedules import (
     beat_schedule,
@@ -60,3 +61,24 @@ def test_celery_is_at_least_once_without_authoritative_result_backend() -> None:
         "task": "stock_platform.workers.ingestion_tasks.report_minio_orphans",
         "schedule": 3600.0,
     }
+
+
+def test_orphan_reporting_uses_one_bounded_summary() -> None:
+    reporter = getattr(ingestion_tasks, "record_orphan_inventory", None)
+    assert reporter is not None, "orphan reporting must aggregate and bound log volume"
+    orphaned = tuple(f"raw/{index:02d}.json" for index in range(25))
+    warnings: list[tuple[str, tuple[object, ...]]] = []
+
+    assert (
+        reporter(
+            orphaned,
+            warning=lambda message, *args: warnings.append((message, args)),
+        )
+        == 25
+    )
+
+    assert len(warnings) == 1
+    message, arguments = warnings[0]
+    assert message == "unreferenced MinIO raw objects: count=%d sample=%s"
+    assert arguments[0] == 25
+    assert arguments[1] == orphaned[:20]

@@ -1738,3 +1738,26 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   credential-gated skipped, Web 14 files / 94 passed, TypeScript/ESLint clean, and the nine-route
   production build successful. The existing Node `--localstorage-file` environment warning remains
   non-functional, and the long-lived PostgreSQL container was restored by the verification trap.
+
+#### PR #12 final review closure — 2026-08-24
+
+- The follow-up review found that grouping revisions only by symbol/feed/event time could silently
+  collapse parallel Provider or IEX/SIP coverage series, and that one warning per orphan could create
+  an unbounded hourly log storm. The new RED command exited 1 with 2 failed: generated cross-series
+  records were discarded and no bounded summary reporter existed.
+- Revision identity now additionally includes Provider, explicit coverage, and session. The property
+  regression generates an original plus correction within one ALPACA/IEX/regular-session series,
+  a parallel ALPACA/SIP series, and a parallel Fixture Provider series. Only the true correction is
+  folded; both parallel series remain visible. Multi-provider responses advertise `MULTIPLE` rather
+  than mislabeling the combined evidence as one Provider.
+- Orphan reporting now emits one aggregate warning with the total count and at most twenty sorted
+  object-key samples, while the fixed `minio_orphans` gauge records the full count. The report remains
+  read-only. A logging-configuration interaction initially made a combined `caplog` assertion fail;
+  an injected warning sink now verifies exactly one bounded call independently of global logging
+  configuration. The corrected expanded suite exited 0 with 41 passed; Ruff and strict Mypy passed.
+- Final clean-database gate exited 0: empty-to-head migration and Alembic drift passed; Seed remained
+  11/31/31 then 0/31/0; `make verify` passed with 256 files format clean, Ruff clean, strict Mypy clean
+  over 225 source files, backend 477 passed / 3 credential-gated skipped, Web 14 files / 94 passed,
+  TypeScript/ESLint clean, and the nine-route Next.js production build successful. The existing Node
+  `--localstorage-file` environment warning is unchanged and non-functional; the long-lived database
+  was restored after the isolated run.
