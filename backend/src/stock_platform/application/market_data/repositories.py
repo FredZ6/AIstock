@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Protocol
 
@@ -22,6 +23,67 @@ class PointInTimeRepository(Protocol):
     def as_of(
         self, *, symbol: str, feed_type: FeedType, decision_time: datetime
     ) -> ProviderResponse: ...
+
+
+def is_visible_at(*, event_time: datetime, available_at: datetime, decision_time: datetime) -> bool:
+    event = require_aware(event_time)
+    available = require_aware(available_at)
+    cutoff = require_aware(decision_time)
+    return event <= cutoff and available <= cutoff
+
+
+def select_latest_visible_revisions(
+    records: Iterable[ProviderRecord],
+    *,
+    decision_time: datetime,
+) -> tuple[ProviderRecord, ...]:
+    cutoff = require_aware(decision_time)
+    latest: dict[
+        tuple[Symbol, FeedType, datetime, str, str | None, str | None], ProviderRecord
+    ] = {}
+    for record in records:
+        if not is_visible_at(
+            event_time=record.event_time,
+            available_at=record.available_at,
+            decision_time=cutoff,
+        ):
+            continue
+        coverage = record.payload.get("coverage")
+        session = record.payload.get("session")
+        key = (
+            record.symbol,
+            record.feed_type,
+            record.event_time,
+            record.provider,
+            str(coverage) if coverage is not None else None,
+            str(session) if session is not None else None,
+        )
+        existing = latest.get(key)
+        rank = (
+            record.available_at,
+            record.ingested_at,
+            record.content_hash,
+            record.raw_object_key,
+        )
+        if existing is None or rank > (
+            existing.available_at,
+            existing.ingested_at,
+            existing.content_hash,
+            existing.raw_object_key,
+        ):
+            latest[key] = record
+    return tuple(
+        sorted(
+            latest.values(),
+            key=lambda record: (
+                record.event_time,
+                record.available_at,
+                record.ingested_at,
+                record.content_hash,
+                record.raw_object_key,
+            ),
+        )
+    )
 
 
 class PostgresMarketDataRepository:
@@ -53,6 +115,7 @@ class PostgresMarketDataRepository:
                 and_(
                     normalized_record.c.record_type == feed_type.value,
                     normalized_record.c.payload["symbol"].astext == str(normalized_symbol),
+                    raw_data_object.c.event_time <= query_as_of,
                     raw_data_object.c.available_at <= query_as_of,
                 )
             )
@@ -60,9 +123,10 @@ class PostgresMarketDataRepository:
                 raw_data_object.c.available_at,
                 raw_data_object.c.event_time,
                 raw_data_object.c.content_hash,
+                normalized_record.c.id,
             )
         )
-        records = tuple(
+        candidates = tuple(
             ProviderRecord(
                 symbol=normalized_symbol,
                 feed_type=feed_type,
@@ -76,9 +140,11 @@ class PostgresMarketDataRepository:
             )
             for row in self._connection.execute(statement)
         )
+        records = select_latest_visible_revisions(candidates, decision_time=query_as_of)
+        providers = {record.provider for record in records}
         return ProviderResponse(
             status=ProviderStatus.OK if records else ProviderStatus.NOT_FOUND,
-            provider=records[0].provider if records else "NONE",
+            provider=next(iter(providers)) if len(providers) == 1 else "MULTIPLE",
             feed_type=feed_type,
             symbol=normalized_symbol,
             query_as_of=query_as_of,

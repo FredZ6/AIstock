@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from io import BytesIO
 from typing import Protocol, cast
 
@@ -21,6 +22,17 @@ class MinioClient(Protocol):
         length: int,
         content_type: str,
     ) -> object: ...
+
+    def list_objects(
+        self,
+        bucket_name: str,
+        prefix: str,
+        recursive: bool,
+    ) -> Iterable[MinioObject]: ...
+
+
+class MinioObject(Protocol):
+    object_name: str | None
 
 
 class MinioRawObjectStore:
@@ -49,4 +61,17 @@ class MinioRawObjectStore:
             BytesIO(content),
             len(content),
             content_type,
+        )
+
+    def list_keys(self, prefix: str = "") -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                item.object_name
+                for item in self._client.list_objects(
+                    self._bucket,
+                    prefix=prefix,
+                    recursive=True,
+                )
+                if item.object_name is not None
+            )
         )

@@ -107,6 +107,7 @@ def add_research_context(
             id=normalized_id,
             raw_data_object_id=raw_id,
             record_type="company_fact",
+            record_key=symbol,
             normalization_version="fixture-v1",
             payload={"symbol": symbol},
             created_at=created_at,

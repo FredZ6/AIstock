@@ -16,9 +16,20 @@ celery_app.conf.update(
         "stock_platform.workers.research_tasks",
         "stock_platform.workers.portfolio_tasks",
         "stock_platform.workers.review_tasks",
+        "stock_platform.workers.ingestion_tasks",
     ),
 )
 
 from stock_platform.workers.schedules import beat_schedule  # noqa: E402
 
-celery_app.conf.beat_schedule = beat_schedule
+celery_app.conf.beat_schedule = {
+    **beat_schedule,
+    "dispatch-normalization-outbox": {
+        "task": "stock_platform.workers.ingestion_tasks.dispatch_normalization_outbox",
+        "schedule": 30.0,
+    },
+    "report-minio-orphans": {
+        "task": "stock_platform.workers.ingestion_tasks.report_minio_orphans",
+        "schedule": 3600.0,
+    },
+}

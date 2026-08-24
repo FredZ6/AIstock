@@ -1,3 +1,4 @@
+import json
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -270,3 +271,101 @@ def test_0007_preserves_and_hardens_existing_append_only_facts(
         with pytest.raises(DBAPIError, match="append-only"):
             connection.execute(text("UPDATE paper_fill SET created_at = created_at"))
     engine.dispose()
+
+
+def test_0025_migrates_watchlist_identity_without_changing_configuration(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "0024_observability_correlation")
+    engine = create_engine(migration_database_url)
+    before = [
+        ("CUSTOM", True, False, {"return_5m": "0.07"}),
+        ("NVDA", False, True, {"price": "150.00", "volume": "1200000"}),
+    ]
+    with engine.begin() as connection:
+        for symbol, daily_research, intraday_monitoring, thresholds in before:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO watchlist_item (
+                        symbol, daily_research, intraday_monitoring, thresholds
+                    ) VALUES (
+                        :symbol, :daily_research, :intraday_monitoring,
+                        CAST(:thresholds AS jsonb)
+                    )
+                    """
+                ),
+                {
+                    "symbol": symbol,
+                    "daily_research": daily_research,
+                    "intraday_monitoring": intraday_monitoring,
+                    "thresholds": json.dumps(thresholds),
+                },
+            )
+    engine.dispose()
+
+    command.upgrade(config, "head")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        after = [
+            tuple(row)
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT symbol, daily_research, intraday_monitoring, thresholds
+                    FROM watchlist_item
+                    ORDER BY symbol
+                    """
+                )
+            ).all()
+        ]
+        identities = connection.execute(
+            text(
+                """
+                SELECT count(*), count(DISTINCT security_id), count(*) FILTER (
+                    WHERE security_id IS NULL
+                )
+                FROM watchlist_item
+                """
+            )
+        ).one()
+        resolved = [
+            tuple(row)
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT watchlist.symbol, identifier.identifier_value
+                    FROM watchlist_item AS watchlist
+                    JOIN security_identifier_version AS identifier
+                      ON identifier.security_id = watchlist.security_id
+                     AND identifier.identifier_type = 'PRIMARY_SYMBOL'
+                    ORDER BY watchlist.symbol
+                    """
+                )
+            ).all()
+        ]
+        primary_key = (
+            connection.execute(
+                text(
+                    """
+                SELECT attribute.attname
+                FROM pg_index AS index
+                JOIN pg_attribute AS attribute
+                  ON attribute.attrelid = index.indrelid
+                 AND attribute.attnum = ANY(index.indkey)
+                WHERE index.indrelid = 'watchlist_item'::regclass
+                  AND index.indisprimary
+                """
+                )
+            )
+            .scalars()
+            .all()
+        )
+    engine.dispose()
+
+    assert after == before
+    assert identities == (2, 2, 0)
+    assert resolved == [("CUSTOM", "CUSTOM"), ("NVDA", "NVDA")]
+    assert primary_key == ["security_id"]

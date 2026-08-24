@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Response
-from sqlalchemy import Connection, insert, select, update
+from sqlalchemy import Connection, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import NoResultFound
 
@@ -45,6 +45,8 @@ from stock_platform.infrastructure.db.models.tables import (
     paper_order,
     portfolio_nav,
     research_opinion,
+    security,
+    security_identifier_version,
     watchlist_item,
     weekly_review_run,
 )
@@ -79,6 +81,46 @@ def _symbol(value: str) -> str:
         return str(Symbol(value))
     except ValueError as exception:
         raise ApiError(422, "INVALID_REQUEST", str(exception)) from exception
+
+
+_WATCHLIST_PUBLIC_COLUMNS = (
+    watchlist_item.c.symbol,
+    watchlist_item.c.daily_research,
+    watchlist_item.c.intraday_monitoring,
+    watchlist_item.c.thresholds,
+    watchlist_item.c.updated_at,
+    watchlist_item.c.created_at,
+)
+
+
+def _security_id_for_symbol(connection: Connection, symbol: str) -> UUID:
+    connection.execute(text("SELECT pg_advisory_xact_lock(hashtext(:symbol))"), {"symbol": symbol})
+    existing = connection.execute(
+        select(security_identifier_version.c.security_id)
+        .where(
+            security_identifier_version.c.identifier_type == "PRIMARY_SYMBOL",
+            security_identifier_version.c.identifier_value == symbol,
+        )
+        .order_by(security_identifier_version.c.available_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if existing is not None:
+        return cast(UUID, existing)
+    now = datetime.now(UTC)
+    security_id = connection.execute(
+        insert(security).values(instrument_type="COMMON_STOCK").returning(security.c.id)
+    ).scalar_one()
+    connection.execute(
+        insert(security_identifier_version).values(
+            security_id=security_id,
+            identifier_type="PRIMARY_SYMBOL",
+            identifier_value=symbol,
+            provider_identifiers={},
+            effective_from=now,
+            available_at=now,
+        )
+    )
+    return cast(UUID, security_id)
 
 
 def _run_response(row: Any) -> RunResponse:
@@ -151,16 +193,20 @@ def provider_health(settings: SettingsDependency) -> dict[str, Any]:
 
 @router.get("/watchlist")
 def list_watchlist(connection: ConnectionDependency) -> list[dict[str, Any]]:
-    rows = connection.execute(select(watchlist_item).order_by(watchlist_item.c.symbol)).mappings()
+    rows = connection.execute(
+        select(*_WATCHLIST_PUBLIC_COLUMNS).order_by(watchlist_item.c.symbol)
+    ).mappings()
     return [_row(row) for row in rows]
 
 
 @router.post("/watchlist", status_code=201)
 def add_watchlist(request: WatchlistRequest, connection: ConnectionDependency) -> dict[str, Any]:
+    values = request.model_dump()
+    values["security_id"] = _security_id_for_symbol(connection, request.symbol)
     row = (
         connection.execute(
             pg_insert(watchlist_item)
-            .values(**request.model_dump())
+            .values(**values)
             .on_conflict_do_update(
                 index_elements=[watchlist_item.c.symbol],
                 set_={
@@ -170,7 +216,7 @@ def add_watchlist(request: WatchlistRequest, connection: ConnectionDependency) -
                     "updated_at": datetime.now(UTC),
                 },
             )
-            .returning(watchlist_item)
+            .returning(*_WATCHLIST_PUBLIC_COLUMNS)
         )
         .mappings()
         .one()
@@ -189,7 +235,7 @@ def patch_watchlist(
             update(watchlist_item)
             .where(watchlist_item.c.symbol == _symbol(symbol))
             .values(**values)
-            .returning(watchlist_item)
+            .returning(*_WATCHLIST_PUBLIC_COLUMNS)
         )
         .mappings()
         .one_or_none()

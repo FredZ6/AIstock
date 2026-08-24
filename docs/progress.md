@@ -1637,3 +1637,127 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
 - Fresh post-review persistence and unreachable-API Playwright commands each exited 0 with 1 passed /
   1 intentionally skipped. The persistence run again proved add, update, reload, delete, and exact
   cleanup against FastAPI/PostgreSQL; the failure run again proved no Fixture substitution.
+
+### M7.5 RDB-1 canonical ingestion foundation — 2026-08-23
+
+- FRE-24 was implemented from `main@1ab9ec1` on `codex/fre-24-rdb-1`, strictly in the approved
+  RDB-1 order. Canonical ingestion contracts reject naive datetimes and binary floats, use aware UTC
+  timestamps and Decimal-safe values, classify retryable versus terminal failures, and derive an
+  immutable request hash from the normalized provider request.
+- The security master now uses stable `Security` identity plus append-only, effective-dated
+  identifier and profile facts. The locked eleven-symbol universe is seeded idempotently while
+  preserving existing Watchlist monitoring configuration and the public REST contract.
+- Durable PostgreSQL orchestration includes ingestion jobs, attempts, leases, cursors, dead letters,
+  raw links, and normalization dispatch. Partial uniqueness and compare-and-swap transitions prevent
+  concurrent duplicate work; expired leases recover within the bounded attempt budget. Immutable
+  control facts reject update/delete at the database layer.
+- Raw payloads are written to MinIO before one database transaction records the append-only
+  `RawDataObject`, job linkage, and durable normalization dispatch. The dispatcher and registered
+  Celery consumer are lease-based, retryable, idempotent, and deterministic; conflicting immutable
+  normalization results are retained as explicit rejections instead of overwritten.
+- Historical normalized reads enforce both `event_time <= decision_time` and
+  `available_at <= decision_time`, with deterministic ordering. Unit, integration, corrupt-legacy-row,
+  and Hypothesis regressions cover the dual predicate and prevent future-event leakage.
+- Final focused command `uv run pytest backend/tests/unit/ingestion
+  backend/tests/property/test_ingestion_point_in_time.py -q` exited 0: 75 passed / 0 failed /
+  0 skipped. Final related integration command `uv run pytest backend/tests/integration/ingestion
+  backend/tests/integration/db backend/tests/integration/market_data -q` exited 0: 44 passed /
+  0 failed / 0 skipped. An initial sandbox-only retry exited 2 because the user-level uv cache was
+  inaccessible; the identical authorized commands produced the recorded green results.
+- Migration acceptance command covering a fresh empty database and an existing 0024 fixture exited
+  0: 2 passed. The 0024-to-head regression preserved Watchlist identity/configuration. Against the
+  dedicated PostgreSQL instance on port 55432, two consecutive `make seed` commands each exited 0
+  and reported 0 new Watchlist securities, the same 31 raw objects, and 0 new normalized records;
+  the earlier first seed on that fresh database inserted the locked 11 Watchlist securities and 31
+  normalized records. No Provider credentials or live-broker capability were introduced.
+- Final `make verify` exited 0: 256 files format clean, Ruff clean, strict Mypy clean over 225 source
+  files, Alembic drift clean, backend 465 passed / 3 credential-gated skipped, Web 14 files / 94
+  passed, TypeScript and ESLint clean, and the nine-route Next.js production build passed. The only
+  emitted warning is the pre-existing Node/Vitest `--localstorage-file` environment warning.
+- Operational follow-up: the original post-reboot PostgreSQL volume remains preserved after its WAL
+  failure, and isolated RDB-1 verification volumes remain preserved for recovery/audit. Provider-
+  specific acquisition, licensed redistribution rules, and canonical vendor normalizers belong to
+  ordered RDB-2 and are intentionally not implemented in RDB-1.
+
+#### PR #12 pre-merge review closure — 2026-08-24
+
+- Seven review findings were closed with regressions before implementation. Active-job identity now
+  includes provider, dataset, window, purpose, policy version, and attempt budget; both application
+  and database boundaries reject error classes outside the frozen enum. The first Job Store RED run
+  exited 1 with 3 failed / 8 passed; the corrected suite exited 0 with 11 passed.
+- Provider payloads can no longer override the canonical symbol, and a later observation of identical
+  raw bytes reuses the first authoritative timestamps instead of raising an immutable conflict. The
+  dispatcher now permits the worker to consume a synchronously published CLAIMED row, while transient
+  normalization failures return the durable row to PENDING and terminal immutable conflicts persist a
+  rejection and FAILED state. The staged Raw Dispatch RED runs failed only for each absent target
+  behavior; the final suite exited 0 with 11 passed.
+- Raw keys must be content-addressed by the exact SHA-256 filename. MinIO inventory can be compared
+  read-only against PostgreSQL lineage so a database failure after object storage commit reports the
+  orphan rather than silently losing it. A new MinIO protocol contract first failed because the fake
+  client lacked `list_objects`; its minimal implementation then passed, and strict Mypy passed over
+  225 source files. The combined concurrency and failure suite exited 0 with 22 passed.
+- Real MinIO verification exited 0 with 2 passed, proving raw bytes exist before database lineage and
+  out-of-order bars retain complete lineage. One diagnostic run exited 1 because a command-level
+  `DATABASE_URL` overrode the fixture's isolated Alembic URL; removing that external override made the
+  unchanged tests pass.
+- The isolated backup/restore and service-restart exercise exited 0. A fresh source database upgraded
+  through 0025, seeded 11 securities and 31 raw/normalized facts, restored with Timescale pre/post
+  hooks, and passed Alembic drift. After Redis and Celery worker restarts, replay retained exactly one
+  PaperFill, three CashLedger rows, 21 scoped AgentEvents, and five scoped ToolCalls; the focused
+  recovery/accounting suite passed 8/8. The stock recovery script's first environment preparation
+  exited 1 because an intentionally preserved legacy Compose container conflicted with the dedicated
+  RDB-1 database on port 55432; the equivalent isolated-container workflow avoided all legacy volumes.
+- Final clean-database acceptance exited 0. Alembic upgraded from empty to head, the first seed wrote
+  11 securities / 31 raw objects / 31 normalized records, and the second seed wrote 0 / 31 / 0.
+  `make verify` passed: 256 files format clean, Ruff clean, strict Mypy clean over 225 source files,
+  Alembic/MCP/OpenAPI drift clean, backend 475 passed / 3 credential-gated skipped, Web 14 files / 94
+  passed, TypeScript and ESLint clean, and the nine-route Next.js production build passed. The durable
+  PostgreSQL container was restored after every isolated verification attempt.
+
+#### PR #12 second-review closure — 2026-08-24
+
+- The independent Standards review reported no P0/P1/P2 findings. The Spec review found two remaining
+  gaps: the read-only orphan detector had no operational entrypoint, and the point-in-time property
+  suite did not generate revised records. Both were reproduced before implementation: the focused RED
+  command exited 1 with 2 failed because the Beat entry and revision selector were absent.
+- Celery Beat now runs `report_minio_orphans` hourly. The task compares MinIO inventory with committed
+  RawDataObject keys, writes one warning per unreferenced object, returns only the count, and never
+  deletes objects. A real invocation exited 0 and reported 20 preserved `alpaca-stream/*` test objects
+  from the shared development bucket, demonstrating that the operational path is reachable and
+  non-destructive.
+- `select_latest_visible_revisions` enforces both time predicates and groups logical revisions by
+  symbol, feed, and event time. It deterministically selects the latest version visible at the cutoff
+  using availability, ingestion, content hash, and object key as stable ordering. The Hypothesis test
+  covers no-visible-version, original-visible, revised-visible, and exact cutoff behavior. The focused
+  GREEN command exited 0 with 2 passed; the expanded market-data/property/ingestion/schedule suite
+  exited 0 with 34 passed, and Ruff plus strict Mypy remained clean.
+- Fresh runtime evidence after both fixes: real MinIO lineage, recovery, concurrency, and failure tests
+  exited 0 with 32 passed. Final clean-database acceptance exited 0: empty-to-head migration and
+  Alembic drift passed; Seed remained idempotent at 11/31/31 then 0/31/0; `make verify` passed with 256
+  files format clean, Ruff clean, strict Mypy clean over 225 source files, backend 476 passed / 3
+  credential-gated skipped, Web 14 files / 94 passed, TypeScript/ESLint clean, and the nine-route
+  production build successful. The existing Node `--localstorage-file` environment warning remains
+  non-functional, and the long-lived PostgreSQL container was restored by the verification trap.
+
+#### PR #12 final review closure — 2026-08-24
+
+- The follow-up review found that grouping revisions only by symbol/feed/event time could silently
+  collapse parallel Provider or IEX/SIP coverage series, and that one warning per orphan could create
+  an unbounded hourly log storm. The new RED command exited 1 with 2 failed: generated cross-series
+  records were discarded and no bounded summary reporter existed.
+- Revision identity now additionally includes Provider, explicit coverage, and session. The property
+  regression generates an original plus correction within one ALPACA/IEX/regular-session series,
+  a parallel ALPACA/SIP series, and a parallel Fixture Provider series. Only the true correction is
+  folded; both parallel series remain visible. Multi-provider responses advertise `MULTIPLE` rather
+  than mislabeling the combined evidence as one Provider.
+- Orphan reporting now emits one aggregate warning with the total count and at most twenty sorted
+  object-key samples, while the fixed `minio_orphans` gauge records the full count. The report remains
+  read-only. A logging-configuration interaction initially made a combined `caplog` assertion fail;
+  an injected warning sink now verifies exactly one bounded call independently of global logging
+  configuration. The corrected expanded suite exited 0 with 41 passed; Ruff and strict Mypy passed.
+- Final clean-database gate exited 0: empty-to-head migration and Alembic drift passed; Seed remained
+  11/31/31 then 0/31/0; `make verify` passed with 256 files format clean, Ruff clean, strict Mypy clean
+  over 225 source files, backend 477 passed / 3 credential-gated skipped, Web 14 files / 94 passed,
+  TypeScript/ESLint clean, and the nine-route Next.js production build successful. The existing Node
+  `--localstorage-file` environment warning is unchanged and non-functional; the long-lived database
+  was restored after the isolated run.

@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, func, insert, select, update
-from stock_platform.infrastructure.db.models.tables import agent_run, watchlist_item
+from stock_platform.infrastructure.db.models.tables import agent_run, security, watchlist_item
 from stock_platform.settings import Settings
 from stock_platform.workers.schedules import (
     recover_queued_runs,
@@ -33,7 +34,22 @@ def test_scheduled_runs_are_durable_idempotent_and_recoverable(
     portfolio_cutoff = datetime(2026, 8, 17, 20, 30, tzinfo=UTC)
 
     with engine.begin() as connection:
-        connection.execute(insert(watchlist_item), [{"symbol": "NVDA"}, {"symbol": "MSFT"}])
+        nvda_id = uuid4()
+        msft_id = uuid4()
+        connection.execute(
+            insert(security),
+            [
+                {"id": nvda_id, "instrument_type": "COMMON_STOCK"},
+                {"id": msft_id, "instrument_type": "COMMON_STOCK"},
+            ],
+        )
+        connection.execute(
+            insert(watchlist_item),
+            [
+                {"security_id": nvda_id, "symbol": "NVDA"},
+                {"security_id": msft_id, "symbol": "MSFT"},
+            ],
+        )
         first = schedule_daily_research(connection, settings, cutoff, dispatch=dispatch)
         replay = schedule_daily_research(connection, settings, cutoff, dispatch=dispatch)
         too_early = schedule_portfolio_decision(connection, settings, cutoff, dispatch=dispatch)

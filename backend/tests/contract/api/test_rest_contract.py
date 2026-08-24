@@ -256,9 +256,18 @@ def test_watchlist_crud_normalizes_and_persists_symbol(client: TestClient) -> No
 
     assert created.status_code == 201
     assert created.json()["symbol"] == "NVDA"
+    assert set(created.json()) == {
+        "symbol",
+        "daily_research",
+        "intraday_monitoring",
+        "thresholds",
+        "updated_at",
+        "created_at",
+    }
     assert patched.status_code == 200
     assert patched.json()["daily_research"] is False
-    assert listed.json()[0]["thresholds"] == {"return_5m": "0.03"}
+    nvda = next(item for item in listed.json() if item["symbol"] == "NVDA")
+    assert nvda["thresholds"] == {"return_5m": "0.03"}
     assert deleted.status_code == 204
 
 

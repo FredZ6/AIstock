@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Connection, and_, select, update
+from sqlalchemy import Connection, and_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from stock_platform.domain.common.ids import Symbol
@@ -180,21 +180,23 @@ class FixtureCatalog:
                 "content_hash": entry.content_hash,
                 "raw_object_key": entry.raw_object_key,
             }
-            raw_id = connection.execute(
-                select(raw_data_object.c.id).where(
-                    and_(
-                        raw_data_object.c.provider == "FIXTURE",
-                        raw_data_object.c.feed_type == entry.feed_type.value,
-                        raw_data_object.c.raw_object_key == entry.raw_object_key,
+            existing_raw = (
+                connection.execute(
+                    select(raw_data_object).where(
+                        and_(
+                            raw_data_object.c.provider == "FIXTURE",
+                            raw_data_object.c.feed_type == entry.feed_type.value,
+                            raw_data_object.c.content_hash == entry.content_hash,
+                        )
                     )
                 )
-            ).scalar_one_or_none()
-            if raw_id is not None:
-                connection.execute(
-                    update(raw_data_object)
-                    .where(raw_data_object.c.id == raw_id)
-                    .values(**raw_values)
-                )
+                .mappings()
+                .one_or_none()
+            )
+            if existing_raw is not None:
+                if any(existing_raw[key] != value for key, value in raw_values.items()):
+                    raise ValueError("immutable fixture raw object conflict")
+                raw_id = existing_raw["id"]
             else:
                 raw_id = connection.execute(
                     insert(raw_data_object)
@@ -212,33 +214,34 @@ class FixtureCatalog:
                             )
                         )
                     ).scalar_one()
-            exists = connection.execute(
-                select(normalized_record.c.id).where(
-                    and_(
-                        normalized_record.c.raw_data_object_id == raw_id,
-                        normalized_record.c.record_type == entry.feed_type.value,
+            normalized_payload = {**entry.payload, "symbol": str(entry.symbol)}
+            existing_normalized = (
+                connection.execute(
+                    select(normalized_record).where(
+                        and_(
+                            normalized_record.c.raw_data_object_id == raw_id,
+                            normalized_record.c.record_type == entry.feed_type.value,
+                            normalized_record.c.normalization_version == "fixture-m1-v1",
+                            normalized_record.c.record_key == str(entry.symbol),
+                        )
                     )
                 )
-            ).scalar_one_or_none()
-            if exists is None:
+                .mappings()
+                .one_or_none()
+            )
+            if existing_normalized is None:
                 connection.execute(
                     insert(normalized_record).values(
                         raw_data_object_id=raw_id,
                         record_type=entry.feed_type.value,
+                        record_key=str(entry.symbol),
                         normalization_version="fixture-m1-v1",
-                        payload={"symbol": str(entry.symbol), **entry.payload},
+                        payload=normalized_payload,
                     )
                 )
                 count += 1
-            else:
-                connection.execute(
-                    update(normalized_record)
-                    .where(normalized_record.c.id == exists)
-                    .values(
-                        normalization_version="fixture-m1-v1",
-                        payload={"symbol": str(entry.symbol), **entry.payload},
-                    )
-                )
+            elif existing_normalized["payload"] != normalized_payload:
+                raise ValueError("immutable fixture normalized record conflict")
         return count
 
 
