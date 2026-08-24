@@ -1761,3 +1761,34 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   TypeScript/ESLint clean, and the nine-route Next.js production build successful. The existing Node
   `--localstorage-file` environment warning is unchanged and non-functional; the long-lived database
   was restored after the isolated run.
+
+### M7.5 RDB-2 Alpaca market and news ingestion — 2026-08-24
+
+#### Task 7 — separate transport from persistence
+
+- FRE-25 moved from Backlog to In Progress. Work started from `main@4d9c60a` on the isolated
+  `codex/fre-25-rdb-2` branch; the user's uncommitted frontend changes in the primary worktree were
+  not touched.
+- Baseline diagnosis: the first `make verify` exited 2 while a new worktree attempted a sandboxed
+  PyPI download. The authorized retry exposed two missing CHECK constraints in a stale local 0025
+  development database. A separate empty TimescaleDB/pgvector database upgraded from 0001 through
+  0025 with exit 0 and no drift. The stale local test database contained no incompatible rows, so
+  the two already-merged 0025 constraints were restored without data changes. The original
+  unmodified `make verify` then exited 0: backend 477 passed / 3 credential-gated skipped, Web 94
+  passed, and all format, lint, type, migration-drift, contract-drift, and build gates passed.
+- TDD RED evidence: focused commands exited 1 for each absent behavior: transport-only raw batch,
+  frozen rate-limit error, timeout/401/403/404/5xx classification, credential/dataset admission,
+  persistence-free stream decoder, coordinator-owned persistence/completion, durable Retry-After
+  scheduling, non-retryable failure recording, and HTTP-date Retry-After parsing.
+- GREEN implementation: provider-neutral `ProviderBatch`, `ProviderEvent`, rate-limit metadata, and
+  `ProviderTransportError` now expose raw REST/stream delivery without MinIO/PostgreSQL writes or
+  transport-layer sleep. `IngestionCoordinator` owns persistence callbacks and translates retryable
+  versus terminal errors into durable job-store transitions. The existing `fetch()` and
+  `AlpacaStreamNormalizer` remain narrow compatibility wrappers; the latter delegates identity/time
+  checks to the new persistence-free decoder.
+- Provider contract command exited 0: 27 passed / 3 credential-gated skipped. Ruff and strict Mypy
+  exited 0 over 227 source files. The combined provider/coordinator/stream/fallback suite exited 0:
+  121 passed / 3 credential-gated skipped. PostgreSQL job-store plus stream/alert replay integration
+  exited 0: 20 passed. The post-refactor stream unit/integration command exited 0: 13 passed.
+- Boundaries preserved: no public API/UI, MarketTrade table, Fixture fallback, live broker, order
+  execution, or real-money path was added. Provider-specific fact normalization remains Task 8.

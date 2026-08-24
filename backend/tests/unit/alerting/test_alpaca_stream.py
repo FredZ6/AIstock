@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
+from stock_platform.infrastructure.providers import alpaca_stream
 from stock_platform.infrastructure.providers.alpaca_stream import AlpacaStreamNormalizer
 
 
@@ -28,6 +29,23 @@ def raw_bar(*, event_time: str = "2026-08-20T14:35:00Z", message_type: str = "b"
         },
         separators=(",", ":"),
     ).encode()
+
+
+def test_alpaca_stream_decoder_returns_raw_event_without_persistence() -> None:
+    decoder_type = getattr(alpaca_stream, "AlpacaStreamDecoder", None)
+    assert decoder_type is not None, "stream transport needs a persistence-free decoder"
+    received_at = datetime(2026, 8, 20, 14, 35, 2, tzinfo=UTC)
+    payload = raw_bar()
+
+    event = decoder_type().decode(payload, received_at=received_at)
+
+    assert event.provider == "ALPACA"
+    assert event.feed_type.value == "price_bars"
+    assert event.symbol == "NVDA"
+    assert event.event_kind == "bar"
+    assert event.event_time == datetime(2026, 8, 20, 14, 35, tzinfo=UTC)
+    assert event.observed_at == received_at
+    assert event.body == payload
 
 
 def test_alpaca_bar_normalization_preserves_decimal_time_and_provenance() -> None:

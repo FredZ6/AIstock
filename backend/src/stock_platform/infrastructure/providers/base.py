@@ -10,6 +10,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from enum import StrEnum
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
@@ -17,7 +18,12 @@ from urllib.request import Request, urlopen
 
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
-from stock_platform.domain.ingestion.models import FeedType as FeedType
+from stock_platform.domain.ingestion.models import (
+    FeedType as FeedType,
+)
+from stock_platform.domain.ingestion.models import (
+    IngestionErrorClass,
+)
 from stock_platform.infrastructure.recovery import CircuitBreaker
 
 
@@ -97,6 +103,68 @@ class HttpResponse:
 
 
 HttpTransport = Callable[[HttpRequest], HttpResponse]
+
+
+def _parse_retry_after(value: str | None, *, observed_at: datetime) -> timedelta | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    if stripped.isdigit():
+        return timedelta(seconds=int(stripped))
+    retry_at = require_aware(parsedate_to_datetime(stripped)).astimezone(UTC)
+    return max(retry_at - require_aware(observed_at).astimezone(UTC), timedelta(0))
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderRateLimit:
+    limit: int | None = None
+    remaining: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderBatch:
+    provider: str
+    feed_type: FeedType
+    symbol: Symbol
+    query_as_of: datetime
+    observed_at: datetime
+    body: bytes
+    headers: dict[str, str]
+    next_page_token: str | None
+    rate_limit: ProviderRateLimit
+
+    def __post_init__(self) -> None:
+        require_aware(self.query_as_of)
+        require_aware(self.observed_at)
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderEvent:
+    provider: str
+    feed_type: FeedType
+    symbol: Symbol
+    event_kind: str
+    event_time: datetime
+    observed_at: datetime
+    body: bytes
+
+    def __post_init__(self) -> None:
+        require_aware(self.event_time)
+        require_aware(self.observed_at)
+
+
+class ProviderTransportError(RuntimeError):
+    def __init__(
+        self,
+        *,
+        error_class: IngestionErrorClass,
+        status_code: int | None = None,
+        retry_after: timedelta | None = None,
+    ) -> None:
+        super().__init__(error_class.value)
+        self.error_class = error_class
+        self.status_code = status_code
+        self.retry_after = retry_after
 
 
 def _parse_provider_timestamp(value: str) -> datetime:
@@ -243,6 +311,94 @@ class GovernedHttpProvider:
             query_as_of=as_of,
             warnings=(warning,),
             missingness="UNAVAILABLE",
+        )
+
+    def fetch_batch(
+        self,
+        feed_type: FeedType,
+        symbol: str,
+        as_of: datetime,
+    ) -> ProviderBatch:
+        query_as_of = require_aware(as_of)
+        normalized_symbol = Symbol(symbol)
+        if feed_type not in self.supported_feeds:
+            raise ProviderTransportError(
+                error_class=IngestionErrorClass.UNSUPPORTED_DATASET,
+            )
+        if not self._configured():
+            raise ProviderTransportError(
+                error_class=IngestionErrorClass.MISSING_CREDENTIALS,
+            )
+        request = HttpRequest(
+            "GET",
+            self._url(feed_type, normalized_symbol, query_as_of),
+            self._headers(),
+            self._timeout_seconds,
+        )
+        try:
+            with self._semaphore:
+                response = self._transport(request)
+        except TimeoutError as error:
+            raise ProviderTransportError(
+                error_class=IngestionErrorClass.TIMEOUT,
+            ) from error
+        observed_at = require_aware(self._clock())
+        if response.status_code == 429:
+            retry_after_value = response.headers.get("Retry-After") or response.headers.get(
+                "retry-after"
+            )
+            retry_after = _parse_retry_after(
+                retry_after_value,
+                observed_at=observed_at,
+            )
+            raise ProviderTransportError(
+                error_class=IngestionErrorClass.RATE_LIMIT,
+                status_code=response.status_code,
+                retry_after=retry_after,
+            )
+        if response.status_code in {401, 403}:
+            raise ProviderTransportError(
+                error_class=IngestionErrorClass.INVALID_AUTH,
+                status_code=response.status_code,
+            )
+        if response.status_code == 404:
+            raise ProviderTransportError(
+                error_class=IngestionErrorClass.INVALID_SECURITY,
+                status_code=response.status_code,
+            )
+        if response.status_code >= 500:
+            raise ProviderTransportError(
+                error_class=IngestionErrorClass.PROVIDER_5XX,
+                status_code=response.status_code,
+            )
+        if not 200 <= response.status_code < 300:
+            raise ProviderTransportError(
+                error_class=IngestionErrorClass.NETWORK,
+                status_code=response.status_code,
+            )
+        try:
+            document = json.loads(response.body)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            document = None
+        next_page_token = document.get("next_page_token") if isinstance(document, dict) else None
+
+        def integer_header(name: str) -> int | None:
+            value = response.headers.get(name)
+            return int(value) if value is not None else None
+
+        return ProviderBatch(
+            provider=self.name,
+            feed_type=feed_type,
+            symbol=normalized_symbol,
+            query_as_of=query_as_of,
+            observed_at=observed_at,
+            body=response.body,
+            headers=response.headers,
+            next_page_token=(str(next_page_token) if next_page_token is not None else None),
+            rate_limit=ProviderRateLimit(
+                limit=integer_header("x-ratelimit-limit"),
+                remaining=integer_header("x-ratelimit-remaining"),
+            ),
         )
 
     def fetch(self, feed_type: FeedType, symbol: str, as_of: datetime) -> ProviderResponse:

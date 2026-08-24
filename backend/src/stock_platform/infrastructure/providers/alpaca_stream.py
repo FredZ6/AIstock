@@ -11,7 +11,7 @@ from typing import cast
 from stock_platform.application.alerting.features import MinuteBar
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
-from stock_platform.infrastructure.providers.base import RawObjectStore
+from stock_platform.infrastructure.providers.base import FeedType, ProviderEvent, RawObjectStore
 
 
 def _decimal(payload: dict[str, object], key: str) -> Decimal:
@@ -21,37 +21,56 @@ def _decimal(payload: dict[str, object], key: str) -> Decimal:
         raise ValueError(f"Alpaca minute bar field {key} is invalid") from error
 
 
-class AlpacaStreamNormalizer:
-    def __init__(self, *, raw_store: RawObjectStore) -> None:
-        self._raw_store = raw_store
-
-    def normalize(self, raw: bytes, *, received_at: datetime) -> MinuteBar:
-        received = require_aware(received_at).astimezone(UTC)
+class AlpacaStreamDecoder:
+    def decode(self, raw: bytes, *, received_at: datetime) -> ProviderEvent:
+        observed_at = require_aware(received_at).astimezone(UTC)
         try:
-            decoded = json.loads(raw, parse_float=Decimal, parse_int=Decimal)
+            decoded = json.loads(raw)
         except (json.JSONDecodeError, UnicodeDecodeError) as error:
             raise ValueError("Alpaca stream payload is invalid JSON") from error
         if not isinstance(decoded, dict) or decoded.get("T") not in {"b", "u"}:
             raise ValueError("Alpaca stream payload must be a minute bar")
-        payload = cast(dict[str, object], decoded)
         try:
-            event_time = datetime.fromisoformat(str(payload["t"]).replace("Z", "+00:00"))
-            symbol = str(payload["S"])
+            event_time = datetime.fromisoformat(str(decoded["t"]).replace("Z", "+00:00"))
+            symbol = Symbol(str(decoded["S"]))
         except (KeyError, ValueError) as error:
             raise ValueError("Alpaca minute bar identity is invalid") from error
         event_time = require_aware(event_time).astimezone(UTC)
-        if event_time > received:
+        if event_time > observed_at:
             raise ValueError("Alpaca event_time cannot be in the future")
+        return ProviderEvent(
+            provider="ALPACA",
+            feed_type=FeedType.PRICE_BARS,
+            symbol=symbol,
+            event_kind="bar" if decoded["T"] == "b" else "updated_bar",
+            event_time=event_time,
+            observed_at=observed_at,
+            body=raw,
+        )
+
+
+class AlpacaStreamNormalizer:
+    def __init__(self, *, raw_store: RawObjectStore) -> None:
+        self._raw_store = raw_store
+        self._decoder = AlpacaStreamDecoder()
+
+    def normalize(self, raw: bytes, *, received_at: datetime) -> MinuteBar:
+        event = self._decoder.decode(raw, received_at=received_at)
+        try:
+            decoded = json.loads(raw, parse_float=Decimal, parse_int=Decimal)
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise ValueError("Alpaca stream payload is invalid JSON") from error
+        payload = cast(dict[str, object], decoded)
         content_hash = hashlib.sha256(raw).hexdigest()
-        date_path = event_time.strftime("%Y/%m/%d")
-        object_key = f"alpaca-stream/{symbol.lower()}/{date_path}/{content_hash}.json"
+        date_path = event.event_time.strftime("%Y/%m/%d")
+        object_key = f"alpaca-stream/{str(event.symbol).lower()}/{date_path}/{content_hash}.json"
         self._raw_store.put(object_key, raw, "application/json")
         previous_close = _decimal(payload, "pc") if "pc" in payload else None
         return MinuteBar(
-            symbol=Symbol(symbol),
-            event_time=event_time,
-            available_at=received,
-            ingested_at=received,
+            symbol=event.symbol,
+            event_time=event.event_time,
+            available_at=event.observed_at,
+            ingested_at=event.observed_at,
             open=_decimal(payload, "o"),
             high=_decimal(payload, "h"),
             low=_decimal(payload, "l"),
