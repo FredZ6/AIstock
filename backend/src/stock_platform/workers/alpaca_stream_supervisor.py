@@ -177,31 +177,38 @@ class AlpacaStreamSupervisor:
         async for message in connection:
             raw = message if isinstance(message, bytes) else message.encode()
             received_at = datetime.now(UTC)
-            events = self._decoder.decode_batch(raw, received_at=received_at)
+            try:
+                events = self._decoder.decode_batch(raw, received_at=received_at)
+            except ValueError:
+                self._archive_and_publish(raw, received_at=received_at)
+                raise
             if not events:
                 continue
-            recovery_key, recovery_envelope = alpaca_stream_recovery_object(
-                raw,
-                coverage=self._coverage,
-                received_at=received_at,
-            )
-            try:
-                # The self-contained recovery envelope goes first, closing the two-write crash gap.
-                self._archive(recovery_key, recovery_envelope)
-                self._archive(self.raw_object_key(raw), raw)
-            except Exception as error:
-                raise AlpacaStreamArchiveUnavailable("stream batch archive failed") from error
-            try:
-                self._publish(
-                    "stock_platform.workers.ingestion_tasks.persist_alpaca_stream_event",
-                    [raw.decode(), received_at.isoformat(), self._coverage.value],
-                )
-            except Exception as error:
-                raise AlpacaStreamPublishUnavailable("stream batch publish failed") from error
+            self._archive_and_publish(raw, received_at=received_at)
             for event in events:
                 previous = self._last_event.get(str(event.symbol))
                 if previous is None or event.event_time > previous:
                     self._last_event[str(event.symbol)] = event.event_time
+
+    def _archive_and_publish(self, raw: bytes, *, received_at: datetime) -> None:
+        recovery_key, recovery_envelope = alpaca_stream_recovery_object(
+            raw,
+            coverage=self._coverage,
+            received_at=received_at,
+        )
+        try:
+            # The self-contained recovery envelope goes first, closing the two-write crash gap.
+            self._archive(recovery_key, recovery_envelope)
+            self._archive(self.raw_object_key(raw), raw)
+        except Exception as error:
+            raise AlpacaStreamArchiveUnavailable("stream batch archive failed") from error
+        try:
+            self._publish(
+                "stock_platform.workers.ingestion_tasks.persist_alpaca_stream_event",
+                [raw.decode(), received_at.isoformat(), self._coverage.value],
+            )
+        except Exception as error:
+            raise AlpacaStreamPublishUnavailable("stream batch publish failed") from error
 
     def publish_reconnect_recovery(self, *, reconnected_at: datetime) -> None:
         for symbol, last_event_at in sorted(self._last_event.items()):

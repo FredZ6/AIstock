@@ -13,6 +13,7 @@ from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.ingestion.models import MarketDataCoverage, MarketSession
 from stock_platform.infrastructure.db.models.tables import (
     market_bar,
+    news_article,
     normalized_record,
     raw_data_object,
 )
@@ -44,7 +45,7 @@ def select_latest_visible_revisions(
 ) -> tuple[ProviderRecord, ...]:
     cutoff = require_aware(decision_time)
     latest: dict[
-        tuple[Symbol, FeedType, datetime, str, str | None, str | None], ProviderRecord
+        tuple[Symbol, FeedType, datetime, str, str | None, str | None, str | None], ProviderRecord
     ] = {}
     for record in records:
         if not is_visible_at(
@@ -55,6 +56,11 @@ def select_latest_visible_revisions(
             continue
         coverage = record.payload.get("coverage")
         session = record.payload.get("session")
+        article_id = (
+            record.payload.get("article_id") or record.payload.get("id")
+            if record.feed_type is FeedType.COMPANY_NEWS
+            else None
+        )
         key = (
             record.symbol,
             record.feed_type,
@@ -62,6 +68,7 @@ def select_latest_visible_revisions(
             record.provider,
             str(coverage) if coverage is not None else None,
             str(session) if session is not None else None,
+            str(article_id) if article_id is not None else None,
         )
         existing = latest.get(key)
         rank = (
@@ -155,6 +162,54 @@ class PostgresMarketDataRepository:
                 records=visible,
                 missingness=None if visible else "MISSING",
             )
+        if feed_type is FeedType.COMPANY_NEWS:
+            rows = self._connection.execute(
+                select(
+                    news_article, raw_data_object.c.content_hash, raw_data_object.c.raw_object_key
+                )
+                .join(
+                    raw_data_object,
+                    news_article.c.raw_data_object_id == raw_data_object.c.id,
+                )
+                .where(
+                    news_article.c.symbols.contains([str(normalized_symbol)]),
+                    news_article.c.pit_eligible.is_(True),
+                    news_article.c.published_at <= query_as_of,
+                    news_article.c.available_at <= query_as_of,
+                    raw_data_object.c.event_time <= query_as_of,
+                    raw_data_object.c.available_at <= query_as_of,
+                )
+                .order_by(
+                    news_article.c.published_at,
+                    news_article.c.available_at,
+                    news_article.c.ingested_at,
+                    news_article.c.id,
+                )
+            ).mappings()
+            records = tuple(
+                ProviderRecord(
+                    symbol=normalized_symbol,
+                    feed_type=feed_type,
+                    provider=str(row["provider"]),
+                    event_time=row["published_at"],
+                    available_at=row["available_at"],
+                    ingested_at=row["ingested_at"],
+                    content_hash=str(row["content_hash"]),
+                    raw_object_key=str(row["raw_object_key"]),
+                    payload=dict(row["payload"]),
+                )
+                for row in rows
+            )
+            visible = select_latest_visible_revisions(records, decision_time=query_as_of)
+            if visible:
+                return ProviderResponse(
+                    status=ProviderStatus.OK,
+                    provider="ALPACA",
+                    feed_type=feed_type,
+                    symbol=normalized_symbol,
+                    query_as_of=query_as_of,
+                    records=visible,
+                )
         statement = (
             select(
                 normalized_record.c.payload,
@@ -177,6 +232,11 @@ class PostgresMarketDataRepository:
                     normalized_record.c.payload["symbol"].astext == str(normalized_symbol),
                     raw_data_object.c.event_time <= query_as_of,
                     raw_data_object.c.available_at <= query_as_of,
+                    *(
+                        (raw_data_object.c.provider != "ALPACA",)
+                        if feed_type is FeedType.COMPANY_NEWS
+                        else ()
+                    ),
                 )
             )
             .order_by(

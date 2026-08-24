@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -31,6 +32,8 @@ from stock_platform.infrastructure.db.models.tables import (
     ingestion_raw_link,
     market_bar,
     news_article,
+    normalization_dispatch,
+    normalization_rejection,
     normalized_record,
     raw_data_object,
 )
@@ -61,6 +64,213 @@ from stock_platform.workers.portfolio_tasks import load_paper_execution_bars
 from stock_platform.workers.schedules import schedule_alpaca_backfills
 
 NOW = datetime(2026, 8, 24, 16, tzinfo=UTC)
+
+
+def test_normalization_outbox_recovery_persists_typed_alpaca_fact(
+    isolated_database_url: str,
+    isolated_minio_store: MinioRawObjectStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    job_id = _enqueue(engine)
+    original = ingestion_tasks.normalize_dispatched_record
+
+    def crash_after_raw_commit(*_args: object, **_kwargs: object) -> bool:
+        raise RuntimeError("simulated crash before normalization")
+
+    monkeypatch.setattr(ingestion_tasks, "normalize_dispatched_record", crash_after_raw_commit)
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        ingestion_tasks._persist_alpaca_batch(
+            engine=engine,
+            raw_store=isolated_minio_store,
+            job_id=job_id,
+            batch=_batch(
+                b'{"bars":[{"t":"2026-08-21T15:00:00Z","o":"180","h":"181",'
+                b'"l":"179","c":"180.5","v":"100"}],"symbol":"NVDA"}',
+                token=None,
+            ),
+            coverage=MarketDataCoverage.IEX,
+            timeframe="1Min",
+            request_identity=str(job_id),
+            now=NOW,
+        )
+    monkeypatch.setattr(ingestion_tasks, "normalize_dispatched_record", original)
+
+    with engine.connect() as connection:
+        raw_id = connection.execute(select(raw_data_object.c.id)).scalar_one()
+        assert connection.execute(select(func.count()).select_from(market_bar)).scalar_one() == 0
+        assert connection.execute(select(normalization_dispatch.c.state)).scalar_one() == "PENDING"
+    with engine.begin() as connection:
+        dispatch = connection.execute(select(normalization_dispatch)).mappings().one()
+        connection.execute(
+            normalized_record.insert().values(
+                raw_data_object_id=raw_id,
+                record_type=dispatch["record_type"],
+                record_key=dispatch["record_key"],
+                normalization_version=dispatch["normalization_version"],
+                payload=dispatch["normalized_payload"],
+            )
+        )
+
+    ingestion_tasks.run_normalization_task(
+        engine,
+        raw_id=raw_id,
+        normalization_version="alpaca-bars-v1",
+        now=NOW,
+        raw_store=isolated_minio_store,
+    )
+    with engine.connect() as connection:
+        assert connection.execute(select(func.count()).select_from(market_bar)).scalar_one() == 1
+    engine.dispose()
+
+
+def test_rest_schema_drift_keeps_raw_object_and_rejection(
+    isolated_database_url: str,
+    isolated_minio_store: MinioRawObjectStore,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    job_id = _enqueue(engine)
+    with pytest.raises(ValueError, match="invalid JSON"):
+        ingestion_tasks._persist_alpaca_batch(
+            engine=engine,
+            raw_store=isolated_minio_store,
+            job_id=job_id,
+            batch=_batch(b'{"bars":[', token=None),
+            coverage=MarketDataCoverage.IEX,
+            timeframe="1Min",
+            request_identity=str(job_id),
+            now=NOW,
+        )
+
+    assert len(isolated_minio_store.list_keys("live/ALPACA/price_bars/")) == 1
+    with engine.connect() as connection:
+        assert (
+            connection.execute(select(func.count()).select_from(raw_data_object)).scalar_one() == 1
+        )
+        assert (
+            connection.execute(
+                select(func.count()).select_from(normalization_rejection)
+            ).scalar_one()
+            == 1
+        )
+    engine.dispose()
+
+
+def test_rest_semantic_schema_drift_keeps_raw_object_and_rejection(
+    isolated_database_url: str,
+    isolated_minio_store: MinioRawObjectStore,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    job_id = _enqueue(engine)
+    body = b'{"bars":[{"S":"NVDA","t":"not-a-date","o":180,"h":182,"l":179,"c":181,"v":1000}]}'
+    with pytest.raises(ValueError):
+        ingestion_tasks._persist_alpaca_batch(
+            engine=engine,
+            raw_store=isolated_minio_store,
+            job_id=job_id,
+            batch=_batch(body, token=None),
+            coverage=MarketDataCoverage.IEX,
+            timeframe="1Min",
+            request_identity=str(job_id),
+            now=NOW,
+        )
+
+    assert len(isolated_minio_store.list_keys("live/ALPACA/price_bars/")) == 1
+    with engine.connect() as connection:
+        assert (
+            connection.execute(select(func.count()).select_from(raw_data_object)).scalar_one() == 1
+        )
+        assert (
+            connection.execute(
+                select(func.count()).select_from(normalization_rejection)
+            ).scalar_one()
+            == 1
+        )
+    engine.dispose()
+
+
+def test_recovery_envelope_missing_provider_records_schema_drift_rejection(
+    isolated_database_url: str,
+    isolated_minio_store: MinioRawObjectStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    job_id = _enqueue(engine)
+    original = ingestion_tasks.normalize_dispatched_record
+
+    def defer_normalization(*_args: object, **_kwargs: object) -> bool:
+        raise RuntimeError("defer normalization")
+
+    monkeypatch.setattr(ingestion_tasks, "normalize_dispatched_record", defer_normalization)
+    with pytest.raises(RuntimeError, match="defer normalization"):
+        ingestion_tasks._persist_alpaca_batch(
+            engine=engine,
+            raw_store=isolated_minio_store,
+            job_id=job_id,
+            batch=_batch(PAGE_1.body, token=None),
+            coverage=MarketDataCoverage.IEX,
+            timeframe="1Min",
+            request_identity=str(job_id),
+            now=NOW,
+        )
+    monkeypatch.setattr(ingestion_tasks, "normalize_dispatched_record", original)
+
+    with engine.connect() as connection:
+        raw_row = connection.execute(select(raw_data_object)).mappings().one()
+    envelope = json.loads(isolated_minio_store.get(raw_row["raw_object_key"]))
+    envelope.pop("provider")
+    isolated_minio_store.put(
+        raw_row["raw_object_key"],
+        json.dumps(envelope).encode(),
+        "application/json",
+    )
+
+    assert not ingestion_tasks.run_normalization_task(
+        engine,
+        raw_id=raw_row["id"],
+        normalization_version="alpaca-bars-v1",
+        now=NOW,
+        raw_store=isolated_minio_store,
+    )
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(func.count()).select_from(normalization_rejection)
+            ).scalar_one()
+            == 1
+        )
+    engine.dispose()
+
+
+def test_websocket_schema_drift_keeps_raw_object_and_rejection(
+    isolated_database_url: str,
+    isolated_minio_store: MinioRawObjectStore,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    with pytest.raises(ValueError, match="invalid JSON"):
+        AlpacaStreamReplayWriter(engine=engine, raw_store=isolated_minio_store).persist_batch(
+            b'[{"T":"b"',
+            received_at=NOW,
+            coverage=MarketDataCoverage.IEX,
+        )
+
+    assert len(isolated_minio_store.list_keys("live/ALPACA/stream/iex/")) == 1
+    with engine.connect() as connection:
+        assert (
+            connection.execute(select(func.count()).select_from(raw_data_object)).scalar_one() == 1
+        )
+        assert (
+            connection.execute(
+                select(func.count()).select_from(normalization_rejection)
+            ).scalar_one()
+            == 1
+        )
+    engine.dispose()
 
 
 def test_registered_celery_task_executes_through_redis_worker(

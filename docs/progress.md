@@ -2002,3 +2002,50 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   550 passed / 3 credential-gated live contracts skipped, Web 14 files / 94 tests passed, and the
   nine-route production build succeeded. The existing Node `--localstorage-file` warning is
   unchanged and non-functional.
+
+#### PR #13 final specification blocker closure — 2026-08-25
+
+- The final Spec review found three remaining crash/PIT boundaries: outbox recovery could commit a
+  `NormalizedRecord` without its typed Alpaca fact, unprovable historical Alpaca news was not
+  explicitly gated through `NewsArticle.pit_eligible`, and malformed REST/WS payloads could be
+  parsed before durable raw preservation. Each issue received a failing regression before its fix.
+- Alpaca normalization now reconstructs the exact provider batch from its immutable MinIO envelope
+  and transactionally persists the normalized row plus MarketBar/NewsArticle facts. Recovery covers
+  the precise crash window where the normalized row already exists but the typed fact does not.
+- Alpaca news PIT reads use append-only `NewsArticle` facts with `pit_eligible=true` and both time
+  cutoffs. Existing non-Alpaca Fixture news retains its generic compatibility path; Alpaca records
+  cannot use that bypass.
+- REST schema drift now keeps its raw envelope, RawDataObject, and one deterministic
+  NormalizationRejection before failing the job. WebSocket malformed batches are archived and
+  published before the validation error; the durable sink records raw lineage and one rejection.
+  Existing immutable-conflict rejections remain deduplicated.
+- Focused RED runs exited 1 with the expected missing raw archive, typed-fact recovery, and WS
+  ordering failures. GREEN targeted runs exited 0 with 5 passed, then the full RDB-2 regression
+  exited 0 with 141 passed / 3 credential-gated live contracts skipped. The first full verification
+  attempt correctly exposed a duplicate rejection and exited 2; its targeted regression then exited
+  0 with 4 passed.
+- Final repeatability run 1: `make verify` exited 0 with 272 files format clean, Ruff clean, strict
+  Mypy clean over 238 source files, no Alembic/MCP/OpenAPI drift, backend 555 passed / 3
+  credential-gated live contracts skipped, Web 14 files / 94 tests passed, and nine routes built.
+- Final repeatability run 2: `make verify` exited 0 with the same gates and counts. The existing Node
+  `--localstorage-file` warning remains non-functional. Alpaca credentials are still pending account
+  approval; no live request, entitlement, response, or market datum was fabricated.
+
+#### PR #13 second professional review closure — 2026-08-25
+
+- Two independent reviews found four final boundary cases. Paper/API research could return persisted
+  Fixture news when Alpaca had no eligible facts; REST semantic timestamp drift could fail before raw
+  preservation; distinct Alpaca articles sharing a publication timestamp were collapsed as revisions;
+  and a recovery envelope missing `provider` was not classified as terminal schema drift.
+- Four focused regressions first reproduced those behaviors, then exited 0 with 4 passed after the
+  fixes. Paper research now admits only Alpaca facts and returns explicit missingness instead of
+  falling back to Fixture. Raw metadata extraction tolerates invalid event timestamps so the exact
+  envelope is durable before normalization rejects it. News revision identity includes article ID,
+  and every required envelope identity field maps to a deterministic `NormalizationRejection`.
+- The expanded ingestion, stream-supervisor, and API-worker suite exited 0 with 86 passed. The first
+  full verification attempt exited 2 at the format gate only; Ruff formatted the two reported files.
+- Repeatability run 1: `make verify` exited 0 with 272 files format clean, Ruff clean, strict Mypy
+  clean over 238 source files, no Alembic drift, backend 558 passed / 3 credential-gated live tests
+  skipped, Web 14 files / 94 tests passed, and the nine-route Next.js build succeeded.
+- Repeatability run 2: `make verify` exited 0 with the same gates and counts. Alpaca credentials remain
+  pending account approval; no live request or result was fabricated.

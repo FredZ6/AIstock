@@ -95,6 +95,26 @@ def test_stream_supervisor_archives_before_publish_and_does_not_advance_on_failu
     assert supervisor.reconnect_watermarks == {}
 
 
+def test_stream_supervisor_archives_and_publishes_before_schema_validation() -> None:
+    order: list[str] = []
+    malformed = '[{"T":"b"'
+    supervisor = AlpacaStreamSupervisor(
+        data_key="test-key",
+        data_secret="test-secret",
+        coverage=MarketDataCoverage.IEX,
+        symbols=("NVDA",),
+        archive=lambda _key, _raw: order.append("archive"),
+        publish=lambda _task, _args: order.append("publish"),
+    )
+
+    try:
+        asyncio.run(supervisor.consume(FakeConnection((malformed,))))
+    except ValueError as error:
+        assert "invalid JSON" in str(error)
+
+    assert order == ["archive", "archive", "publish"]
+
+
 def test_sidecar_survives_raw_archive_failure_and_is_replayable() -> None:
     archived: list[tuple[str, bytes]] = []
     published: list[tuple[str, list[str]]] = []

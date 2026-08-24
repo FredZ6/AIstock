@@ -17,7 +17,11 @@ from stock_platform.application.ingestion.normalizers.alpaca import AlpacaBar, m
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.ingestion.models import MarketDataCoverage
-from stock_platform.infrastructure.db.models.tables import normalized_record, raw_data_object
+from stock_platform.infrastructure.db.models.tables import (
+    normalization_rejection,
+    normalized_record,
+    raw_data_object,
+)
 from stock_platform.infrastructure.ingestion.fact_store import PostgresAlpacaFactStore
 from stock_platform.infrastructure.providers.base import (
     ProviderEvent,
@@ -116,7 +120,56 @@ class AlpacaStreamReplayWriter:
         coverage: MarketDataCoverage,
     ) -> tuple[UUID, ...]:
         observed_at = require_aware(received_at).astimezone(UTC)
-        events = self._decoder.decode_batch(raw, received_at=observed_at)
+        content_hash = hashlib.sha256(raw).hexdigest()
+        feed_type = f"alpaca_stream_batch_{coverage.value.lower()}"
+        object_key = alpaca_stream_object_key(raw, coverage=coverage)
+        try:
+            self._raw_store.put(object_key, raw, "application/json")
+        except Exception as error:
+            raise AlpacaStreamPersistenceUnavailable("Alpaca stream object write failed") from error
+        try:
+            events = self._decoder.decode_batch(raw, received_at=observed_at)
+        except ValueError as error:
+            with self._engine.begin() as connection:
+                raw_id = connection.execute(
+                    insert(raw_data_object)
+                    .values(
+                        provider="ALPACA",
+                        feed_type=feed_type,
+                        event_time=observed_at,
+                        available_at=observed_at,
+                        ingested_at=observed_at,
+                        content_hash=content_hash,
+                        raw_object_key=object_key,
+                    )
+                    .on_conflict_do_nothing(constraint="uq_raw_data_provider_content")
+                    .returning(raw_data_object.c.id)
+                ).scalar_one_or_none()
+                if raw_id is None:
+                    raw_id = connection.execute(
+                        select(raw_data_object.c.id).where(
+                            raw_data_object.c.provider == "ALPACA",
+                            raw_data_object.c.feed_type == feed_type,
+                            raw_data_object.c.content_hash == content_hash,
+                        )
+                    ).scalar_one()
+                existing_rejection = connection.execute(
+                    select(normalization_rejection.c.id).where(
+                        normalization_rejection.c.raw_data_object_id == raw_id,
+                        normalization_rejection.c.normalization_version == "alpaca-stream-v2",
+                    )
+                ).scalar_one_or_none()
+                if existing_rejection is None:
+                    connection.execute(
+                        insert(normalization_rejection).values(
+                            raw_data_object_id=raw_id,
+                            record_key=f"stream:{coverage.value}",
+                            normalization_version="alpaca-stream-v2",
+                            error_class="SCHEMA_DRIFT",
+                            error_detail={"type": type(error).__name__, "message": str(error)},
+                        )
+                    )
+            raise
         if not events:
             return ()
         try:
@@ -131,13 +184,6 @@ class AlpacaStreamReplayWriter:
         ]
         if len(payloads) != len(events):
             raise ValueError("Alpaca stream batch does not match decoded events")
-        content_hash = hashlib.sha256(raw).hexdigest()
-        feed_type = f"alpaca_stream_batch_{coverage.value.lower()}"
-        object_key = alpaca_stream_object_key(raw, coverage=coverage)
-        try:
-            self._raw_store.put(object_key, raw, "application/json")
-        except Exception as error:
-            raise AlpacaStreamPersistenceUnavailable("Alpaca stream object write failed") from error
         raw_values = {
             "provider": "ALPACA",
             "feed_type": feed_type,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from base64 import b64encode
+from base64 import b64decode, b64encode
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -24,6 +24,7 @@ from stock_platform.application.ingestion.raw_writer import (
     RawWriter,
     report_orphaned_raw_objects,
 )
+from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.ingestion.models import (
     FeedType,
@@ -47,6 +48,7 @@ from stock_platform.infrastructure.providers.alpaca_stream import (
 )
 from stock_platform.infrastructure.providers.base import (
     ProviderBatch,
+    ProviderRateLimit,
     ProviderRecord,
     RawObjectStore,
 )
@@ -79,6 +81,10 @@ class AlpacaWindowTransport(Protocol):
         coverage: str,
         page_token: str | None = None,
     ) -> ProviderBatch: ...
+
+
+class RawObjectArchive(RawObjectStore, Protocol):
+    def get(self, object_key: str) -> bytes: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -208,22 +214,25 @@ def _raw_record(
     raw_content: bytes,
 ) -> ProviderRecord:
     try:
-        payload = json.loads(batch.body, parse_float=str, parse_int=str)
-    except (json.JSONDecodeError, UnicodeDecodeError) as error:
-        raise ValueError("Alpaca REST payload is invalid JSON") from error
-    if not isinstance(payload, dict):
-        raise ValueError("Alpaca REST payload must be an object")
+        decoded = json.loads(batch.body, parse_float=str, parse_int=str)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        decoded = None
+    payload = decoded if isinstance(decoded, dict) else {}
     event_times: list[datetime] = []
     for collection_name, time_key in (("bars", "t"), ("news", "created_at")):
         collection = payload.get(collection_name)
         if isinstance(collection, list):
             for item in collection:
                 if isinstance(item, dict) and item.get(time_key) is not None:
-                    event_times.append(
-                        require_aware(
-                            datetime.fromisoformat(str(item[time_key]).replace("Z", "+00:00"))
-                        ).astimezone(UTC)
-                    )
+                    try:
+                        event_times.append(
+                            require_aware(
+                                datetime.fromisoformat(str(item[time_key]).replace("Z", "+00:00"))
+                            ).astimezone(UTC)
+                        )
+                    except (TypeError, ValueError):
+                        # Raw preservation must not depend on semantic schema validity.
+                        continue
     content_hash = hashlib.sha256(raw_content).hexdigest()
     checked_ingested_at = max(
         require_aware(ingested_at).astimezone(UTC),
@@ -300,45 +309,23 @@ def _persist_alpaca_batch(
         raw_content=raw_envelope,
         normalization_version=normalization_version,
     )
-    normalize_dispatched_record(
-        engine,
-        raw_id=raw_id,
-        normalization_version=normalization_version,
-    )
-    with engine.begin() as connection:
-        normalized_id = cast(
-            UUID,
-            connection.execute(
-                select(normalized_record.c.id).where(
-                    normalized_record.c.raw_data_object_id == raw_id,
-                    normalized_record.c.normalization_version == normalization_version,
-                )
-            ).scalar_one(),
+    try:
+        normalize_dispatched_record(
+            engine,
+            raw_id=raw_id,
+            normalization_version=normalization_version,
+            raw_store=cast(RawObjectArchive, raw_store),
         )
-        facts = AlpacaNormalizer().normalize_batch(verified_batch)
-        fact_store = PostgresAlpacaFactStore(connection)
-        if batch.feed_type is FeedType.PRICE_BARS:
-            for bar in facts:
-                fact_store.persist_bar(
-                    raw_id=raw_id,
-                    normalized_id=normalized_id,
-                    bar=bar,  # type: ignore[arg-type]
-                )
-        else:
-            for article in facts:
-                fact_store.persist_news(
-                    raw_id=raw_id,
-                    normalized_id=normalized_id,
-                    article=article,  # type: ignore[arg-type]
-                )
-        connection.execute(
-            update(normalization_dispatch)
-            .where(
-                normalization_dispatch.c.raw_data_object_id == raw_id,
-                normalization_dispatch.c.normalization_version == normalization_version,
-            )
-            .values(state="DISPATCHED", updated_at=require_aware(now).astimezone(UTC))
+    except Exception as error:
+        record_normalization_failure(
+            engine,
+            raw_id=raw_id,
+            normalization_version=normalization_version,
+            error=error,
+            now=now,
+            terminal=isinstance(error, ValueError),
         )
+        raise
 
 
 def _job_cursor(
@@ -566,7 +553,17 @@ def normalize_dispatched_record(
     *,
     raw_id: UUID,
     normalization_version: str,
+    raw_store: RawObjectArchive | None = None,
 ) -> bool:
+    if normalization_version in {"alpaca-bars-v1", "alpaca-news-v1"}:
+        if raw_store is None:
+            raise ValueError("Alpaca normalization requires the immutable raw archive")
+        return _normalize_alpaca_dispatched_record(
+            engine,
+            raw_id=raw_id,
+            normalization_version=normalization_version,
+            raw_store=raw_store,
+        )
     conflict = False
     with engine.begin() as connection:
         dispatch = (
@@ -622,6 +619,112 @@ def normalize_dispatched_record(
     return False
 
 
+def _normalize_alpaca_dispatched_record(
+    engine: Engine,
+    *,
+    raw_id: UUID,
+    normalization_version: str,
+    raw_store: RawObjectArchive,
+) -> bool:
+    with engine.connect() as connection:
+        source = (
+            connection.execute(
+                select(raw_data_object, normalization_dispatch)
+                .join(
+                    normalization_dispatch,
+                    normalization_dispatch.c.raw_data_object_id == raw_data_object.c.id,
+                )
+                .where(
+                    raw_data_object.c.id == raw_id,
+                    normalization_dispatch.c.normalization_version == normalization_version,
+                )
+            )
+            .mappings()
+            .one()
+        )
+    envelope = json.loads(raw_store.get(str(source["raw_object_key"])))
+    if not isinstance(envelope, dict):
+        raise ValueError("Alpaca raw envelope must be an object")
+    try:
+        body = b64decode(str(envelope["body_base64"]), validate=True)
+        feed_type = FeedType(str(envelope["feed_type"]))
+        symbol = Symbol(str(envelope["symbol"]))
+        provider = str(envelope["provider"])
+    except (KeyError, ValueError) as error:
+        raise ValueError("Alpaca raw envelope identity is invalid") from error
+    coverage = envelope.get("coverage")
+    timeframe = envelope.get("timeframe")
+    headers = ({"X-AIStock-Verified-Coverage": str(coverage)} if coverage is not None else {}) | (
+        {"X-AIStock-Timeframe": str(timeframe)} if timeframe is not None else {}
+    )
+    batch = ProviderBatch(
+        provider=provider,
+        feed_type=feed_type,
+        symbol=symbol,
+        query_as_of=source["event_time"],
+        observed_at=source["available_at"],
+        body=body,
+        headers=headers,
+        next_page_token=None,
+        rate_limit=ProviderRateLimit(),
+    )
+    facts = AlpacaNormalizer().normalize_batch(batch)
+    with engine.begin() as connection:
+        inserted = connection.execute(
+            insert(normalized_record)
+            .values(
+                raw_data_object_id=raw_id,
+                record_type=source["record_type"],
+                record_key=source["record_key"],
+                normalization_version=normalization_version,
+                payload=source["normalized_payload"],
+            )
+            .on_conflict_do_nothing(constraint="uq_normalized_record_version")
+            .returning(normalized_record.c.id)
+        ).scalar_one_or_none()
+        normalized_id = inserted
+        if normalized_id is None:
+            existing = (
+                connection.execute(
+                    select(normalized_record).where(
+                        normalized_record.c.raw_data_object_id == raw_id,
+                        normalized_record.c.record_type == source["record_type"],
+                        normalized_record.c.record_key == source["record_key"],
+                        normalized_record.c.normalization_version == normalization_version,
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            if existing["payload"] != source["normalized_payload"]:
+                raise ValueError("immutable normalized record conflict")
+            normalized_id = existing["id"]
+        fact_store = PostgresAlpacaFactStore(connection)
+        if feed_type is FeedType.PRICE_BARS:
+            for bar in facts:
+                fact_store.persist_bar(
+                    raw_id=raw_id,
+                    normalized_id=cast(UUID, normalized_id),
+                    bar=bar,  # type: ignore[arg-type]
+                )
+        else:
+            for article in facts:
+                fact_store.persist_news(
+                    raw_id=raw_id,
+                    normalized_id=cast(UUID, normalized_id),
+                    article=article,  # type: ignore[arg-type]
+                )
+        connection.execute(
+            update(normalization_dispatch)
+            .where(
+                normalization_dispatch.c.raw_data_object_id == raw_id,
+                normalization_dispatch.c.normalization_version == normalization_version,
+            )
+            .values(state="DISPATCHED", updated_at=datetime.now(UTC))
+        )
+    return inserted is not None
+
+
 def record_normalization_failure(
     engine: Engine,
     *,
@@ -665,6 +768,23 @@ def record_normalization_failure(
                 updated_at=failed_at,
             )
         )
+        if terminal:
+            existing_rejection = connection.execute(
+                select(normalization_rejection.c.id).where(
+                    normalization_rejection.c.raw_data_object_id == raw_id,
+                    normalization_rejection.c.normalization_version == normalization_version,
+                )
+            ).scalar_one_or_none()
+            if existing_rejection is None:
+                connection.execute(
+                    insert(normalization_rejection).values(
+                        raw_data_object_id=raw_id,
+                        record_key=row["record_key"],
+                        normalization_version=normalization_version,
+                        error_class="SCHEMA_DRIFT",
+                        error_detail={"type": type(error).__name__, "message": str(error)},
+                    )
+                )
     return state
 
 
@@ -674,12 +794,14 @@ def run_normalization_task(
     raw_id: UUID,
     normalization_version: str,
     now: datetime,
+    raw_store: RawObjectArchive | None = None,
 ) -> bool:
     try:
         return normalize_dispatched_record(
             engine,
             raw_id=raw_id,
             normalization_version=normalization_version,
+            raw_store=raw_store,
         )
     except Exception as error:
         record_normalization_failure(
@@ -866,6 +988,7 @@ def normalize_raw_object(raw_id: str, normalization_version: str) -> bool:
             raw_id=UUID(raw_id),
             normalization_version=normalization_version,
             now=datetime.now(UTC),
+            raw_store=MinioRawObjectStore.from_settings(settings),
         )
     finally:
         engine.dispose()

@@ -26,8 +26,14 @@ from stock_platform.infrastructure.db.models.tables import (
     tool_call,
     weekly_review_run,
 )
+from stock_platform.infrastructure.providers.base import FeedType, ProviderStatus
+from stock_platform.infrastructure.providers.fixture.loader import FixtureCatalog
 from stock_platform.workers.portfolio_tasks import execute_portfolio_run
-from stock_platform.workers.research_tasks import execute_market_monitor_run, execute_research_run
+from stock_platform.workers.research_tasks import (
+    PostgresResearchProvider,
+    execute_market_monitor_run,
+    execute_research_run,
+)
 from stock_platform.workers.review_tasks import execute_weekly_review_run
 from stock_platform.workers.schedules import recover_queued_runs
 
@@ -501,6 +507,27 @@ def test_paper_research_worker_consumes_sip_admission_as_typed_gap(
     assert len(gaps) == 1
     assert gaps[0]["kind"] == "UNAVAILABLE"
     assert gaps[0]["provider"] == "ALPACA"
+    engine.dispose()
+
+
+def test_paper_research_provider_never_falls_back_to_persisted_fixture_news(
+    isolated_database_url: str,
+) -> None:
+    _migrate(isolated_database_url)
+    engine = create_engine(isolated_database_url)
+    as_of = datetime(2026, 8, 21, 20, tzinfo=UTC)
+    with engine.begin() as connection:
+        FixtureCatalog.load_default().seed_database(connection)
+        response = PostgresResearchProvider(
+            connection,
+            coverage=None,
+            gap_reason=None,
+        ).fetch(FeedType.COMPANY_NEWS, "NVDA", as_of)
+
+    assert response.status is ProviderStatus.NOT_FOUND
+    assert response.provider == "ALPACA"
+    assert response.records == ()
+    assert response.missingness == "MISSING"
     engine.dispose()
 
 
