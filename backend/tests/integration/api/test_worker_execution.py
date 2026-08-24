@@ -17,6 +17,7 @@ from stock_platform.infrastructure.db.models.tables import (
     agent_run,
     cash_ledger,
     decision_snapshot,
+    evidence_gap,
     execution_policy_version,
     market_context_snapshot,
     paper_portfolio_config,
@@ -25,8 +26,14 @@ from stock_platform.infrastructure.db.models.tables import (
     tool_call,
     weekly_review_run,
 )
+from stock_platform.infrastructure.providers.base import FeedType, ProviderStatus
+from stock_platform.infrastructure.providers.fixture.loader import FixtureCatalog
 from stock_platform.workers.portfolio_tasks import execute_portfolio_run
-from stock_platform.workers.research_tasks import execute_market_monitor_run, execute_research_run
+from stock_platform.workers.research_tasks import (
+    PostgresResearchProvider,
+    execute_market_monitor_run,
+    execute_research_run,
+)
 from stock_platform.workers.review_tasks import execute_weekly_review_run
 from stock_platform.workers.schedules import recover_queued_runs
 
@@ -450,6 +457,77 @@ def test_research_worker_runs_real_graph_once_with_ordered_events(
         replay = load_events(connection, run_id)
         assert sum(event["type"] == "mcp.tool.completed" for event in replay) == 5
         assert {event["correlation_id"] for event in replay} == {correlation_id}
+    engine.dispose()
+
+
+def test_paper_research_worker_consumes_sip_admission_as_typed_gap(
+    isolated_database_url: str,
+) -> None:
+    _migrate(isolated_database_url)
+    engine = create_engine(isolated_database_url)
+    run_id = uuid4()
+    as_of = datetime(2026, 8, 21, 20, tzinfo=UTC)
+    with engine.begin() as connection:
+        connection.execute(
+            insert(agent_run).values(
+                id=run_id,
+                run_type="RESEARCH",
+                idempotency_key=f"paper-research-{run_id}",
+                request_hash="9" * 64,
+                request_payload={
+                    "symbol": "NVDA",
+                    "market_data_admission": {
+                        "outcome": "ALLOWED_WITH_GAP",
+                        "selected_coverage": None,
+                        "gap_kind": "UNAVAILABLE",
+                        "reason": "SIP entitlement unavailable",
+                    },
+                },
+                symbol="NVDA",
+                decision_time=as_of,
+                data_cutoff=as_of,
+                status="QUEUED",
+            )
+        )
+
+    assert execute_research_run(
+        isolated_database_url,
+        str(run_id),
+        completed_at=as_of,
+        fixture_mode=False,
+    )
+    with engine.connect() as connection:
+        gaps = (
+            connection.execute(
+                select(evidence_gap).where(evidence_gap.c.reason == "SIP entitlement unavailable")
+            )
+            .mappings()
+            .all()
+        )
+    assert len(gaps) == 1
+    assert gaps[0]["kind"] == "UNAVAILABLE"
+    assert gaps[0]["provider"] == "ALPACA"
+    engine.dispose()
+
+
+def test_paper_research_provider_never_falls_back_to_persisted_fixture_news(
+    isolated_database_url: str,
+) -> None:
+    _migrate(isolated_database_url)
+    engine = create_engine(isolated_database_url)
+    as_of = datetime(2026, 8, 21, 20, tzinfo=UTC)
+    with engine.begin() as connection:
+        FixtureCatalog.load_default().seed_database(connection)
+        response = PostgresResearchProvider(
+            connection,
+            coverage=None,
+            gap_reason=None,
+        ).fetch(FeedType.COMPANY_NEWS, "NVDA", as_of)
+
+    assert response.status is ProviderStatus.NOT_FOUND
+    assert response.provider == "ALPACA"
+    assert response.records == ()
+    assert response.missingness == "MISSING"
     engine.dispose()
 
 

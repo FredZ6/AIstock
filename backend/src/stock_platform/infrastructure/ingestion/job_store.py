@@ -332,12 +332,21 @@ class IngestionJobStore:
         cursor: dict[str, object],
         watermark: datetime,
         now: datetime,
+        lease: IngestionLease | None = None,
     ) -> bool:
         checked_watermark = require_aware(watermark).astimezone(UTC)
         changed_at = require_aware(now).astimezone(UTC)
         if expected_generation < 0:
             raise ValueError("expected_generation must not be negative")
         with self._engine.begin() as connection:
+            if lease is not None:
+                lease_valid = connection.execute(
+                    select(ingestion_job.c.id)
+                    .where(*self._lease_predicates(lease, changed_at))
+                    .with_for_update()
+                ).scalar_one_or_none()
+                if lease_valid is None:
+                    return False
             if expected_generation == 0:
                 inserted = connection.execute(
                     pg_insert(ingestion_cursor)

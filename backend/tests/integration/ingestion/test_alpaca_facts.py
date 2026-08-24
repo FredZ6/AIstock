@@ -1,0 +1,418 @@
+import importlib
+import importlib.util
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from pathlib import Path
+
+import pytest
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine, func, insert, inspect, select, text, update
+from sqlalchemy.exc import DBAPIError
+from stock_platform.application.ingestion.normalizers.alpaca import (
+    AlpacaBar,
+    AlpacaNewsArticle,
+)
+from stock_platform.application.market_data.repositories import PostgresMarketDataRepository
+from stock_platform.domain.common.ids import Symbol
+from stock_platform.domain.ingestion.models import MarketDataCoverage, MarketSession
+from stock_platform.infrastructure.db.models.tables import (
+    market_bar,
+    news_article,
+    normalized_record,
+    raw_data_object,
+)
+from stock_platform.infrastructure.providers.base import FeedType, ProviderStatus
+
+
+def _alembic_config(database_url: str) -> Config:
+    config = Config(str(Path(__file__).parents[3] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", database_url)
+    return config
+
+
+def test_0026_adds_alpaca_fact_schema_and_database_guards(
+    isolated_database_url: str,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    inspector = inspect(engine)
+
+    table_names = inspector.get_table_names()
+    assert "news_article" in table_names
+    assert "market_trade" not in table_names
+    market_bar_columns = {column["name"] for column in inspector.get_columns("market_bar")}
+    assert {"normalized_record_id", "coverage", "session"} <= market_bar_columns
+    stream_index = next(
+        index
+        for index in inspector.get_indexes("market_bar")
+        if index["name"] == "uq_market_bar_stream_content"
+    )
+    assert stream_index["unique"] is True
+    assert stream_index["column_names"] == [
+        "provider",
+        "feed_type",
+        "content_hash",
+        "event_time",
+        "symbol",
+    ]
+    with engine.connect() as connection:
+        guarded_tables = set(
+            connection.execute(
+                text(
+                    """
+                    SELECT event_object_table
+                    FROM information_schema.triggers
+                    WHERE trigger_name = 'enforce_append_only'
+                      AND event_object_table IN ('market_bar', 'news_article')
+                    """
+                )
+            ).scalars()
+        )
+        lineage_guard = connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM pg_trigger
+                WHERE tgname = 'require_normalized_market_bar_lineage'
+                  AND NOT tgisinternal
+                """
+            )
+        ).scalar_one()
+
+    assert guarded_tables == {"market_bar", "news_article"}
+    assert lineage_guard == 1
+    engine.dispose()
+
+
+def test_news_pit_eligibility_is_enforced_by_postgres(
+    isolated_database_url: str,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    published_at = datetime(2026, 8, 21, 13, tzinfo=UTC)
+    available_at = datetime(2026, 8, 21, 14, tzinfo=UTC)
+
+    with engine.begin() as connection:
+        raw_id = connection.execute(
+            insert(raw_data_object)
+            .values(
+                provider="ALPACA",
+                feed_type="company_news",
+                event_time=published_at,
+                available_at=available_at,
+                ingested_at=available_at,
+                content_hash="c" * 64,
+                raw_object_key=f"live/ALPACA/company_news/{'c' * 64}.json",
+            )
+            .returning(raw_data_object.c.id)
+        ).scalar_one()
+        normalized_id = connection.execute(
+            insert(normalized_record)
+            .values(
+                raw_data_object_id=raw_id,
+                record_type="news_article",
+                record_key="pit-invalid",
+                normalization_version="alpaca-news-v1",
+                payload={"article_id": "pit-invalid"},
+            )
+            .returning(normalized_record.c.id)
+        ).scalar_one()
+
+    invalid = {
+        "raw_data_object_id": raw_id,
+        "normalized_record_id": normalized_id,
+        "provider": "ALPACA",
+        "article_id": "pit-invalid",
+        "symbols": ["NVDA"],
+        "headline": "Invalid PIT fixture",
+        "source": "fixture-wire",
+        "summary": "",
+        "published_at": published_at,
+        "observed_at": None,
+        "available_at": available_at,
+        "ingested_at": available_at,
+        "pit_eligible": True,
+        "payload": {},
+    }
+    with engine.begin() as connection, pytest.raises(DBAPIError):
+        connection.execute(insert(news_article).values(**invalid))
+    engine.dispose()
+
+
+def test_news_without_provable_observation_is_hidden_from_pit_queries(
+    isolated_database_url: str,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    published_at = datetime(2026, 8, 21, 13, tzinfo=UTC)
+    available_at = datetime(2026, 8, 21, 14, tzinfo=UTC)
+    with engine.begin() as connection:
+        raw_id = connection.execute(
+            insert(raw_data_object)
+            .values(
+                provider="ALPACA",
+                feed_type="company_news",
+                event_time=published_at,
+                available_at=available_at,
+                ingested_at=available_at,
+                content_hash="d" * 64,
+                raw_object_key=f"live/ALPACA/company_news/{'d' * 64}.json",
+            )
+            .returning(raw_data_object.c.id)
+        ).scalar_one()
+        normalized_id = connection.execute(
+            insert(normalized_record)
+            .values(
+                raw_data_object_id=raw_id,
+                record_type="company_news",
+                record_key="NVDA",
+                normalization_version="alpaca-news-v1",
+                payload={"symbol": "NVDA", "news": [{"id": "unprovable"}]},
+            )
+            .returning(normalized_record.c.id)
+        ).scalar_one()
+        connection.execute(
+            insert(news_article).values(
+                raw_data_object_id=raw_id,
+                normalized_record_id=normalized_id,
+                provider="ALPACA",
+                article_id="unprovable",
+                symbols=["NVDA"],
+                headline="Historical article",
+                source="fixture-wire",
+                summary="",
+                published_at=published_at,
+                observed_at=None,
+                available_at=available_at,
+                ingested_at=available_at,
+                pit_eligible=False,
+                payload={"id": "unprovable", "symbols": ["NVDA"]},
+            )
+        )
+        eligible_raw_id = connection.execute(
+            insert(raw_data_object)
+            .values(
+                provider="ALPACA",
+                feed_type="company_news",
+                event_time=published_at + timedelta(minutes=1),
+                available_at=available_at,
+                ingested_at=available_at,
+                content_hash="e" * 64,
+                raw_object_key=f"live/ALPACA/company_news/{'e' * 64}.json",
+            )
+            .returning(raw_data_object.c.id)
+        ).scalar_one()
+        eligible_normalized_id = connection.execute(
+            insert(normalized_record)
+            .values(
+                raw_data_object_id=eligible_raw_id,
+                record_type="company_news",
+                record_key="NVDA",
+                normalization_version="alpaca-news-v1",
+                payload={"symbol": "NVDA", "news": [{"id": "eligible"}]},
+            )
+            .returning(normalized_record.c.id)
+        ).scalar_one()
+        connection.execute(
+            insert(news_article).values(
+                raw_data_object_id=eligible_raw_id,
+                normalized_record_id=eligible_normalized_id,
+                provider="ALPACA",
+                article_id="eligible",
+                symbols=["NVDA"],
+                headline="Observed article",
+                source="fixture-wire",
+                summary="",
+                published_at=published_at + timedelta(minutes=1),
+                observed_at=available_at,
+                available_at=available_at,
+                ingested_at=available_at,
+                pit_eligible=True,
+                payload={"id": "eligible", "symbols": ["NVDA"]},
+            )
+        )
+        second_raw_id = connection.execute(
+            insert(raw_data_object)
+            .values(
+                provider="ALPACA",
+                feed_type="company_news",
+                event_time=published_at + timedelta(minutes=1),
+                available_at=available_at,
+                ingested_at=available_at,
+                content_hash="f" * 64,
+                raw_object_key=f"live/ALPACA/company_news/{'f' * 64}.json",
+            )
+            .returning(raw_data_object.c.id)
+        ).scalar_one()
+        second_normalized_id = connection.execute(
+            insert(normalized_record)
+            .values(
+                raw_data_object_id=second_raw_id,
+                record_type="company_news",
+                record_key="NVDA",
+                normalization_version="alpaca-news-v1",
+                payload={"symbol": "NVDA", "news": [{"id": "eligible-2"}]},
+            )
+            .returning(normalized_record.c.id)
+        ).scalar_one()
+        connection.execute(
+            insert(news_article).values(
+                raw_data_object_id=second_raw_id,
+                normalized_record_id=second_normalized_id,
+                provider="ALPACA",
+                article_id="eligible-2",
+                symbols=["NVDA"],
+                headline="Second observed article",
+                source="fixture-wire",
+                summary="",
+                published_at=published_at + timedelta(minutes=1),
+                observed_at=available_at,
+                available_at=available_at,
+                ingested_at=available_at,
+                pit_eligible=True,
+                payload={"id": "eligible-2", "symbols": ["NVDA"]},
+            )
+        )
+        response = PostgresMarketDataRepository(connection).as_of(
+            symbol=Symbol("NVDA"),
+            feed_type=FeedType.COMPANY_NEWS,
+            decision_time=available_at + timedelta(minutes=1),
+        )
+    assert response.status is ProviderStatus.OK
+    assert [record.payload["id"] for record in response.records] == ["eligible", "eligible-2"]
+    engine.dispose()
+
+
+def test_alpaca_fact_store_is_idempotent_and_preserves_append_only_lineage(
+    isolated_database_url: str,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    module_name = "stock_platform.infrastructure.ingestion.fact_store"
+    try:
+        module_spec = importlib.util.find_spec(module_name)
+    except ModuleNotFoundError:
+        module_spec = None
+    assert module_spec is not None, "Alpaca fact store is missing"
+    store_type = importlib.import_module(module_name).PostgresAlpacaFactStore
+    engine = create_engine(isolated_database_url)
+    published_at = datetime(2026, 8, 21, 13, tzinfo=UTC)
+    available_at = datetime(2026, 8, 21, 14, 31, tzinfo=UTC)
+
+    with engine.begin() as connection:
+        bar_raw_id = connection.execute(
+            insert(raw_data_object)
+            .values(
+                provider="ALPACA",
+                feed_type="price_bars",
+                event_time=datetime(2026, 8, 21, 14, 30, tzinfo=UTC),
+                available_at=available_at,
+                ingested_at=available_at,
+                content_hash="a" * 64,
+                raw_object_key=f"live/ALPACA/price_bars/{'a' * 64}.json",
+            )
+            .returning(raw_data_object.c.id)
+        ).scalar_one()
+        bar_normalized_id = connection.execute(
+            insert(normalized_record)
+            .values(
+                raw_data_object_id=bar_raw_id,
+                record_type="market_bar",
+                record_key="NVDA:2026-08-21T14:30:00Z:IEX",
+                normalization_version="alpaca-bars-v1",
+                payload={"symbol": "NVDA", "close": "181.00"},
+            )
+            .returning(normalized_record.c.id)
+        ).scalar_one()
+        news_raw_id = connection.execute(
+            insert(raw_data_object)
+            .values(
+                provider="ALPACA",
+                feed_type="company_news",
+                event_time=published_at,
+                available_at=available_at,
+                ingested_at=available_at,
+                content_hash="b" * 64,
+                raw_object_key=f"live/ALPACA/company_news/{'b' * 64}.json",
+            )
+            .returning(raw_data_object.c.id)
+        ).scalar_one()
+        news_normalized_id = connection.execute(
+            insert(normalized_record)
+            .values(
+                raw_data_object_id=news_raw_id,
+                record_type="news_article",
+                record_key="987654",
+                normalization_version="alpaca-news-v1",
+                payload={"article_id": "987654", "symbols": ["NVDA"]},
+            )
+            .returning(normalized_record.c.id)
+        ).scalar_one()
+        store = store_type(connection)
+        bar = AlpacaBar(
+            symbol=Symbol("NVDA"),
+            event_time=datetime(2026, 8, 21, 14, 30, tzinfo=UTC),
+            available_at=available_at,
+            open=Decimal("180.10"),
+            high=Decimal("181.25"),
+            low=Decimal("179.80"),
+            close=Decimal("181.00"),
+            volume=Decimal("125000"),
+            coverage=MarketDataCoverage.IEX,
+            session=MarketSession.REGULAR,
+            payload={"t": "2026-08-21T14:30:00Z", "c": "181.00"},
+        )
+        article = AlpacaNewsArticle(
+            article_id="987654",
+            symbols=(Symbol("NVDA"),),
+            headline="Fixture research update",
+            published_at=published_at,
+            available_at=available_at,
+            observed_at=None,
+            pit_eligible=False,
+            source="fixture-wire",
+            summary="Redacted fixture.",
+            payload={"id": "987654", "symbols": ["NVDA"]},
+        )
+
+        first_bar_id = store.persist_bar(
+            raw_id=bar_raw_id,
+            normalized_id=bar_normalized_id,
+            bar=bar,
+        )
+        assert (
+            store.persist_bar(
+                raw_id=bar_raw_id,
+                normalized_id=bar_normalized_id,
+                bar=bar,
+            )
+            == first_bar_id
+        )
+        first_news_id = store.persist_news(
+            raw_id=news_raw_id,
+            normalized_id=news_normalized_id,
+            article=article,
+        )
+        assert (
+            store.persist_news(
+                raw_id=news_raw_id,
+                normalized_id=news_normalized_id,
+                article=article,
+            )
+            == first_news_id
+        )
+
+        assert connection.execute(select(func.count()).select_from(market_bar)).scalar_one() == 1
+        assert connection.execute(select(func.count()).select_from(news_article)).scalar_one() == 1
+        assert connection.execute(
+            select(market_bar.c.raw_data_object_id, market_bar.c.normalized_record_id)
+        ).one() == (bar_raw_id, bar_normalized_id)
+        assert connection.execute(
+            select(news_article.c.raw_data_object_id, news_article.c.normalized_record_id)
+        ).one() == (news_raw_id, news_normalized_id)
+
+    with engine.connect() as connection, pytest.raises(DBAPIError, match="append-only"):
+        connection.execute(update(market_bar).values(close=Decimal("999")))
+    with engine.connect() as connection, pytest.raises(DBAPIError, match="append-only"):
+        connection.execute(text("DELETE FROM news_article"))
+    engine.dispose()

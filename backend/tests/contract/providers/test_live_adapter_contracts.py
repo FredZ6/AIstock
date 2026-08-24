@@ -5,6 +5,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from stock_platform.application.market_data.fallback import FallbackPolicy
+from stock_platform.domain.ingestion.models import IngestionErrorClass
+from stock_platform.infrastructure.providers import base as provider_base
 from stock_platform.infrastructure.providers.alpaca import AlpacaProvider
 from stock_platform.infrastructure.providers.base import (
     FeedType,
@@ -13,6 +15,7 @@ from stock_platform.infrastructure.providers.base import (
     ProviderRecord,
     ProviderResponse,
     ProviderStatus,
+    ProviderTransportError,
     ResearchDataProvider,
 )
 from stock_platform.infrastructure.providers.fmp import FmpProvider
@@ -50,6 +53,205 @@ def successful_transport(requests: list[HttpRequest]) -> Callable[[HttpRequest],
         return HttpResponse(status_code=200, headers={"etag": "fixture-v1"}, body=body)
 
     return send
+
+
+def test_alpaca_transport_returns_raw_batch_without_persistence() -> None:
+    requests: list[HttpRequest] = []
+    raw_store = RecordingStore()
+    record_store = RecordingRecordStore()
+    body = json.dumps(
+        {
+            "bars": [{"t": "2026-08-16T11:55:00Z", "c": "123.45"}],
+            "symbol": "NVDA",
+            "next_page_token": "page-2",
+        }
+    ).encode()
+
+    def transport(request: HttpRequest) -> HttpResponse:
+        requests.append(request)
+        return HttpResponse(
+            status_code=200,
+            headers={
+                "x-ratelimit-limit": "200",
+                "x-ratelimit-remaining": "199",
+            },
+            body=body,
+        )
+
+    adapter = AlpacaProvider(
+        data_key="fixture-key",
+        data_secret="fixture-secret",
+        transport=transport,
+        raw_store=raw_store,
+        record_store=record_store,
+        clock=lambda: AS_OF,
+    )
+
+    batch = adapter.fetch_batch(FeedType.PRICE_BARS, "NVDA", AS_OF)
+
+    assert batch.body == body
+    assert batch.next_page_token == "page-2"
+    assert batch.rate_limit.limit == 200
+    assert batch.rate_limit.remaining == 199
+    assert len(requests) == 1
+    assert raw_store.objects == []
+    assert record_store.records == []
+
+
+def test_alpaca_window_transport_carries_bounds_feed_timeframe_and_resume_token() -> None:
+    requests: list[HttpRequest] = []
+
+    adapter = AlpacaProvider(
+        data_key="fixture-key",
+        data_secret="fixture-secret",
+        transport=successful_transport(requests),
+        clock=lambda: AS_OF,
+    )
+    batch = adapter.fetch_window(
+        FeedType.PRICE_BARS,
+        "NVDA",
+        start=AS_OF - timedelta(hours=1),
+        end=AS_OF,
+        timeframe="1Min",
+        coverage="SIP",
+        page_token="opaque-page-2",
+    )
+
+    assert len(requests) == 1
+    assert "start=2026-08-16T11%3A00%3A00%2B00%3A00" in requests[0].url
+    assert "end=2026-08-16T12%3A00%3A00%2B00%3A00" in requests[0].url
+    assert "timeframe=1Min" in requests[0].url
+    assert "feed=sip" in requests[0].url
+    assert "page_token=opaque-page-2" in requests[0].url
+    assert "X-Alpaca-Data-Feed" not in batch.headers
+
+
+def test_alpaca_transport_returns_typed_rate_limit_without_sleeping() -> None:
+    requests: list[HttpRequest] = []
+    sleeps: list[float] = []
+
+    def transport(request: HttpRequest) -> HttpResponse:
+        requests.append(request)
+        return HttpResponse(
+            status_code=429,
+            headers={"Retry-After": "120"},
+            body=b'{"message":"rate limit exceeded"}',
+        )
+
+    adapter = AlpacaProvider(
+        data_key="fixture-key",
+        data_secret="fixture-secret",
+        transport=transport,
+        sleep=sleeps.append,
+        clock=lambda: AS_OF,
+    )
+    error_type = getattr(provider_base, "ProviderTransportError", None)
+    assert error_type is not None, "transport failures need a frozen typed error"
+
+    with pytest.raises(error_type) as caught:
+        adapter.fetch_batch(FeedType.PRICE_BARS, "NVDA", AS_OF)
+
+    assert caught.value.error_class is IngestionErrorClass.RATE_LIMIT
+    assert caught.value.status_code == 429
+    assert caught.value.retry_after == timedelta(seconds=120)
+    assert len(requests) == 1
+    assert sleeps == []
+
+
+def test_alpaca_transport_parses_http_date_retry_after() -> None:
+    adapter = AlpacaProvider(
+        data_key="fixture-key",
+        data_secret="fixture-secret",
+        transport=lambda _: HttpResponse(
+            status_code=429,
+            headers={"Retry-After": "Sun, 16 Aug 2026 12:02:00 GMT"},
+            body=b"{}",
+        ),
+        clock=lambda: AS_OF,
+    )
+
+    with pytest.raises(ProviderTransportError) as caught:
+        adapter.fetch_batch(FeedType.PRICE_BARS, "NVDA", AS_OF)
+
+    assert caught.value.retry_after == timedelta(minutes=2)
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_error"),
+    [
+        (401, IngestionErrorClass.INVALID_AUTH),
+        (403, IngestionErrorClass.INVALID_AUTH),
+        (404, IngestionErrorClass.INVALID_SECURITY),
+        (500, IngestionErrorClass.PROVIDER_5XX),
+        (503, IngestionErrorClass.PROVIDER_5XX),
+    ],
+)
+def test_alpaca_transport_classifies_http_failures(
+    status_code: int,
+    expected_error: IngestionErrorClass,
+) -> None:
+    adapter = AlpacaProvider(
+        data_key="fixture-key",
+        data_secret="fixture-secret",
+        transport=lambda _: HttpResponse(status_code=status_code, headers={}, body=b"{}"),
+        clock=lambda: AS_OF,
+    )
+
+    with pytest.raises(ProviderTransportError) as caught:
+        adapter.fetch_batch(FeedType.PRICE_BARS, "NVDA", AS_OF)
+
+    assert caught.value.error_class is expected_error
+    assert caught.value.status_code == status_code
+
+
+def test_alpaca_transport_classifies_timeout_without_retrying() -> None:
+    attempts = 0
+
+    def timeout(_: HttpRequest) -> HttpResponse:
+        nonlocal attempts
+        attempts += 1
+        raise TimeoutError("fixture timeout")
+
+    adapter = AlpacaProvider(
+        data_key="fixture-key",
+        data_secret="fixture-secret",
+        transport=timeout,
+        clock=lambda: AS_OF,
+    )
+
+    with pytest.raises(ProviderTransportError) as caught:
+        adapter.fetch_batch(FeedType.PRICE_BARS, "NVDA", AS_OF)
+
+    assert caught.value.error_class is IngestionErrorClass.TIMEOUT
+    assert caught.value.status_code is None
+    assert attempts == 1
+
+
+@pytest.mark.parametrize(
+    ("adapter", "feed_type", "expected_error"),
+    [
+        (
+            AlpacaProvider(data_key=None, data_secret=None),
+            FeedType.PRICE_BARS,
+            IngestionErrorClass.MISSING_CREDENTIALS,
+        ),
+        (
+            AlpacaProvider(data_key="fixture-key", data_secret="fixture-secret"),
+            FeedType.COMPANY_FACTS,
+            IngestionErrorClass.UNSUPPORTED_DATASET,
+        ),
+    ],
+)
+def test_alpaca_transport_classifies_admission_failures_without_network(
+    adapter: AlpacaProvider,
+    feed_type: FeedType,
+    expected_error: IngestionErrorClass,
+) -> None:
+    with pytest.raises(ProviderTransportError) as caught:
+        adapter.fetch_batch(feed_type, "NVDA", AS_OF)
+
+    assert caught.value.error_class is expected_error
+    assert caught.value.status_code is None
 
 
 @pytest.mark.parametrize(

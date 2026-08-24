@@ -7,11 +7,19 @@ from sqlalchemy.engine import RowMapping
 from stock_platform.agents.harness.budget import BudgetLimits
 from stock_platform.agents.harness.task_spec import PolicyVersions, TaskSpecification
 from stock_platform.agents.research.graph import DailyResearchGraph
+from stock_platform.application.market_data.repositories import PostgresMarketDataRepository
 from stock_platform.application.research.persistence import PostgresResearchStore
 from stock_platform.application.runs import RunControl, execute_run
+from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
+from stock_platform.domain.ingestion.models import MarketDataCoverage
 from stock_platform.infrastructure.db.models.tables import market_bar
-from stock_platform.infrastructure.providers.base import FeedType
+from stock_platform.infrastructure.providers.base import (
+    FeedType,
+    ProviderResponse,
+    ProviderStatus,
+    ResearchDataProvider,
+)
 from stock_platform.infrastructure.providers.fixture.loader import FixtureCatalog
 from stock_platform.mcp_servers.common import McpProviderGateway, durable_mcp_audit_sink
 from stock_platform.settings import Settings
@@ -20,11 +28,79 @@ from stock_platform.workers.celery_app import celery_app
 
 @celery_app.task(name="stock_platform.workers.research_tasks.run_research")  # type: ignore[untyped-decorator]
 def run_research(run_id: str) -> bool:
-    return execute_research_run(Settings().database_url, run_id)
+    settings = Settings()
+    return execute_research_run(
+        settings.database_url,
+        run_id,
+        fixture_mode=settings.fixture_mode,
+    )
+
+
+class PostgresResearchProvider:
+    """Point-in-time paper-mode provider over committed normalized facts."""
+
+    name = "POSTGRES_POINT_IN_TIME"
+
+    def __init__(
+        self,
+        connection: Connection,
+        *,
+        coverage: MarketDataCoverage | None,
+        gap_reason: str | None,
+    ) -> None:
+        self._repository = PostgresMarketDataRepository(connection)
+        self._coverage = coverage
+        self._gap_reason = gap_reason
+
+    def fetch(self, feed_type: FeedType, symbol: str, as_of: datetime) -> ProviderResponse:
+        if feed_type is FeedType.PRICE_BARS and self._coverage is None:
+            return ProviderResponse(
+                status=ProviderStatus.UNAVAILABLE,
+                provider="ALPACA",
+                feed_type=feed_type,
+                symbol=Symbol(symbol),
+                query_as_of=require_aware(as_of),
+                missingness=self._gap_reason or "market data entitlement unavailable",
+            )
+        response = self._repository.as_of(
+            symbol=symbol,
+            feed_type=feed_type,
+            decision_time=as_of,
+            coverage=self._coverage if feed_type is FeedType.PRICE_BARS else None,
+        )
+        alpaca_records = tuple(record for record in response.records if record.provider == "ALPACA")
+        if response.records and alpaca_records != response.records:
+            response = ProviderResponse(
+                status=ProviderStatus.OK if alpaca_records else ProviderStatus.NOT_FOUND,
+                provider="ALPACA",
+                feed_type=response.feed_type,
+                symbol=response.symbol,
+                query_as_of=response.query_as_of,
+                records=alpaca_records,
+                warnings=response.warnings,
+                trace_id=response.trace_id,
+                missingness=None if alpaca_records else "MISSING",
+            )
+        if feed_type is FeedType.PRICE_BARS and self._gap_reason is not None:
+            return ProviderResponse(
+                status=response.status,
+                provider=response.provider,
+                feed_type=response.feed_type,
+                symbol=response.symbol,
+                query_as_of=response.query_as_of,
+                records=response.records,
+                warnings=response.warnings + (f"market_data_gap:UNAVAILABLE:{self._gap_reason}",),
+                missingness=response.missingness,
+            )
+        return response
 
 
 def execute_research_run(
-    database_url: str, run_id: str, *, completed_at: datetime | None = None
+    database_url: str,
+    run_id: str,
+    *,
+    completed_at: datetime | None = None,
+    fixture_mode: bool = True,
 ) -> bool:
     completion_time = require_aware(completed_at) if completed_at is not None else None
 
@@ -32,10 +108,31 @@ def execute_research_run(
         symbol = row["symbol"]
         if not symbol:
             raise ValueError("research run requires a symbol")
-        catalog = FixtureCatalog.load_default()
-        catalog.seed_database(connection)
+        request_payload = row["request_payload"] or {}
+        admission = request_payload.get("market_data_admission", {})
+        selected_coverage = admission.get("selected_coverage")
+        gap_reason = (
+            str(admission.get("reason")) if admission.get("gap_kind") == "UNAVAILABLE" else None
+        )
+        provider: ResearchDataProvider = PostgresResearchProvider(
+            connection,
+            coverage=(
+                MarketDataCoverage(str(selected_coverage))
+                if selected_coverage is not None
+                else None
+            ),
+            gap_reason=gap_reason,
+        )
+        if fixture_mode:
+            catalog = FixtureCatalog.load_default()
+            catalog.seed_database(connection)
+            provider = catalog.provider()
         specification = TaskSpecification(
-            objective=f"Research the frozen {symbol} fixture",
+            objective=(
+                f"Research the frozen {symbol} fixture"
+                if fixture_mode
+                else f"Research {symbol} from point-in-time provider facts"
+            ),
             symbols=(symbol,),
             decision_time=row["decision_time"],
             data_cutoff=row["data_cutoff"],
@@ -55,7 +152,7 @@ def execute_research_run(
         audit_sink = durable_mcp_audit_sink(database_url)
         try:
             DailyResearchGraph(
-                provider=McpProviderGateway(catalog.provider(), audit_sink),
+                provider=McpProviderGateway(provider, audit_sink),
                 store=PostgresResearchStore(
                     connection, available_at=completion_time, record_events=False
                 ),

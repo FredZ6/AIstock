@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from io import BytesIO
 from typing import Protocol, cast
 
@@ -29,6 +29,18 @@ class MinioClient(Protocol):
         prefix: str,
         recursive: bool,
     ) -> Iterable[MinioObject]: ...
+
+
+class MinioResponse(Protocol):
+    def read(self) -> bytes: ...
+
+    def close(self) -> None: ...
+
+    def release_conn(self) -> None: ...
+
+
+class MinioReadableClient(Protocol):
+    def get_object(self, bucket_name: str, object_name: str) -> MinioResponse: ...
 
 
 class MinioObject(Protocol):
@@ -64,14 +76,21 @@ class MinioRawObjectStore:
         )
 
     def list_keys(self, prefix: str = "") -> tuple[str, ...]:
-        return tuple(
-            sorted(
-                item.object_name
-                for item in self._client.list_objects(
-                    self._bucket,
-                    prefix=prefix,
-                    recursive=True,
-                )
-                if item.object_name is not None
-            )
-        )
+        return tuple(sorted(self.iter_keys(prefix)))
+
+    def iter_keys(self, prefix: str = "") -> Iterator[str]:
+        for item in self._client.list_objects(
+            self._bucket,
+            prefix=prefix,
+            recursive=True,
+        ):
+            if item.object_name is not None:
+                yield item.object_name
+
+    def get(self, object_key: str) -> bytes:
+        response = cast(MinioReadableClient, self._client).get_object(self._bucket, object_key)
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()

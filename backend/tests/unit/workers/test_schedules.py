@@ -47,6 +47,9 @@ def test_celery_is_at_least_once_without_authoritative_result_backend() -> None:
     assert celery_app.conf.task_acks_late is True
     assert celery_app.conf.task_reject_on_worker_lost is True
     assert celery_app.conf.timezone == "UTC"
+    assert celery_app.conf.task_routes[
+        "stock_platform.workers.ingestion_tasks.run_alpaca_ingestion_job"
+    ] == {"queue": "ingestion-low"}
     assert set(beat_schedule) == {
         "daily-research-after-close",
         "intraday-market-monitor",
@@ -61,6 +64,45 @@ def test_celery_is_at_least_once_without_authoritative_result_backend() -> None:
         "task": "stock_platform.workers.ingestion_tasks.report_minio_orphans",
         "schedule": 3600.0,
     }
+    assert celery_app.conf.beat_schedule["dispatch-alpaca-ingestion-jobs"] == {
+        "task": "stock_platform.workers.ingestion_tasks.dispatch_alpaca_ingestion_jobs",
+        "schedule": 15.0,
+    }
+    assert celery_app.conf.beat_schedule["schedule-alpaca-watchlist-ingestion"] == {
+        "task": "stock_platform.workers.schedules.schedule_alpaca_watchlist_ingestion",
+        "schedule": 60.0,
+    }
+    assert celery_app.conf.beat_schedule["schedule-alpaca-daily-ingestion"]["task"] == (
+        "stock_platform.workers.schedules.schedule_alpaca_daily_ingestion"
+    )
+    assert (
+        celery_app.tasks["stock_platform.workers.ingestion_tasks.run_alpaca_ingestion_job"]
+        is not None
+    )
+    assert celery_app.tasks["stock_platform.workers.ingestion_tasks.persist_alpaca_stream_event"]
+    assert celery_app.tasks[
+        "stock_platform.workers.ingestion_tasks.reconcile_alpaca_stream_archive"
+    ]
+    assert celery_app.tasks["stock_platform.workers.schedules.schedule_alpaca_reconnect_ingestion"]
+    assert celery_app.tasks["stock_platform.workers.schedules.schedule_alpaca_bounded_backfill"]
+
+
+def test_documented_worker_consumes_the_low_priority_ingestion_queue() -> None:
+    recovery = open("scripts/verify-recovery.sh", encoding="utf-8").read()
+    runbook = open("docs/runbooks/stuck-run.md", encoding="utf-8").read()
+
+    assert "--queues=celery,ingestion-low" in recovery
+    assert "--queues=celery,ingestion-low" in runbook
+
+
+def test_alpaca_stream_has_managed_operator_entrypoint() -> None:
+    makefile = open("Makefile", encoding="utf-8").read()
+    runbook = open("docs/runbooks/provider-outage.md", encoding="utf-8").read()
+
+    assert "alpaca-stream:" in makefile
+    assert "scripts/run_alpaca_stream.py" in makefile
+    assert "restart-on-failure" in runbook
+    assert "stream.data.alpaca.markets/v2/{iex|sip}" in runbook
 
 
 def test_orphan_reporting_uses_one_bounded_summary() -> None:

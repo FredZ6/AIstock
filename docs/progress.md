@@ -1761,3 +1761,298 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   TypeScript/ESLint clean, and the nine-route Next.js production build successful. The existing Node
   `--localstorage-file` environment warning is unchanged and non-functional; the long-lived database
   was restored after the isolated run.
+
+### M7.5 RDB-2 Alpaca market and news ingestion — 2026-08-24
+
+#### Task 7 — separate transport from persistence
+
+- FRE-25 moved from Backlog to In Progress. Work started from `main@4d9c60a` on the isolated
+  `codex/fre-25-rdb-2` branch; the user's uncommitted frontend changes in the primary worktree were
+  not touched.
+- Baseline diagnosis: the first `make verify` exited 2 while a new worktree attempted a sandboxed
+  PyPI download. The authorized retry exposed two missing CHECK constraints in a stale local 0025
+  development database. A separate empty TimescaleDB/pgvector database upgraded from 0001 through
+  0025 with exit 0 and no drift. The stale local test database contained no incompatible rows, so
+  the two already-merged 0025 constraints were restored without data changes. The original
+  unmodified `make verify` then exited 0: backend 477 passed / 3 credential-gated skipped, Web 94
+  passed, and all format, lint, type, migration-drift, contract-drift, and build gates passed.
+- TDD RED evidence: focused commands exited 1 for each absent behavior: transport-only raw batch,
+  frozen rate-limit error, timeout/401/403/404/5xx classification, credential/dataset admission,
+  persistence-free stream decoder, coordinator-owned persistence/completion, durable Retry-After
+  scheduling, non-retryable failure recording, and HTTP-date Retry-After parsing.
+- GREEN implementation: provider-neutral `ProviderBatch`, `ProviderEvent`, rate-limit metadata, and
+  `ProviderTransportError` now expose raw REST/stream delivery without MinIO/PostgreSQL writes or
+  transport-layer sleep. `IngestionCoordinator` owns persistence callbacks and translates retryable
+  versus terminal errors into durable job-store transitions. The existing `fetch()` and
+  `AlpacaStreamNormalizer` remain narrow compatibility wrappers; the latter delegates identity/time
+  checks to the new persistence-free decoder.
+- Provider contract command exited 0: 27 passed / 3 credential-gated skipped. Ruff and strict Mypy
+  exited 0 over 227 source files. The combined provider/coordinator/stream/fallback suite exited 0:
+  121 passed / 3 credential-gated skipped. PostgreSQL job-store plus stream/alert replay integration
+  exited 0: 20 passed. The post-refactor stream unit/integration command exited 0: 13 passed.
+- Boundaries preserved: no public API/UI, MarketTrade table, Fixture fallback, live broker, order
+  execution, or real-money path was added. Provider-specific fact normalization remains Task 8.
+
+#### Task 8 — normalize and persist Alpaca bars and news
+
+- TDD RED evidence: recorded Alpaca REST bars/news and WebSocket event fixtures initially failed
+  because the provider-specific normalizer and fact store did not exist, trade messages were not
+  decoded, historical news incorrectly inferred observation time, and persisted stream bars omitted
+  coverage/session. The database integration initially failed because `news_article` and normalized
+  market-bar lineage were absent. Each RED exited 1 for the targeted missing behavior.
+- GREEN implementation: `AlpacaNormalizer` parses JSON decimals without binary floats, requires
+  aware UTC timestamps, assigns explicit IEX/SIP coverage and New York session labels, and marks
+  historical news without provider-observed time as not point-in-time eligible. The stream decoder
+  now recognizes bar, updated-bar, trade, quote, and market-status envelopes while the compatibility
+  alert path persists only supported bars.
+- Migration `0026_alpaca_market_news` adds normalized lineage, coverage/session constraints and
+  append-only protection to `market_bar`, creates append-only `news_article`, and backfills existing
+  bar lineage without deleting or rewriting historical facts. A dedicated 0025-to-head test proves
+  an existing market bar survives and receives its matching NormalizedRecord ID. No `market_trade`
+  table was added; unsupported trade/quote/status facts remain RawDataObject/NormalizedRecord only.
+- `PostgresAlpacaFactStore` owns idempotent append-only bar/news persistence and verifies every
+  NormalizedRecord belongs to the same RawDataObject. Duplicate delivery performs deterministic
+  reread/equality checks and never UPDATEs historical facts. The existing alert replay store now
+  persists normalized lineage plus IEX/session metadata.
+- Final related command exited 0 with 23 passed across recorded provider contracts, stream decoding,
+  Alpaca fact persistence, alert replay, database append-only checks, and 0025-to-0026 migration
+  preservation. Ruff formatting/lint exited 0 over 264 files, strict Mypy exited 0 over 232 source
+  files, `alembic check` exited 0 with no upgrade operations, and `git diff --check` exited 0.
+- Boundaries preserved: no UI/public API, live broker, order path, Fixture fallback, invented
+  provider response, or binary-float money path was added. Holiday/half-day entitlement handling,
+  bounded backfill, gap recovery, and reconciliation remain ordered Task 9 work.
+
+#### Task 9 — bounded recovery and entitlement-aware routing
+
+- TDD RED evidence: the policy/recovery command exited 2 during collection because the approved
+  entitlement policy and backfill planner were absent. Follow-up targeted tests exited 1 for a
+  missing window-aware Alpaca transport and for SIP requests whose selected coverage was not
+  recorded in the returned raw batch metadata. A durable scheduling run also exposed and fixed an
+  incompatible Protocol import and a Celery schedule/worker circular import.
+- GREEN implementation: frozen entitlement snapshots record Provider, IEX/SIP coverage, explicit
+  SIP delay, overnight permission, observation time, and policy version. Research may continue on
+  explicitly labeled IEX with an `UNAVAILABLE` evidence gap when required SIP is absent; Replay and
+  Paper Execution receive deterministic `DENIED_NO_ACTION`. IEX is never relabeled as SIP.
+- The New York market calendar accepts explicit closures and half-day close times and is tested
+  across winter/summer DST, holiday, half-day, and naive-datetime rejection. Backfill planners cap
+  daily bars at one year in 30-day slices, entitled minute bars at 90 days in 5-day slices, and news
+  at one year in 30-day slices. Reconnect REST gap-fill is capped at 30 minutes; pagination retains the same
+  immutable window and an opaque cursor.
+- `schedule_alpaca_backfills` persists low-priority, purpose-separated jobs with the exact selected
+  coverage and entitlement metadata in the request payload. Concurrent/repeated scheduling reuses
+  active job IDs through the existing advisory-lock idempotency guard. Missing SIP creates no Replay
+  or Paper Execution job. Alpaca window transport sends exact start/end, timeframe, feed, and page
+  token. Requested coverage is never trusted as evidence: the worker compares the request with the
+  persisted entitlement snapshot and adds an internal verified-coverage marker only after they match.
+- Focused policy/window/durable-schedule verification exited 0 with 16 passed. Full related Alpaca,
+  coordinator, recovery, PIT, alert, and replay verification exited 0 with 66 passed / 3 live
+  credential-gated skipped. Celery/Beat schedule and ingestion job-store regression exited 0 with
+  17 passed. Ruff format/lint exited 0; strict Mypy exited 0 over 235 source files.
+- Boundaries preserved: the scheduling surface is GET/read-only data ingestion. It adds no public
+  endpoint, UI, Fixture API fallback, MarketTrade table, broker credential, order execution, or
+  real-money capability.
+
+#### Task 10 — RDB-2 acceptance
+
+- The first full acceptance attempt exited 2 before tests because MCP snapshots exposed the new
+  internal WebSocket Trade/Quote/Status feed labels as public `FeedType` values. Root-cause review
+  classified this as an unintended public-contract expansion. Commit `a00a1e2` introduced an
+  internal-only `ProviderEventFeed`; the recorded stream behavior remained intact while MCP contract
+  drift returned to zero. Its focused verification exited 0 with 35 passed / 3 live credential-gated
+  skipped; Ruff, strict Mypy, and MCP snapshot check also exited 0.
+- Corrected `make verify` run 1 — exit 0: 267 files format clean; Ruff clean; strict Mypy clean over
+  235 source files; Alembic reported no new upgrade operations; MCP and OpenAPI snapshots matched;
+  backend 511 passed / 3 credential-gated live tests skipped; Web TypeScript and ESLint clean;
+  Vitest 14 files / 94 tests passed; Next.js 15.4.6 production build completed for 9 routes.
+- Corrected `make verify` run 2 — exit 0 with the same gates and counts: backend 511 passed / 3
+  credential-gated skipped, Web 14 files / 94 tests passed, and the nine-route production build
+  succeeded. This proves the full verification loop is repeatable.
+- Live Alpaca smoke was not executed because this environment has no real Provider credentials or
+  verified entitlements. The three opt-in live contracts were explicitly skipped; no result,
+  entitlement, response, performance number, or market datum was fabricated.
+- RDB-2 acceptance is satisfied locally. FRE-25 remains `In Progress` until this final evidence
+  commit is pushed and the issue is moved to `In Review`; it must not be marked Done before PR/CI,
+  review, and merge.
+
+#### Authority cross-check correction — 2026-08-24
+
+- The final Linear/Notion delivery cross-check found that the initial Task 9 limits (one day of
+  minute bars and seven days of news) were narrower than the locked FRE-25 requirement. New RED
+  coverage exited 1 with four failures against one-year daily/news and entitlement-gated 90-day
+  minute windows.
+- The planner now supports one-year daily/news windows and 90-day minute windows while keeping each
+  job bounded to 30-day, 30-day, and 5-day slices respectively; a full 90-day minute request remains
+  below the 24-job admission cap. Focused recovery/scheduling verification exited 0 with 7 passed;
+  Ruff and strict Mypy exited 0. Full acceptance was rerun after this correction as recorded below.
+- Post-correction `make verify` runs 1 and 2 both exited 0 on the corrected head: backend 511 passed /
+  3 credential-gated skipped; Web 14 files / 94 tests passed; 267 files format clean; Ruff, strict
+  Mypy over 235 source files, Alembic/MCP/OpenAPI drift, TypeScript, ESLint, and the nine-route
+  production build all passed. These replace the earlier pre-correction full-gate evidence.
+
+#### PR #13 blocker remediation and second-review candidate — 2026-08-24
+
+- The first professional review found seven blocking gaps: no operational Celery ingestion chain,
+  non-durable pagination/recovery, an unused SIP gate, incomplete WebSocket raw replay lineage,
+  market-session handling that did not enforce the exchange calendar, missing database-level news
+  PIT protection, and naive/non-canonical timestamps. Each target first received a failing regression.
+- Celery Beat now admits only explicitly configured Alpaca entitlements, creates idempotent Watchlist
+  jobs, dispatches durable leases to a low-priority queue, walks every opaque page token, and advances
+  its cursor only after RawDataObject, NormalizedRecord, typed fact, and MinIO writes commit. Expired
+  leases are recoverable; rate-limit, transport, PostgreSQL, MinIO, and schema-drift paths retain the
+  correct retry/dead-letter state. Bounded REST reconnect recovery covers at most thirty minutes.
+- The stream replay writer persists trade, quote, status, and updated-bar envelopes raw-first and
+  idempotently to append-only RawDataObject/NormalizedRecord lineage. Supported bars continue to reach
+  MarketBar; no MarketTrade table, public feed-contract expansion, broker path, or Fixture fallback was
+  introduced. IEX is never relabeled SIP, and Replay/Paper admission remains denied without verified SIP.
+- DTO/coordinator timestamps are canonical UTC and naive values are rejected. The deterministic New
+  York calendar covers DST, holidays, and early closes. Migration 0027 adds the forward-only
+  `news_article` PIT CHECK without mutating the already-released 0026 migration; Alembic drift is clean.
+- An official Alpaca OpenAPI cross-check exposed one additional production blocker: the single-symbol
+  bars endpoint returns `bars` as a list plus a top-level `symbol`, while the original test fixture used
+  the multi-symbol grouped shape. A recorded-contract RED exited 1 with the normalizer rejecting the
+  official shape. The normalizer and pagination E2E fixtures now match the single-symbol contract and
+  reject a mismatched response symbol. The focused contract command exited 0 with 36 passed / 3 live
+  credential-gated skipped.
+- One initial E2E command exited 4 because three guessed test paths did not exist; no test ran and no
+  product failure was hidden. The corrected real PostgreSQL/MinIO command exited 0 with 32 passed across
+  paginated job execution, fact lineage, recovery, stream/alert replay, PIT, and append-only checks.
+- Final `make verify` exited 0: 269 files format clean; Ruff clean; strict Mypy clean over 236 source
+  files; Alembic reported no new upgrade operations; backend 528 passed / 3 credential-gated skipped;
+  Web TypeScript and ESLint clean; Vitest 14 files / 94 tests passed; and the nine-route Next.js
+  production build succeeded. The existing Node `--localstorage-file` warning is unchanged and
+  non-functional. A live Alpaca smoke remains intentionally unexecuted without real credentials and
+  an operator-verified entitlement snapshot.
+
+#### PR #13 second-review remediation — 2026-08-24
+
+- The second independent review withheld approval because `ingestion-low` had no documented consumer,
+  the E2E bypassed Redis/Celery, pagination lacked lease renewal, cursor scope could collide, repeated
+  empty REST and delayed WS messages had unstable immutable metadata, Beat entitlement timestamps were
+  not idempotent, WS/reconnect/daily-news paths lacked operational entrypoints, and SIP policy was not
+  pinned into normal Run admission. New RED coverage reproduced each behavior.
+- The registered Alpaca task now executes through an actual Redis broker and solo Celery worker.
+  Production routing pins it to `ingestion-low`; the recovery script and runbook consume both queues.
+  Every page validates and renews its lease before MinIO/PostgreSQL writes, uses current time for state
+  transitions, and stores cursor state under the immutable job ID. A stale worker cannot persist.
+- Empty responses now have stable transport-artifact event time; non-empty responses derive event time
+  from provider facts. Delayed WS replay preserves the first observation and remains idempotent.
+  Operational Celery entrypoints now persist WS messages, schedule bounded reconnect recovery, expose
+  locked daily/minute/news backfills, and create stable weekday daily-bar/news Watchlist jobs.
+- Paper-mode Research admission persists the exact entitlement decision and typed `UNAVAILABLE` gap.
+  Portfolio admission requires SIP and returns no run for deterministic `DENIED_NO_ACTION`; explicit
+  Fixture/test mode remains separate. No live-broker or real-money path was added.
+- The real Redis/Celery test exited 0 with 1 passed. Expanded Alpaca/Celery/recovery/WS/PIT tests exited
+  0 with 187 passed / 3 credential-gated skipped; the combined runtime suite exited 0 with 29 passed.
+  The first post-review `make verify` exited 2 only because Celery's testing module lacks `py.typed`;
+  a precise third-party import ignore fixed it. The fresh full rerun exited 0: 269 files format clean,
+  Ruff clean, strict Mypy clean over 236 source files, Alembic drift clean, backend 534 passed / 3
+  credential-gated skipped, Web 14 files / 94 tests passed, TypeScript/ESLint clean, and the nine-route
+  build succeeded. The existing Node `--localstorage-file` warning remains non-functional.
+
+#### PR #13 final-review closure — 2026-08-24
+
+- Final independent review found that admission metadata alone was insufficient for paper-mode
+  execution. Research now consumes the frozen admission decision, isolates IEX/SIP series in its
+  PostgreSQL PIT query, limits the default path to REGULAR-session facts, and persists the explicit
+  SIP-unavailable warning as a typed `UNAVAILABLE` EvidenceGap. Real-data objectives and conflict
+  provenance no longer claim Fixture origin.
+- Alpaca WebSocket persistence now archives the exact wire batch before Celery publication, includes
+  verified coverage in object/series identity, derives one RawDataObject with per-event normalized
+  lineage, and persists ordinary `T=b` events as typed MarketBar facts. The market-bar unique identity
+  now includes symbol, so one provider batch can safely carry multiple symbols at the same timestamp.
+  Delayed replay retains the first `available_at`; repeated and concurrent delivery stays append-only
+  and idempotent. A timestamped recovery sidecar preserves the original `received_at`. On supervised
+  restart, a low-priority reconciliation task walks recovery objects in bounded 100-object pages,
+  checks each raw object key against PostgreSQL, publishes only orphans, and continues with an opaque
+  cursor. Broker publish failure exits the managed stream process, so restart recovery always runs;
+  referenced history is never flooded back into the queue.
+- Paper Portfolio loads only SIP/REGULAR bars visible at the execution observation time. It supplies
+  both decision-time valuation bars and post-decision execution bars to the graph; the graph's
+  separate event/availability cutoffs prevent future facts from affecting the decision. Visible
+  corrections collapse deterministically to the latest revision, and real-data rationale no longer
+  claims Fixture provenance.
+- The Celery E2E uses a fixed known trading session with a matching request window. Targeted
+  WS/MinIO/PostgreSQL, multi-symbol, delayed-replay, bounded orphan recovery with original observation
+  time, session/revision, operator-recovery and migration
+  commands exited 0. The expanded concurrency, pagination/recovery, raw lineage, SIP admission, PIT,
+  worker and append-only suite exited 0 with 228 passed / 3 credential-gated live tests skipped.
+- The first final `make verify` attempt exited 2 on strict Mypy because an existing MinIO fake lacked
+  the newly separated read protocol; the fake remained write-only and the production store now casts
+  only at the read boundary. The next attempt correctly rejected mutation of a locally applied 0027;
+  0027 was restored byte-for-behavior and the symbol identity change moved to forward-only migration
+  0028. After upgrading the validation database to head, one full run exposed and fixed a deterministic
+  `list_keys()` ordering regression while retaining lazy `iter_keys()` for bounded recovery.
+- Final fresh `make verify` exited 0: 272 files format clean; Ruff clean; strict Mypy clean over 238
+  source files; Alembic reported no upgrade operations; backend 550 passed / 3 credential-gated live
+  tests skipped; Web TypeScript and ESLint clean; Vitest 14 files / 94 tests passed; and the nine-route
+  Next.js production build succeeded. The existing Node `--localstorage-file` warning remains
+  non-functional. No live Alpaca request was fabricated or attempted without credentials.
+
+#### PR #13 independent acceptance rerun — 2026-08-24
+
+- The focused Celery/MinIO/PostgreSQL, pagination/lease recovery, WebSocket replay, orphan recovery,
+  IEX/SIP isolation, point-in-time, append-only, API admission, and migration command exited 0 with
+  131 passed / 3 credential-gated live contracts skipped. Alpaca credentials remain unavailable
+  while the account application is under review; no live response or entitlement was fabricated.
+- Required repeatability run 1: `make verify` exited 0 with 272 files format clean, Ruff clean,
+  strict Mypy clean over 238 source files, no Alembic/MCP/OpenAPI drift, backend 550 passed / 3
+  credential-gated live contracts skipped, Web 14 files / 94 tests passed, and all nine Next.js
+  routes built successfully.
+- Required repeatability run 2: `make verify` exited 0 with the same gates and counts: backend
+  550 passed / 3 credential-gated live contracts skipped, Web 14 files / 94 tests passed, and the
+  nine-route production build succeeded. The existing Node `--localstorage-file` warning is
+  unchanged and non-functional.
+
+#### PR #13 final specification blocker closure — 2026-08-25
+
+- The final Spec review found three remaining crash/PIT boundaries: outbox recovery could commit a
+  `NormalizedRecord` without its typed Alpaca fact, unprovable historical Alpaca news was not
+  explicitly gated through `NewsArticle.pit_eligible`, and malformed REST/WS payloads could be
+  parsed before durable raw preservation. Each issue received a failing regression before its fix.
+- Alpaca normalization now reconstructs the exact provider batch from its immutable MinIO envelope
+  and transactionally persists the normalized row plus MarketBar/NewsArticle facts. Recovery covers
+  the precise crash window where the normalized row already exists but the typed fact does not.
+- Alpaca news PIT reads use append-only `NewsArticle` facts with `pit_eligible=true` and both time
+  cutoffs. Existing non-Alpaca Fixture news retains its generic compatibility path; Alpaca records
+  cannot use that bypass.
+- REST schema drift now keeps its raw envelope, RawDataObject, and one deterministic
+  NormalizationRejection before failing the job. WebSocket malformed batches are archived and
+  published before the validation error; the durable sink records raw lineage and one rejection.
+  Existing immutable-conflict rejections remain deduplicated.
+- Focused RED runs exited 1 with the expected missing raw archive, typed-fact recovery, and WS
+  ordering failures. GREEN targeted runs exited 0 with 5 passed, then the full RDB-2 regression
+  exited 0 with 141 passed / 3 credential-gated live contracts skipped. The first full verification
+  attempt correctly exposed a duplicate rejection and exited 2; its targeted regression then exited
+  0 with 4 passed.
+- Final repeatability run 1: `make verify` exited 0 with 272 files format clean, Ruff clean, strict
+  Mypy clean over 238 source files, no Alembic/MCP/OpenAPI drift, backend 555 passed / 3
+  credential-gated live contracts skipped, Web 14 files / 94 tests passed, and nine routes built.
+- Final repeatability run 2: `make verify` exited 0 with the same gates and counts. The existing Node
+  `--localstorage-file` warning remains non-functional. Alpaca credentials are still pending account
+  approval; no live request, entitlement, response, or market datum was fabricated.
+
+#### PR #13 second professional review closure — 2026-08-25
+
+- Two independent reviews found four final boundary cases. Paper/API research could return persisted
+  Fixture news when Alpaca had no eligible facts; REST semantic timestamp drift could fail before raw
+  preservation; distinct Alpaca articles sharing a publication timestamp were collapsed as revisions;
+  and a recovery envelope missing `provider` was not classified as terminal schema drift.
+- Four focused regressions first reproduced those behaviors, then exited 0 with 4 passed after the
+  fixes. Paper research now admits only Alpaca facts and returns explicit missingness instead of
+  falling back to Fixture. Raw metadata extraction tolerates invalid event timestamps so the exact
+  envelope is durable before normalization rejects it. News revision identity includes article ID,
+  and every required envelope identity field maps to a deterministic `NormalizationRejection`.
+- The expanded ingestion, stream-supervisor, and API-worker suite exited 0 with 86 passed. The first
+  full verification attempt exited 2 at the format gate only; Ruff formatted the two reported files.
+- Repeatability run 1: `make verify` exited 0 with 272 files format clean, Ruff clean, strict Mypy
+  clean over 238 source files, no Alembic drift, backend 558 passed / 3 credential-gated live tests
+  skipped, Web 14 files / 94 tests passed, and the nine-route Next.js build succeeded.
+- Repeatability run 2: `make verify` exited 0 with the same gates and counts. Alpaca credentials remain
+  pending account approval; no live request or result was fabricated.
+- A final standards pass identified a MinIO overwrite integrity boundary. Recovery now verifies the
+  archived envelope against `RawDataObject.content_hash`, verifies decoded bytes against
+  `body_sha256`, and matches provider/feed/symbol to frozen PostgreSQL identity before creating facts.
+  Missing-identity and valid-schema body-tamper regressions exited 0 with 2 passed and no typed fact;
+  the expanded related suite exited 0 with 87 passed. The final post-fix `make verify` exited 0 with
+  backend 559 passed / 3 credential-gated live tests skipped and Web 94 passed; all other gates and
+  the nine-route build remained clean.

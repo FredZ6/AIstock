@@ -131,3 +131,54 @@ def test_scheduled_runs_are_durable_idempotent_and_recoverable(
         assert all(run_id != expired_id for _, run_id in dispatched)
 
     engine.dispose()
+
+
+def test_paper_run_admission_records_research_gap_and_denies_portfolio_without_sip(
+    isolated_database_url: str,
+) -> None:
+    config = Config("backend/alembic.ini")
+    config.set_main_option("sqlalchemy.url", isolated_database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(isolated_database_url)
+    settings = Settings(
+        environment="paper",
+        database_url=isolated_database_url,
+        max_active_agent_runs=20,
+        alpaca_data_key="test-key",
+        alpaca_data_secret="test-secret",
+        alpaca_entitlement_coverage="IEX",
+        alpaca_entitlement_version="operator-verified-v1",
+    )
+    research_cutoff = datetime(2026, 8, 17, 20, 15, tzinfo=UTC)
+    portfolio_cutoff = datetime(2026, 8, 17, 20, 30, tzinfo=UTC)
+    with engine.begin() as connection:
+        security_id = uuid4()
+        connection.execute(insert(security).values(id=security_id, instrument_type="EQUITY"))
+        connection.execute(insert(watchlist_item).values(security_id=security_id, symbol="NVDA"))
+
+        research_ids = schedule_daily_research(
+            connection,
+            settings,
+            research_cutoff,
+            dispatch=lambda _task, _run_id: None,
+        )
+        portfolio_id = schedule_portfolio_decision(
+            connection,
+            settings,
+            portfolio_cutoff,
+            dispatch=lambda _task, _run_id: None,
+        )
+        payload = connection.execute(
+            select(agent_run.c.request_payload).where(agent_run.c.id == research_ids[0])
+        ).scalar_one()
+
+    assert payload["market_data_admission"] == {
+        "outcome": "ALLOWED_WITH_GAP",
+        "selected_coverage": "IEX",
+        "gap_kind": "UNAVAILABLE",
+        "reason": "SIP entitlement unavailable",
+        "entitlement_version": "operator-verified-v1",
+        "declared_delay_seconds": None,
+    }
+    assert portfolio_id is None
+    engine.dispose()

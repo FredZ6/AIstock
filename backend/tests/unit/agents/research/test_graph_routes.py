@@ -139,3 +139,35 @@ def test_missing_provider_data_produces_typed_gaps_and_abstention() -> None:
     assert result.opinion.value.value == "ABSTAIN"
     assert result.gaps
     assert result.reflections == 1
+
+
+@dataclass
+class DegradedIexProvider:
+    name: str = "ALPACA"
+
+    def fetch(self, feed_type: FeedType, symbol: str, as_of: datetime) -> ProviderResponse:
+        return ProviderResponse(
+            status=ProviderStatus.NOT_FOUND,
+            provider=self.name,
+            feed_type=feed_type,
+            symbol=Symbol(symbol),
+            query_as_of=as_of,
+            warnings=(
+                ("market_data_gap:UNAVAILABLE:SIP entitlement unavailable",)
+                if feed_type is FeedType.PRICE_BARS
+                else ()
+            ),
+            missingness="MISSING",
+        )
+
+
+def test_admission_warning_becomes_typed_unavailable_gap_without_fixture_provenance() -> None:
+    result = DailyResearchGraph(provider=DegradedIexProvider(), store=InMemoryResearchStore()).run(
+        run_id="13aa2003-c231-4b0f-8fbb-ff064a0ca914",
+        specification=specification(),
+    )
+
+    sip_gaps = [gap for gap in result.gaps if gap.reason == "SIP entitlement unavailable"]
+    assert len(sip_gaps) == 1
+    assert sip_gaps[0].kind.value == "UNAVAILABLE"
+    assert sip_gaps[0].provider == "ALPACA"

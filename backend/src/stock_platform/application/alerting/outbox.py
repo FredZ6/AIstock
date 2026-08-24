@@ -17,7 +17,9 @@ from sqlalchemy.engine import RowMapping
 
 from stock_platform.application.alerting.features import AnomalyFeatures, GapContext, MinuteBar
 from stock_platform.application.alerting.rules import RuleEvaluation
+from stock_platform.application.ingestion.normalizers.alpaca import market_session_for
 from stock_platform.domain.common.time import require_aware
+from stock_platform.domain.ingestion.models import MarketDataCoverage
 from stock_platform.infrastructure.db.models.tables import (
     alert_event,
     alert_explanation,
@@ -389,7 +391,9 @@ class PostgresAlertStore:
                     .returning(normalized_record.c.id)
                 ).scalar_one(),
             )
-            del normalized_id
+            session = market_session_for(item.event_time)
+            if session is None:
+                raise ValueError("market bar falls outside the configured market calendar")
             self.connection.execute(
                 pg_insert(market_bar)
                 .values(
@@ -397,8 +401,11 @@ class PostgresAlertStore:
                     event_time=item.event_time,
                     symbol=str(item.symbol),
                     raw_data_object_id=raw_id,
+                    normalized_record_id=normalized_id,
                     provider=item.provider,
                     feed_type="minute_bars_stream",
+                    coverage=MarketDataCoverage.IEX.value,
+                    session=session.value,
                     content_hash=item.content_hash,
                     raw_object_key=item.raw_object_key,
                     available_at=item.available_at,

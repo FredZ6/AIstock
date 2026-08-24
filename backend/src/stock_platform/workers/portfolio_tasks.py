@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -17,6 +17,8 @@ from stock_platform.application.portfolio.allocation import MarketContextSnapsho
 from stock_platform.application.portfolio.execution import ExecutionPolicy
 from stock_platform.application.portfolio.risk import RiskPolicy
 from stock_platform.application.runs import RunControl, RunInputUnavailable, execute_run
+from stock_platform.domain.common.ids import Symbol
+from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.portfolio.fill import ExecutionBar
 from stock_platform.domain.research.claims import ResearchOpinionValue
 from stock_platform.infrastructure.db.models.tables import (
@@ -25,6 +27,7 @@ from stock_platform.infrastructure.db.models.tables import (
     evidence_item,
     execution_policy_version,
     investment_thesis,
+    market_bar,
     market_context_snapshot,
     paper_portfolio_config,
     portfolio_action,
@@ -39,13 +42,86 @@ from stock_platform.settings import Settings
 from stock_platform.workers.celery_app import celery_app
 
 
+def load_paper_execution_bars(
+    connection: Connection,
+    *,
+    symbols: tuple[str, ...],
+    decision_time: datetime,
+    observed_at: datetime,
+) -> tuple[ExecutionBar, ...]:
+    require_aware(decision_time)
+    observation = require_aware(observed_at).astimezone(UTC)
+    visible_rows = connection.execute(
+        select(market_bar)
+        .where(
+            market_bar.c.symbol.in_(symbols),
+            market_bar.c.coverage == "SIP",
+            market_bar.c.session == "REGULAR",
+            market_bar.c.event_time <= observation,
+            market_bar.c.available_at <= observation,
+            market_bar.c.open.is_not(None),
+            market_bar.c.volume.is_not(None),
+        )
+        .order_by(
+            market_bar.c.symbol,
+            market_bar.c.event_time,
+            market_bar.c.available_at,
+            market_bar.c.ingested_at,
+        )
+    ).mappings()
+    revisions: dict[tuple[str, datetime, str, str, str], RowMapping] = {}
+    for row in visible_rows:
+        key = (
+            str(row["symbol"]),
+            row["event_time"],
+            str(row["provider"]),
+            str(row["coverage"]),
+            str(row["session"]),
+        )
+        current = revisions.get(key)
+        if current is None or (
+            row["available_at"],
+            row["ingested_at"],
+            row["content_hash"],
+        ) > (
+            current["available_at"],
+            current["ingested_at"],
+            current["content_hash"],
+        ):
+            revisions[key] = row
+    return tuple(
+        ExecutionBar(
+            Symbol(str(row["symbol"])),
+            row["event_time"],
+            row["available_at"],
+            Decimal(row["open"]),
+            Decimal(row["volume"]),
+            str(row["content_hash"]),
+        )
+        for _, row in sorted(revisions.items())
+    )
+
+
 @celery_app.task(name="stock_platform.workers.portfolio_tasks.run_portfolio")  # type: ignore[untyped-decorator]
 def run_portfolio(run_id: str) -> bool:
-    return execute_portfolio_run(Settings().database_url, run_id)
+    settings = Settings()
+    return execute_portfolio_run(
+        settings.database_url,
+        run_id,
+        fixture_mode=settings.fixture_mode,
+        observed_at=datetime.now(UTC),
+    )
 
 
-def execute_portfolio_run(database_url: str, run_id: str) -> bool:
+def execute_portfolio_run(
+    database_url: str,
+    run_id: str,
+    *,
+    fixture_mode: bool = True,
+    observed_at: datetime | None = None,
+) -> bool:
     run_uuid = UUID(run_id)
+    execution_observed_at = require_aware(observed_at or datetime.now(UTC)).astimezone(UTC)
 
     def work(connection: Connection, row: RowMapping, control: RunControl) -> None:
         config = connection.execute(select(paper_portfolio_config)).mappings().one()
@@ -185,7 +261,11 @@ def execute_portfolio_run(database_url: str, run_id: str) -> bool:
                     available_at=frozen_row["available_at"],
                     evidence_complete=evidence_state[0] > 0 and not evidence_state[1],
                     proposed_weight=proposed_weight,
-                    rationale="deterministic fixture proposer from frozen research opinion",
+                    rationale=(
+                        "deterministic fixture proposer from frozen research opinion"
+                        if fixture_mode
+                        else "deterministic paper proposer from frozen research opinion"
+                    ),
                     policy_versions=PolicyVersions(
                         frozen_row["research_version"],
                         frozen_row["risk_version"],
@@ -214,22 +294,30 @@ def execute_portfolio_run(database_url: str, run_id: str) -> bool:
             completion_rules=frozenset({"risk_decision_for_every_order"}),
             policy_versions=portfolio_versions,
         )
-        catalog = FixtureCatalog.load_default()
-        bars = tuple(
-            ExecutionBar(
-                entry.symbol,
-                entry.event_time,
-                entry.available_at,
-                Decimal(str(entry.payload["open"])),
-                Decimal(str(entry.payload["volume"])),
-                entry.content_hash,
+        if fixture_mode:
+            catalog = FixtureCatalog.load_default()
+            bars = tuple(
+                ExecutionBar(
+                    entry.symbol,
+                    entry.event_time,
+                    entry.available_at,
+                    Decimal(str(entry.payload["open"])),
+                    Decimal(str(entry.payload["volume"])),
+                    entry.content_hash,
+                )
+                for entry in catalog.entries
+                if entry.feed_type is FeedType.PRICE_BARS
+                and str(entry.symbol) in latest_by_symbol
+                and {"open", "volume"} <= entry.payload.keys()
+                and entry.available_at <= specification.data_cutoff
             )
-            for entry in catalog.entries
-            if entry.feed_type is FeedType.PRICE_BARS
-            and str(entry.symbol) in latest_by_symbol
-            and {"open", "volume"} <= entry.payload.keys()
-            and entry.available_at <= specification.data_cutoff
-        )
+        else:
+            bars = load_paper_execution_bars(
+                connection,
+                symbols=tuple(sorted(latest_by_symbol)),
+                decision_time=specification.decision_time,
+                observed_at=execution_observed_at,
+            )
         store = PostgresPaperAccountingStore(connection)
         prior_fills = store.load_fills(config["id"], as_of=specification.decision_time)
         ledger = store.load_ledger(config["id"], as_of=specification.decision_time)

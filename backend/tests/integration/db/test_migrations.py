@@ -369,3 +369,78 @@ def test_0025_migrates_watchlist_identity_without_changing_configuration(
     assert identities == (2, 2, 0)
     assert resolved == [("CUSTOM", "CUSTOM"), ("NVDA", "NVDA")]
     assert primary_key == ["security_id"]
+
+
+def test_0026_preserves_existing_market_bars_and_backfills_normalized_lineage(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "0025_ingestion_foundation")
+    engine = create_engine(migration_database_url)
+    raw_id = "81000000-0000-0000-0000-000000000026"
+    normalized_id = "82000000-0000-0000-0000-000000000026"
+    bar_id = "83000000-0000-0000-0000-000000000026"
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO raw_data_object (
+                    id, provider, feed_type, event_time, available_at, ingested_at,
+                    content_hash, raw_object_key
+                ) VALUES (
+                    :raw_id, 'ALPACA', 'price_bars', '2026-08-21T14:30:00Z',
+                    '2026-08-21T14:30:01Z', '2026-08-21T14:30:02Z', repeat('c', 64),
+                    'live/ALPACA/price_bars/legacy.json'
+                )
+                """
+            ),
+            {"raw_id": raw_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO normalized_record (
+                    id, raw_data_object_id, record_type, record_key,
+                    normalization_version, payload
+                ) VALUES (
+                    :normalized_id, :raw_id, 'market_bar', 'NVDA:legacy',
+                    'alpaca-bars-v1', '{"symbol":"NVDA"}'::jsonb
+                )
+                """
+            ),
+            {"raw_id": raw_id, "normalized_id": normalized_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO market_bar (
+                    id, event_time, symbol, available_at, ingested_at, close,
+                    raw_data_object_id, provider, feed_type, content_hash,
+                    raw_object_key, payload
+                ) VALUES (
+                    :bar_id, '2026-08-21T14:30:00Z', 'NVDA',
+                    '2026-08-21T14:30:01Z', '2026-08-21T14:30:02Z', 181,
+                    :raw_id, 'ALPACA', 'price_bars', repeat('c', 64),
+                    'live/ALPACA/price_bars/legacy.json', '{}'::jsonb
+                )
+                """
+            ),
+            {"bar_id": bar_id, "raw_id": raw_id},
+        )
+    engine.dispose()
+
+    command.upgrade(config, "head")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        assert connection.execute(
+            text(
+                """
+                    SELECT id::text, raw_data_object_id::text,
+                           normalized_record_id::text, close::text
+                FROM market_bar WHERE id = :bar_id
+                """
+            ),
+            {"bar_id": bar_id},
+        ).one() == (bar_id, raw_id, normalized_id, "181")
+    engine.dispose()
