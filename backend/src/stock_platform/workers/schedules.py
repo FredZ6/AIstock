@@ -1,11 +1,22 @@
+from __future__ import annotations
+
 from collections.abc import Callable, Collection
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
-from typing import Literal
+from typing import TYPE_CHECKING, Literal, Protocol
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from celery.schedules import crontab  # type: ignore[import-untyped]
 from sqlalchemy import Connection, create_engine, select, update
 
+from stock_platform.application.ingestion.jobs import IngestionJobSpec
+from stock_platform.application.market_data.policy import (
+    EntitlementSnapshot,
+    MarketDataDecision,
+    PolicyOutcome,
+    route_market_data,
+)
 from stock_platform.application.runs import (
     RunAdmissionLimit,
     RunType,
@@ -14,11 +25,33 @@ from stock_platform.application.runs import (
 )
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
+from stock_platform.domain.ingestion.models import (
+    DataPurpose,
+    FeedType,
+    IngestionRequest,
+    MarketDataCoverage,
+    MarketSession,
+)
 from stock_platform.infrastructure.db.models.tables import agent_run, watchlist_item
 from stock_platform.infrastructure.observability.metrics import platform_metrics
 from stock_platform.settings import Settings
 
+if TYPE_CHECKING:
+    from stock_platform.workers.ingestion_tasks import BarTimeframe
+
 Dispatch = Callable[[str, str], None]
+
+
+class BackfillJobStore(Protocol):
+    def enqueue(self, spec: IngestionJobSpec, *, now: datetime) -> UUID: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduledAlpacaBackfill:
+    decision: MarketDataDecision
+    job_ids: tuple[UUID, ...]
+
+
 NEW_YORK = ZoneInfo("America/New_York")
 TASKS = {
     "RESEARCH": "stock_platform.workers.research_tasks.run_research",
@@ -73,6 +106,89 @@ def schedule_key(kind: str, cutoff: datetime, *, symbol: str | None = None) -> s
     aware = require_aware(cutoff).astimezone(UTC)
     prefix = f"{kind}:{Symbol(symbol)}" if symbol is not None else kind
     return f"{prefix}:{aware.isoformat()}"
+
+
+def schedule_alpaca_backfills(
+    store: BackfillJobStore,
+    *,
+    symbol: str,
+    dataset: FeedType,
+    timeframe: BarTimeframe | None,
+    start: datetime,
+    end: datetime,
+    purpose: DataPurpose,
+    required_coverage: MarketDataCoverage,
+    session: MarketSession,
+    entitlement: EntitlementSnapshot,
+    now: datetime,
+    max_jobs: int = 24,
+) -> ScheduledAlpacaBackfill:
+    from stock_platform.workers.ingestion_tasks import plan_alpaca_backfill
+
+    if max_jobs < 1:
+        raise ValueError("max_jobs must be positive")
+    decision = route_market_data(
+        purpose=purpose,
+        required_coverage=required_coverage,
+        session=session,
+        entitlement=entitlement,
+    )
+    if decision.outcome is PolicyOutcome.DENIED_NO_ACTION:
+        return ScheduledAlpacaBackfill(decision=decision, job_ids=())
+    slices = plan_alpaca_backfill(
+        dataset=dataset,
+        timeframe=timeframe,
+        start=start,
+        end=end,
+    )
+    if len(slices) > max_jobs:
+        raise ValueError("backfill plan exceeds bounded job count")
+    queued_at = require_aware(now).astimezone(UTC)
+    job_ids: list[UUID] = []
+    for item in slices:
+        request = IngestionRequest(
+            {
+                "symbol": str(Symbol(symbol)),
+                "timeframe": item.timeframe.value if item.timeframe is not None else None,
+                "coverage": (
+                    decision.selected_coverage.value
+                    if decision.selected_coverage is not None
+                    else None
+                ),
+                "session": session.value,
+                "priority": item.priority.value,
+                "page_token": item.page_token,
+                "entitlement": {
+                    "version": entitlement.version,
+                    "observed_at": entitlement.observed_at,
+                    "coverage": sorted(value.value for value in entitlement.coverage),
+                    "overnight": entitlement.overnight,
+                    "sip_delay_seconds": (
+                        int(entitlement.sip_delay.total_seconds())
+                        if entitlement.sip_delay is not None
+                        else None
+                    ),
+                },
+                "gap_kind": decision.gap_kind,
+                "gap_reason": decision.reason,
+            }
+        )
+        job_ids.append(
+            store.enqueue(
+                IngestionJobSpec(
+                    request=request,
+                    provider="ALPACA",
+                    dataset=dataset,
+                    window_start=item.start,
+                    window_end=item.end,
+                    purpose=purpose,
+                    policy_version=entitlement.version,
+                    max_attempts=3,
+                ),
+                now=queued_at,
+            )
+        )
+    return ScheduledAlpacaBackfill(decision=decision, job_ids=tuple(job_ids))
 
 
 def _dispatch(task: str, run_id: str) -> None:

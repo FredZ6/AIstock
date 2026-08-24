@@ -1821,3 +1821,32 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
 - Boundaries preserved: no UI/public API, live broker, order path, Fixture fallback, invented
   provider response, or binary-float money path was added. Holiday/half-day entitlement handling,
   bounded backfill, gap recovery, and reconciliation remain ordered Task 9 work.
+
+#### Task 9 — bounded recovery and entitlement-aware routing
+
+- TDD RED evidence: the policy/recovery command exited 2 during collection because the approved
+  entitlement policy and backfill planner were absent. Follow-up targeted tests exited 1 for a
+  missing window-aware Alpaca transport and for SIP requests whose selected coverage was not
+  recorded in the returned raw batch metadata. A durable scheduling run also exposed and fixed an
+  incompatible Protocol import and a Celery schedule/worker circular import.
+- GREEN implementation: frozen entitlement snapshots record Provider, IEX/SIP coverage, explicit
+  SIP delay, overnight permission, observation time, and policy version. Research may continue on
+  explicitly labeled IEX with an `UNAVAILABLE` evidence gap when required SIP is absent; Replay and
+  Paper Execution receive deterministic `DENIED_NO_ACTION`. IEX is never relabeled as SIP.
+- The New York market calendar accepts explicit closures and half-day close times and is tested
+  across winter/summer DST, holiday, half-day, and naive-datetime rejection. Backfill planners cap
+  daily bars at 31 days in 7-day slices, minute bars at 1 day in hourly slices, and news at 7 days
+  in daily slices. Reconnect REST gap-fill is capped at 30 minutes; pagination retains the same
+  immutable window and an opaque cursor.
+- `schedule_alpaca_backfills` persists low-priority, purpose-separated jobs with the exact selected
+  coverage and entitlement metadata in the request payload. Concurrent/repeated scheduling reuses
+  active job IDs through the existing advisory-lock idempotency guard. Missing SIP creates no Replay
+  or Paper Execution job. Alpaca window transport sends exact start/end, timeframe, feed, and page
+  token and records the requested feed in `ProviderBatch` headers for deterministic normalization.
+- Focused policy/window/durable-schedule verification exited 0 with 16 passed. Full related Alpaca,
+  coordinator, recovery, PIT, alert, and replay verification exited 0 with 66 passed / 3 live
+  credential-gated skipped. Celery/Beat schedule and ingestion job-store regression exited 0 with
+  17 passed. Ruff format/lint exited 0; strict Mypy exited 0 over 235 source files.
+- Boundaries preserved: the scheduling surface is GET/read-only data ingestion. It adds no public
+  endpoint, UI, Fixture API fallback, MarketTrade table, broker credential, order execution, or
+  real-money capability.

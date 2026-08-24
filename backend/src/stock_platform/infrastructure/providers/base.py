@@ -329,9 +329,24 @@ class GovernedHttpProvider:
             raise ProviderTransportError(
                 error_class=IngestionErrorClass.MISSING_CREDENTIALS,
             )
+        return self._fetch_batch_from_url(
+            feed_type=feed_type,
+            symbol=normalized_symbol,
+            query_as_of=query_as_of,
+            url=self._url(feed_type, normalized_symbol, query_as_of),
+        )
+
+    def _fetch_batch_from_url(
+        self,
+        *,
+        feed_type: FeedType,
+        symbol: Symbol,
+        query_as_of: datetime,
+        url: str,
+    ) -> ProviderBatch:
         request = HttpRequest(
             "GET",
-            self._url(feed_type, normalized_symbol, query_as_of),
+            url,
             self._headers(),
             self._timeout_seconds,
         )
@@ -389,7 +404,7 @@ class GovernedHttpProvider:
         return ProviderBatch(
             provider=self.name,
             feed_type=feed_type,
-            symbol=normalized_symbol,
+            symbol=symbol,
             query_as_of=query_as_of,
             observed_at=observed_at,
             body=response.body,

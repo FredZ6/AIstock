@@ -97,6 +97,34 @@ def test_alpaca_transport_returns_raw_batch_without_persistence() -> None:
     assert record_store.records == []
 
 
+def test_alpaca_window_transport_carries_bounds_feed_timeframe_and_resume_token() -> None:
+    requests: list[HttpRequest] = []
+
+    adapter = AlpacaProvider(
+        data_key="fixture-key",
+        data_secret="fixture-secret",
+        transport=successful_transport(requests),
+        clock=lambda: AS_OF,
+    )
+    batch = adapter.fetch_window(
+        FeedType.PRICE_BARS,
+        "NVDA",
+        start=AS_OF - timedelta(hours=1),
+        end=AS_OF,
+        timeframe="1Min",
+        coverage="SIP",
+        page_token="opaque-page-2",
+    )
+
+    assert len(requests) == 1
+    assert "start=2026-08-16T11%3A00%3A00%2B00%3A00" in requests[0].url
+    assert "end=2026-08-16T12%3A00%3A00%2B00%3A00" in requests[0].url
+    assert "timeframe=1Min" in requests[0].url
+    assert "feed=sip" in requests[0].url
+    assert "page_token=opaque-page-2" in requests[0].url
+    assert batch.headers["X-Alpaca-Data-Feed"] == "SIP"
+
+
 def test_alpaca_transport_returns_typed_rate_limit_without_sleeping() -> None:
     requests: list[HttpRequest] = []
     sleeps: list[float] = []

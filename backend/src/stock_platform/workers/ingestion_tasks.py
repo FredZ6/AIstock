@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import Engine, and_, create_engine, or_, select, update
@@ -12,6 +14,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from stock_platform.application.ingestion.raw_writer import report_orphaned_raw_objects
 from stock_platform.domain.common.time import require_aware
+from stock_platform.domain.ingestion.models import FeedType
 from stock_platform.infrastructure.db.models.tables import (
     normalization_dispatch,
     normalization_rejection,
@@ -26,6 +29,100 @@ NORMALIZATION_MAX_ATTEMPTS = 5
 NORMALIZATION_RETRY_AFTER = timedelta(minutes=1)
 ORPHAN_LOG_SAMPLE_LIMIT = 20
 logger = logging.getLogger(__name__)
+
+
+class BarTimeframe(StrEnum):
+    MINUTE = "1Min"
+    DAY = "1Day"
+
+
+class BackfillPriority(StrEnum):
+    LOW = "LOW"
+
+
+@dataclass(frozen=True, slots=True)
+class AlpacaBackfillSlice:
+    dataset: FeedType
+    timeframe: BarTimeframe | None
+    start: datetime
+    end: datetime
+    priority: BackfillPriority = BackfillPriority.LOW
+    page_token: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ReconnectGapFill:
+    start: datetime
+    end: datetime
+    truncated: bool
+
+
+_BACKFILL_BOUNDS = {
+    (FeedType.PRICE_BARS, BarTimeframe.DAY): (timedelta(days=31), timedelta(days=7)),
+    (FeedType.PRICE_BARS, BarTimeframe.MINUTE): (timedelta(days=1), timedelta(hours=1)),
+    (FeedType.COMPANY_NEWS, None): (timedelta(days=7), timedelta(days=1)),
+}
+
+
+def plan_alpaca_backfill(
+    *,
+    dataset: FeedType,
+    timeframe: BarTimeframe | None,
+    start: datetime,
+    end: datetime,
+) -> tuple[AlpacaBackfillSlice, ...]:
+    window_start = require_aware(start).astimezone(UTC)
+    window_end = require_aware(end).astimezone(UTC)
+    if window_start >= window_end:
+        raise ValueError("backfill start must be before end")
+    try:
+        maximum, chunk = _BACKFILL_BOUNDS[(dataset, timeframe)]
+    except KeyError as error:
+        raise ValueError("unsupported Alpaca backfill dataset/timeframe") from error
+    if window_end - window_start > maximum:
+        raise ValueError("backfill window must be bounded")
+    slices: list[AlpacaBackfillSlice] = []
+    cursor = window_start
+    while cursor < window_end:
+        next_end = min(cursor + chunk, window_end)
+        slices.append(
+            AlpacaBackfillSlice(
+                dataset=dataset,
+                timeframe=timeframe,
+                start=cursor,
+                end=next_end,
+            )
+        )
+        cursor = next_end
+    return tuple(slices)
+
+
+def resume_alpaca_page(
+    item: AlpacaBackfillSlice,
+    *,
+    next_page_token: str,
+) -> AlpacaBackfillSlice:
+    if not next_page_token.strip():
+        raise ValueError("pagination token cannot be blank")
+    return replace(item, page_token=next_page_token)
+
+
+def plan_reconnect_gap_fill(
+    *,
+    last_event_at: datetime,
+    reconnected_at: datetime,
+    maximum: timedelta = timedelta(minutes=30),
+) -> ReconnectGapFill:
+    last_event = require_aware(last_event_at).astimezone(UTC)
+    reconnected = require_aware(reconnected_at).astimezone(UTC)
+    if maximum <= timedelta(0) or last_event >= reconnected:
+        raise ValueError("reconnect gap must be positive and ordered")
+    truncated = reconnected - last_event > maximum
+    return ReconnectGapFill(
+        start=max(last_event, reconnected - maximum),
+        end=reconnected,
+        truncated=truncated,
+    )
 
 
 def normalize_dispatched_record(
