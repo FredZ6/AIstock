@@ -38,23 +38,23 @@ def _alembic_config(database_url: str) -> Config:
         (
             FeedType.PRICE_BARS,
             BarTimeframe.DAY,
-            NOW - timedelta(days=31),
-            timedelta(days=31),
-            timedelta(days=7),
+            NOW - timedelta(days=365),
+            timedelta(days=365),
+            timedelta(days=30),
         ),
         (
             FeedType.PRICE_BARS,
             BarTimeframe.MINUTE,
-            NOW - timedelta(days=1),
-            timedelta(days=1),
-            timedelta(hours=1),
+            NOW - timedelta(days=90),
+            timedelta(days=90),
+            timedelta(days=5),
         ),
         (
             FeedType.COMPANY_NEWS,
             None,
-            NOW - timedelta(days=7),
-            timedelta(days=7),
-            timedelta(days=1),
+            NOW - timedelta(days=365),
+            timedelta(days=365),
+            timedelta(days=30),
         ),
     ),
 )
@@ -80,7 +80,7 @@ def test_backfill_rejects_unbounded_and_naive_windows() -> None:
         plan_alpaca_backfill(
             dataset=FeedType.PRICE_BARS,
             timeframe=BarTimeframe.MINUTE,
-            start=NOW - timedelta(days=1, seconds=1),
+            start=NOW - timedelta(days=90, seconds=1),
             end=NOW,
         )
     with pytest.raises(ValueError, match="timezone-aware"):
@@ -180,7 +180,7 @@ def test_entitlement_aware_schedule_is_durable_idempotent_and_purpose_safe(
 
     assert research.decision.outcome is PolicyOutcome.ALLOWED_WITH_GAP
     assert research.job_ids == replayed.job_ids
-    assert len(research.job_ids) == 2
+    assert len(research.job_ids) == 1
     assert denied.decision.outcome is PolicyOutcome.DENIED_NO_ACTION
     assert denied.job_ids == ()
     with engine.connect() as connection:
@@ -189,7 +189,7 @@ def test_entitlement_aware_schedule_is_durable_idempotent_and_purpose_safe(
                 ingestion_job.c.window_start
             )
         ).all()
-    assert len(rows) == 2
+    assert len(rows) == 1
     assert all(row.purpose == "RESEARCH" for row in rows)
     assert all(row.request_payload["request"]["coverage"] == "IEX" for row in rows)
     assert all(

@@ -1835,8 +1835,8 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   Paper Execution receive deterministic `DENIED_NO_ACTION`. IEX is never relabeled as SIP.
 - The New York market calendar accepts explicit closures and half-day close times and is tested
   across winter/summer DST, holiday, half-day, and naive-datetime rejection. Backfill planners cap
-  daily bars at 31 days in 7-day slices, minute bars at 1 day in hourly slices, and news at 7 days
-  in daily slices. Reconnect REST gap-fill is capped at 30 minutes; pagination retains the same
+  daily bars at one year in 30-day slices, entitled minute bars at 90 days in 5-day slices, and news
+  at one year in 30-day slices. Reconnect REST gap-fill is capped at 30 minutes; pagination retains the same
   immutable window and an opaque cursor.
 - `schedule_alpaca_backfills` persists low-priority, purpose-separated jobs with the exact selected
   coverage and entitlement metadata in the request payload. Concurrent/repeated scheduling reuses
@@ -1872,3 +1872,18 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
 - RDB-2 acceptance is satisfied locally. FRE-25 remains `In Progress` until this final evidence
   commit is pushed and the issue is moved to `In Review`; it must not be marked Done before PR/CI,
   review, and merge.
+
+#### Authority cross-check correction — 2026-08-24
+
+- The final Linear/Notion delivery cross-check found that the initial Task 9 limits (one day of
+  minute bars and seven days of news) were narrower than the locked FRE-25 requirement. New RED
+  coverage exited 1 with four failures against one-year daily/news and entitlement-gated 90-day
+  minute windows.
+- The planner now supports one-year daily/news windows and 90-day minute windows while keeping each
+  job bounded to 30-day, 30-day, and 5-day slices respectively; a full 90-day minute request remains
+  below the 24-job admission cap. Focused recovery/scheduling verification exited 0 with 7 passed;
+  Ruff and strict Mypy exited 0. Full acceptance was rerun after this correction as recorded below.
+- Post-correction `make verify` runs 1 and 2 both exited 0 on the corrected head: backend 511 passed /
+  3 credential-gated skipped; Web 14 files / 94 tests passed; 267 files format clean; Ruff, strict
+  Mypy over 235 source files, Alembic/MCP/OpenAPI drift, TypeScript, ESLint, and the nine-route
+  production build all passed. These replace the earlier pre-correction full-gate evidence.

@@ -58,9 +58,9 @@ class ReconnectGapFill:
 
 
 _BACKFILL_BOUNDS = {
-    (FeedType.PRICE_BARS, BarTimeframe.DAY): (timedelta(days=31), timedelta(days=7)),
-    (FeedType.PRICE_BARS, BarTimeframe.MINUTE): (timedelta(days=1), timedelta(hours=1)),
-    (FeedType.COMPANY_NEWS, None): (timedelta(days=7), timedelta(days=1)),
+    (FeedType.PRICE_BARS, BarTimeframe.DAY): (timedelta(days=365), timedelta(days=30)),
+    (FeedType.PRICE_BARS, BarTimeframe.MINUTE): (timedelta(days=90), timedelta(days=5)),
+    (FeedType.COMPANY_NEWS, None): (timedelta(days=365), timedelta(days=30)),
 }
 
 
