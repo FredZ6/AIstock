@@ -1242,6 +1242,7 @@ Index(
     market_bar.c.feed_type,
     market_bar.c.content_hash,
     market_bar.c.event_time,
+    market_bar.c.symbol,
     unique=True,
 )
 Index(
@@ -1281,6 +1282,12 @@ news_article = Table(
     CheckConstraint(
         "published_at <= available_at AND available_at <= ingested_at",
         name=conv("ck_news_article_times"),
+    ),
+    CheckConstraint(
+        "(observed_at IS NULL OR "
+        "(published_at <= observed_at AND observed_at <= available_at)) "
+        "AND (NOT pit_eligible OR observed_at IS NOT NULL)",
+        name=conv("ck_news_article_pit_eligibility"),
     ),
     UniqueConstraint(
         "provider",

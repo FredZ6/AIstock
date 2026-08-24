@@ -125,7 +125,7 @@ def _batch() -> ProviderBatch:
         symbol=Symbol("NVDA"),
         query_as_of=NOW,
         observed_at=NOW,
-        body=b'{"bars":{}}',
+        body=b'{"bars":[],"symbol":"NVDA"}',
         headers={},
         next_page_token=None,
         rate_limit=ProviderRateLimit(),
@@ -170,6 +170,64 @@ def test_coordinator_persists_transport_batch_then_completes_job() -> None:
     assert transport.calls == [(FeedType.PRICE_BARS, "NVDA", NOW)]
     assert persisted == [batch]
     assert store.completed == [(lease, NOW)]
+
+
+def test_coordinator_can_defer_completion_for_paginated_work() -> None:
+    module = importlib.import_module("stock_platform.application.ingestion.coordinator")
+    batch = _batch()
+    store = RecordingJobStore()
+    coordinator = module.IngestionCoordinator(
+        job_store=store,
+        persist_batch=lambda _: None,
+    )
+
+    assert (
+        coordinator.run(
+            lease=_lease(),
+            transport=StaticTransport(batch),
+            feed_type=FeedType.PRICE_BARS,
+            symbol="NVDA",
+            as_of=NOW,
+            now=NOW,
+            complete_job=False,
+        )
+        == batch
+    )
+    assert store.completed == []
+
+
+def test_provider_batch_and_coordinator_canonicalize_aware_times_to_utc() -> None:
+    offset = datetime.fromisoformat("2026-08-24T14:00:00+08:00")
+    batch = ProviderBatch(
+        provider="ALPACA",
+        feed_type=FeedType.PRICE_BARS,
+        symbol=Symbol("NVDA"),
+        query_as_of=offset,
+        observed_at=offset,
+        body=b'{"bars":[],"symbol":"NVDA"}',
+        headers={},
+        next_page_token=None,
+        rate_limit=ProviderRateLimit(),
+    )
+    transport = StaticTransport(batch)
+    store = RecordingJobStore()
+    coordinator = importlib.import_module(
+        "stock_platform.application.ingestion.coordinator"
+    ).IngestionCoordinator(job_store=store, persist_batch=lambda _: None)
+
+    coordinator.run(
+        lease=_lease(),
+        transport=transport,
+        feed_type=FeedType.PRICE_BARS,
+        symbol="NVDA",
+        as_of=offset,
+        now=offset,
+    )
+
+    assert batch.query_as_of == NOW
+    assert batch.observed_at == NOW
+    assert transport.calls == [(FeedType.PRICE_BARS, "NVDA", NOW)]
+    assert store.completed[0][1] == NOW
 
 
 def test_coordinator_schedules_retry_after_without_blocking_or_persisting() -> None:

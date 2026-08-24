@@ -38,7 +38,10 @@ class RawWriter:
             raise ValueError("raw content hash does not match ProviderRecord")
         if record.raw_object_key.rsplit("/", 1)[-1] != f"{record.content_hash}.json":
             raise ValueError("raw object key must be content-addressed by its SHA-256 hash")
-        self._raw_store.put(record.raw_object_key, raw_content, "application/json")
+        try:
+            self._raw_store.put(record.raw_object_key, raw_content, "application/json")
+        except Exception as error:
+            raise RawObjectStoreUnavailable("raw object store write failed") from error
         with self._engine.begin() as connection:
             raw_id = persist_raw_object(connection, record)
             connection.execute(
@@ -83,6 +86,10 @@ class RawWriter:
                 if any(existing[key] != dispatch_values[key] for key in immutable_keys):
                     raise ValueError("immutable normalization dispatch conflict")
             return raw_id
+
+
+class RawObjectStoreUnavailable(RuntimeError):
+    pass
 
 
 class RawObjectInventory(Protocol):

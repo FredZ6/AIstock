@@ -24,7 +24,9 @@ def _batch(name: str, feed_type: FeedType) -> ProviderBatch:
         query_as_of=OBSERVED_AT,
         observed_at=OBSERVED_AT,
         body=(FIXTURES / name).read_bytes(),
-        headers={},
+        headers=(
+            {"X-AIStock-Verified-Coverage": "IEX"} if feed_type is FeedType.PRICE_BARS else {}
+        ),
         next_page_token=None,
         rate_limit=ProviderRateLimit(),
     )
@@ -92,14 +94,50 @@ def test_news_is_pit_eligible_only_with_explicit_provider_observation_time() -> 
     assert article.pit_eligible is True
 
 
+def test_daily_bar_uses_official_regular_session_not_midnight_anchor_session() -> None:
+    normalizer = importlib.import_module(
+        "stock_platform.application.ingestion.normalizers.alpaca"
+    ).AlpacaNormalizer()
+    body = json.dumps(
+        {
+            "bars": [
+                {
+                    "t": "2026-08-21T04:00:00Z",
+                    "o": "180",
+                    "h": "182",
+                    "l": "179",
+                    "c": "181",
+                    "v": "1000",
+                }
+            ],
+            "symbol": "NVDA",
+        }
+    ).encode()
+    batch = ProviderBatch(
+        provider="ALPACA",
+        feed_type=FeedType.PRICE_BARS,
+        symbol=Symbol("NVDA"),
+        query_as_of=OBSERVED_AT,
+        observed_at=OBSERVED_AT,
+        body=body,
+        headers={
+            "X-AIStock-Verified-Coverage": "SIP",
+            "X-AIStock-Timeframe": "1Day",
+        },
+        next_page_token=None,
+        rate_limit=ProviderRateLimit(),
+    )
+
+    bar = normalizer.normalize_batch(batch)[0]
+
+    assert bar.session == "REGULAR"
+    assert bar.payload["timeframe"] == "1Day"
+
+
 def test_recorded_alpaca_ws_events_decode_without_fact_table_expansion() -> None:
-    recorded = json.loads((FIXTURES / "ws_events.json").read_bytes())
-    events = tuple(
-        AlpacaStreamDecoder().decode(
-            json.dumps(item, separators=(",", ":")).encode(),
-            received_at=OBSERVED_AT,
-        )
-        for item in recorded
+    events = AlpacaStreamDecoder().decode_batch(
+        (FIXTURES / "ws_events.json").read_bytes(),
+        received_at=OBSERVED_AT,
     )
 
     assert [event.event_kind for event in events] == [

@@ -107,6 +107,7 @@ class PostgresAlpacaFactStore:
                     market_bar.c.feed_type,
                     market_bar.c.content_hash,
                     market_bar.c.event_time,
+                    market_bar.c.symbol,
                 ]
             )
             .returning(market_bar.c.id)
@@ -121,6 +122,7 @@ class PostgresAlpacaFactStore:
                         market_bar.c.feed_type == lineage["feed_type"],
                         market_bar.c.content_hash == lineage["content_hash"],
                         market_bar.c.event_time == bar.event_time,
+                        market_bar.c.symbol == str(bar.symbol),
                     )
                 )
             )

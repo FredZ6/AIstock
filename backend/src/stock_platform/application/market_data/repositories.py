@@ -10,7 +10,12 @@ from sqlalchemy import Connection, Engine, and_, select
 
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
-from stock_platform.infrastructure.db.models.tables import normalized_record, raw_data_object
+from stock_platform.domain.ingestion.models import MarketDataCoverage, MarketSession
+from stock_platform.infrastructure.db.models.tables import (
+    market_bar,
+    normalized_record,
+    raw_data_object,
+)
 from stock_platform.infrastructure.providers.base import (
     FeedType,
     ProviderRecord,
@@ -91,10 +96,65 @@ class PostgresMarketDataRepository:
         self._connection = connection
 
     def as_of(
-        self, *, symbol: str, feed_type: FeedType, decision_time: datetime
+        self,
+        *,
+        symbol: str,
+        feed_type: FeedType,
+        decision_time: datetime,
+        coverage: MarketDataCoverage | None = None,
+        session: MarketSession = MarketSession.REGULAR,
     ) -> ProviderResponse:
         query_as_of = require_aware(decision_time)
         normalized_symbol = Symbol(symbol)
+        if feed_type is FeedType.PRICE_BARS and coverage is not None:
+            rows = self._connection.execute(
+                select(market_bar)
+                .where(
+                    market_bar.c.symbol == str(normalized_symbol),
+                    market_bar.c.coverage == coverage.value,
+                    market_bar.c.session == session.value,
+                    market_bar.c.event_time <= query_as_of,
+                    market_bar.c.available_at <= query_as_of,
+                )
+                .order_by(
+                    market_bar.c.event_time,
+                    market_bar.c.available_at,
+                    market_bar.c.ingested_at,
+                    market_bar.c.content_hash,
+                )
+            ).mappings()
+            records = tuple(
+                ProviderRecord(
+                    symbol=normalized_symbol,
+                    feed_type=feed_type,
+                    provider=str(row["provider"]),
+                    event_time=row["event_time"],
+                    available_at=row["available_at"],
+                    ingested_at=row["ingested_at"],
+                    content_hash=str(row["content_hash"]),
+                    raw_object_key=str(row["raw_object_key"]),
+                    payload={
+                        "open": str(row["open"]),
+                        "high": str(row["high"]),
+                        "low": str(row["low"]),
+                        "close": str(row["close"]),
+                        "volume": str(row["volume"]),
+                        "coverage": str(row["coverage"]),
+                        "session": str(row["session"]),
+                    },
+                )
+                for row in rows
+            )
+            visible = select_latest_visible_revisions(records, decision_time=query_as_of)
+            return ProviderResponse(
+                status=ProviderStatus.OK if visible else ProviderStatus.NOT_FOUND,
+                provider="ALPACA",
+                feed_type=feed_type,
+                symbol=normalized_symbol,
+                query_as_of=query_as_of,
+                records=visible,
+                missingness=None if visible else "MISSING",
+            )
         statement = (
             select(
                 normalized_record.c.payload,

@@ -127,7 +127,27 @@ class ResearchNodes:
                         payload=record.payload,
                     )
                 )
-            if response.status is not ProviderStatus.OK:
+            admission_gap = next(
+                (
+                    warning.removeprefix("market_data_gap:UNAVAILABLE:")
+                    for warning in response.warnings
+                    if warning.startswith("market_data_gap:UNAVAILABLE:")
+                ),
+                None,
+            )
+            if admission_gap is not None:
+                gaps.append(
+                    EvidenceGap.create(
+                        run_id=state["run_id"],
+                        kind=EvidenceGapKind.UNAVAILABLE,
+                        field=response.feed_type.value,
+                        domain="market_data",
+                        reason=admission_gap,
+                        provider=response.provider,
+                        observed_at=state["specification"].decision_time,
+                    )
+                )
+            if response.status is not ProviderStatus.OK and admission_gap is None:
                 kind = (
                     EvidenceGapKind.UNAVAILABLE
                     if response.status is ProviderStatus.UNAVAILABLE
@@ -168,13 +188,14 @@ class ResearchNodes:
             evidence_ids=evidence_ids,
             reason="provider target values disagree",
         )
+        providers = sorted({item.provider for item in targets})
         gap = EvidenceGap.create(
             run_id=state["run_id"],
             kind=EvidenceGapKind.CONFLICTED,
             field="median_target",
             domain="analyst",
             reason=conflict.reason,
-            provider="FIXTURE",
+            provider=providers[0] if len(providers) == 1 else "MULTIPLE",
             observed_at=state["specification"].decision_time,
         )
         return {

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import UTC, datetime
 from urllib.parse import urlencode
 
@@ -92,15 +91,9 @@ class AlpacaProvider(GovernedHttpProvider):
                 raise ValueError("Alpaca news does not accept a bar timeframe")
             params["symbols"] = str(normalized_symbol)
             url = f"https://data.alpaca.markets/v1beta1/news?{urlencode(params)}"
-        batch = self._fetch_batch_from_url(
+        return self._fetch_batch_from_url(
             feed_type=feed_type,
             symbol=normalized_symbol,
             query_as_of=window_end,
             url=url,
         )
-        if feed_type is FeedType.PRICE_BARS:
-            return replace(
-                batch,
-                headers=batch.headers | {"X-Alpaca-Data-Feed": coverage.upper()},
-            )
-        return batch

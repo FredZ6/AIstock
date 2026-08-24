@@ -114,3 +114,41 @@ def test_concurrent_admission_and_idempotency_are_serialized_in_postgres(
         engine.dispose()
     finally:
         app.dependency_overrides.clear()
+
+
+def test_paper_rest_admission_records_research_gap_and_rejects_portfolio_without_sip(
+    isolated_database_url: str,
+) -> None:
+    database_url = migrated_url(isolated_database_url)
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        environment="paper",
+        database_url=database_url,
+        max_active_agent_runs=10,
+        alpaca_data_key="test-key",
+        alpaca_data_secret="test-secret",
+        alpaca_entitlement_coverage="IEX",
+        alpaca_entitlement_version="operator-verified-v1",
+    )
+    try:
+        headers, payload = request(f"paper-research-{uuid4()}")
+        with TestClient(app) as client:
+            research = client.post("/api/v1/research-runs", headers=headers, json=payload)
+            portfolio = client.post(
+                "/api/v1/portfolio/rebalance-runs",
+                headers={"Idempotency-Key": f"paper-portfolio-{uuid4()}"},
+                json={
+                    "decision_time": payload["decision_time"],
+                    "data_cutoff": payload["data_cutoff"],
+                },
+            )
+        assert research.status_code == 202
+        assert portfolio.status_code == 403
+        assert portfolio.json()["error"]["code"] == "MARKET_DATA_NOT_ENTITLED"
+        engine = create_engine(database_url)
+        with engine.connect() as connection:
+            stored = connection.execute(select(agent_run.c.request_payload)).scalar_one()
+        assert stored["market_data_admission"]["outcome"] == "ALLOWED_WITH_GAP"
+        assert stored["market_data_admission"]["gap_kind"] == "UNAVAILABLE"
+        engine.dispose()
+    finally:
+        app.dependency_overrides.clear()

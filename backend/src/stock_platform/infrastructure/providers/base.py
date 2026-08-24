@@ -134,8 +134,8 @@ class ProviderBatch:
     rate_limit: ProviderRateLimit
 
     def __post_init__(self) -> None:
-        require_aware(self.query_as_of)
-        require_aware(self.observed_at)
+        object.__setattr__(self, "query_as_of", require_aware(self.query_as_of).astimezone(UTC))
+        object.__setattr__(self, "observed_at", require_aware(self.observed_at).astimezone(UTC))
 
 
 class ProviderEventFeed(StrEnum):
@@ -156,8 +156,8 @@ class ProviderEvent:
     body: bytes
 
     def __post_init__(self) -> None:
-        require_aware(self.event_time)
-        require_aware(self.observed_at)
+        object.__setattr__(self, "event_time", require_aware(self.event_time).astimezone(UTC))
+        object.__setattr__(self, "observed_at", require_aware(self.observed_at).astimezone(UTC))
 
 
 class ProviderTransportError(RuntimeError):

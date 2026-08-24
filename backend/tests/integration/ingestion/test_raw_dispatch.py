@@ -14,7 +14,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from stock_platform.application.ingestion import raw_writer as raw_writer_module
 from stock_platform.application.ingestion.jobs import IngestionJobSpec
-from stock_platform.application.ingestion.raw_writer import RawWriter
+from stock_platform.application.ingestion.raw_writer import RawObjectStoreUnavailable, RawWriter
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.ingestion.models import DataPurpose, FeedType, IngestionRequest
 from stock_platform.infrastructure.db.models.tables import (
@@ -175,7 +175,7 @@ def test_raw_writer_requires_object_storage_before_database_commit(
     job_id = _job_id(engine)
     writer = RawWriter(engine=engine, raw_store=RecordingRawStore(fail=True))
 
-    with pytest.raises(OSError, match="object store unavailable"):
+    with pytest.raises(RawObjectStoreUnavailable, match="raw object store write failed"):
         writer.write(
             job_id=job_id,
             record=_record(),

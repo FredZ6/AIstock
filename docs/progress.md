@@ -1842,7 +1842,8 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   coverage and entitlement metadata in the request payload. Concurrent/repeated scheduling reuses
   active job IDs through the existing advisory-lock idempotency guard. Missing SIP creates no Replay
   or Paper Execution job. Alpaca window transport sends exact start/end, timeframe, feed, and page
-  token and records the requested feed in `ProviderBatch` headers for deterministic normalization.
+  token. Requested coverage is never trusted as evidence: the worker compares the request with the
+  persisted entitlement snapshot and adds an internal verified-coverage marker only after they match.
 - Focused policy/window/durable-schedule verification exited 0 with 16 passed. Full related Alpaca,
   coordinator, recovery, PIT, alert, and replay verification exited 0 with 66 passed / 3 live
   credential-gated skipped. Celery/Beat schedule and ingestion job-store regression exited 0 with
@@ -1887,3 +1888,102 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   3 credential-gated skipped; Web 14 files / 94 tests passed; 267 files format clean; Ruff, strict
   Mypy over 235 source files, Alembic/MCP/OpenAPI drift, TypeScript, ESLint, and the nine-route
   production build all passed. These replace the earlier pre-correction full-gate evidence.
+
+#### PR #13 blocker remediation and second-review candidate — 2026-08-24
+
+- The first professional review found seven blocking gaps: no operational Celery ingestion chain,
+  non-durable pagination/recovery, an unused SIP gate, incomplete WebSocket raw replay lineage,
+  market-session handling that did not enforce the exchange calendar, missing database-level news
+  PIT protection, and naive/non-canonical timestamps. Each target first received a failing regression.
+- Celery Beat now admits only explicitly configured Alpaca entitlements, creates idempotent Watchlist
+  jobs, dispatches durable leases to a low-priority queue, walks every opaque page token, and advances
+  its cursor only after RawDataObject, NormalizedRecord, typed fact, and MinIO writes commit. Expired
+  leases are recoverable; rate-limit, transport, PostgreSQL, MinIO, and schema-drift paths retain the
+  correct retry/dead-letter state. Bounded REST reconnect recovery covers at most thirty minutes.
+- The stream replay writer persists trade, quote, status, and updated-bar envelopes raw-first and
+  idempotently to append-only RawDataObject/NormalizedRecord lineage. Supported bars continue to reach
+  MarketBar; no MarketTrade table, public feed-contract expansion, broker path, or Fixture fallback was
+  introduced. IEX is never relabeled SIP, and Replay/Paper admission remains denied without verified SIP.
+- DTO/coordinator timestamps are canonical UTC and naive values are rejected. The deterministic New
+  York calendar covers DST, holidays, and early closes. Migration 0027 adds the forward-only
+  `news_article` PIT CHECK without mutating the already-released 0026 migration; Alembic drift is clean.
+- An official Alpaca OpenAPI cross-check exposed one additional production blocker: the single-symbol
+  bars endpoint returns `bars` as a list plus a top-level `symbol`, while the original test fixture used
+  the multi-symbol grouped shape. A recorded-contract RED exited 1 with the normalizer rejecting the
+  official shape. The normalizer and pagination E2E fixtures now match the single-symbol contract and
+  reject a mismatched response symbol. The focused contract command exited 0 with 36 passed / 3 live
+  credential-gated skipped.
+- One initial E2E command exited 4 because three guessed test paths did not exist; no test ran and no
+  product failure was hidden. The corrected real PostgreSQL/MinIO command exited 0 with 32 passed across
+  paginated job execution, fact lineage, recovery, stream/alert replay, PIT, and append-only checks.
+- Final `make verify` exited 0: 269 files format clean; Ruff clean; strict Mypy clean over 236 source
+  files; Alembic reported no new upgrade operations; backend 528 passed / 3 credential-gated skipped;
+  Web TypeScript and ESLint clean; Vitest 14 files / 94 tests passed; and the nine-route Next.js
+  production build succeeded. The existing Node `--localstorage-file` warning is unchanged and
+  non-functional. A live Alpaca smoke remains intentionally unexecuted without real credentials and
+  an operator-verified entitlement snapshot.
+
+#### PR #13 second-review remediation — 2026-08-24
+
+- The second independent review withheld approval because `ingestion-low` had no documented consumer,
+  the E2E bypassed Redis/Celery, pagination lacked lease renewal, cursor scope could collide, repeated
+  empty REST and delayed WS messages had unstable immutable metadata, Beat entitlement timestamps were
+  not idempotent, WS/reconnect/daily-news paths lacked operational entrypoints, and SIP policy was not
+  pinned into normal Run admission. New RED coverage reproduced each behavior.
+- The registered Alpaca task now executes through an actual Redis broker and solo Celery worker.
+  Production routing pins it to `ingestion-low`; the recovery script and runbook consume both queues.
+  Every page validates and renews its lease before MinIO/PostgreSQL writes, uses current time for state
+  transitions, and stores cursor state under the immutable job ID. A stale worker cannot persist.
+- Empty responses now have stable transport-artifact event time; non-empty responses derive event time
+  from provider facts. Delayed WS replay preserves the first observation and remains idempotent.
+  Operational Celery entrypoints now persist WS messages, schedule bounded reconnect recovery, expose
+  locked daily/minute/news backfills, and create stable weekday daily-bar/news Watchlist jobs.
+- Paper-mode Research admission persists the exact entitlement decision and typed `UNAVAILABLE` gap.
+  Portfolio admission requires SIP and returns no run for deterministic `DENIED_NO_ACTION`; explicit
+  Fixture/test mode remains separate. No live-broker or real-money path was added.
+- The real Redis/Celery test exited 0 with 1 passed. Expanded Alpaca/Celery/recovery/WS/PIT tests exited
+  0 with 187 passed / 3 credential-gated skipped; the combined runtime suite exited 0 with 29 passed.
+  The first post-review `make verify` exited 2 only because Celery's testing module lacks `py.typed`;
+  a precise third-party import ignore fixed it. The fresh full rerun exited 0: 269 files format clean,
+  Ruff clean, strict Mypy clean over 236 source files, Alembic drift clean, backend 534 passed / 3
+  credential-gated skipped, Web 14 files / 94 tests passed, TypeScript/ESLint clean, and the nine-route
+  build succeeded. The existing Node `--localstorage-file` warning remains non-functional.
+
+#### PR #13 final-review closure — 2026-08-24
+
+- Final independent review found that admission metadata alone was insufficient for paper-mode
+  execution. Research now consumes the frozen admission decision, isolates IEX/SIP series in its
+  PostgreSQL PIT query, limits the default path to REGULAR-session facts, and persists the explicit
+  SIP-unavailable warning as a typed `UNAVAILABLE` EvidenceGap. Real-data objectives and conflict
+  provenance no longer claim Fixture origin.
+- Alpaca WebSocket persistence now archives the exact wire batch before Celery publication, includes
+  verified coverage in object/series identity, derives one RawDataObject with per-event normalized
+  lineage, and persists ordinary `T=b` events as typed MarketBar facts. The market-bar unique identity
+  now includes symbol, so one provider batch can safely carry multiple symbols at the same timestamp.
+  Delayed replay retains the first `available_at`; repeated and concurrent delivery stays append-only
+  and idempotent. A timestamped recovery sidecar preserves the original `received_at`. On supervised
+  restart, a low-priority reconciliation task walks recovery objects in bounded 100-object pages,
+  checks each raw object key against PostgreSQL, publishes only orphans, and continues with an opaque
+  cursor. Broker publish failure exits the managed stream process, so restart recovery always runs;
+  referenced history is never flooded back into the queue.
+- Paper Portfolio loads only SIP/REGULAR bars visible at the execution observation time. It supplies
+  both decision-time valuation bars and post-decision execution bars to the graph; the graph's
+  separate event/availability cutoffs prevent future facts from affecting the decision. Visible
+  corrections collapse deterministically to the latest revision, and real-data rationale no longer
+  claims Fixture provenance.
+- The Celery E2E uses a fixed known trading session with a matching request window. Targeted
+  WS/MinIO/PostgreSQL, multi-symbol, delayed-replay, bounded orphan recovery with original observation
+  time, session/revision, operator-recovery and migration
+  commands exited 0. The expanded concurrency, pagination/recovery, raw lineage, SIP admission, PIT,
+  worker and append-only suite exited 0 with 228 passed / 3 credential-gated live tests skipped.
+- The first final `make verify` attempt exited 2 on strict Mypy because an existing MinIO fake lacked
+  the newly separated read protocol; the fake remained write-only and the production store now casts
+  only at the read boundary. The next attempt correctly rejected mutation of a locally applied 0027;
+  0027 was restored byte-for-behavior and the symbol identity change moved to forward-only migration
+  0028. After upgrading the validation database to head, one full run exposed and fixed a deterministic
+  `list_keys()` ordering regression while retaining lazy `iter_keys()` for bounded recovery.
+- Final fresh `make verify` exited 0: 272 files format clean; Ruff clean; strict Mypy clean over 238
+  source files; Alembic reported no upgrade operations; backend 550 passed / 3 credential-gated live
+  tests skipped; Web TypeScript and ESLint clean; Vitest 14 files / 94 tests passed; and the nine-route
+  Next.js production build succeeded. The existing Node `--localstorage-file` warning remains
+  non-functional. No live Alpaca request was fabricated or attempted without credentials.

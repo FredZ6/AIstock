@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from stock_platform.application.ingestion.jobs import IngestionLease
@@ -71,9 +71,10 @@ class IngestionCoordinator:
         symbol: str,
         as_of: datetime,
         now: datetime,
+        complete_job: bool = True,
     ) -> ProviderBatch | None:
-        checked_as_of = require_aware(as_of)
-        checked_now = require_aware(now)
+        checked_as_of = require_aware(as_of).astimezone(UTC)
+        checked_now = require_aware(now).astimezone(UTC)
         try:
             batch = transport.fetch_batch(feed_type, symbol, checked_as_of)
         except ProviderTransportError as error:
@@ -101,6 +102,6 @@ class IngestionCoordinator:
                 raise RuntimeError("ingestion retry scheduling rejected") from error
             return None
         self._persist_batch(batch)
-        if not self._job_store.complete(lease, now=checked_now):
+        if complete_job and not self._job_store.complete(lease, now=checked_now):
             raise RuntimeError("ingestion job completion rejected")
         return batch

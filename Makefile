@@ -1,4 +1,4 @@
-.PHONY: bootstrap up down seed clean-fixtures verify evaluate smoke
+.PHONY: bootstrap up down seed clean-fixtures verify evaluate smoke alpaca-stream
 
 bootstrap:
 	./scripts/bootstrap.sh
@@ -23,3 +23,6 @@ evaluate:
 
 smoke:
 	./scripts/smoke.sh
+
+alpaca-stream:
+	PYTHONPATH="$(CURDIR)/backend/src" UV_CACHE_DIR="$(CURDIR)/.uv-cache" uv run python scripts/run_alpaca_stream.py

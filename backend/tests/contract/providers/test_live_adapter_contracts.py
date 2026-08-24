@@ -61,7 +61,8 @@ def test_alpaca_transport_returns_raw_batch_without_persistence() -> None:
     record_store = RecordingRecordStore()
     body = json.dumps(
         {
-            "bars": {"NVDA": [{"t": "2026-08-16T11:55:00Z", "c": "123.45"}]},
+            "bars": [{"t": "2026-08-16T11:55:00Z", "c": "123.45"}],
+            "symbol": "NVDA",
             "next_page_token": "page-2",
         }
     ).encode()
@@ -122,7 +123,7 @@ def test_alpaca_window_transport_carries_bounds_feed_timeframe_and_resume_token(
     assert "timeframe=1Min" in requests[0].url
     assert "feed=sip" in requests[0].url
     assert "page_token=opaque-page-2" in requests[0].url
-    assert batch.headers["X-Alpaca-Data-Feed"] == "SIP"
+    assert "X-Alpaca-Data-Feed" not in batch.headers
 
 
 def test_alpaca_transport_returns_typed_rate_limit_without_sleeping() -> None:

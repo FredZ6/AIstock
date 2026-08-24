@@ -2,10 +2,12 @@ from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
 
 import pytest
+from stock_platform.application.ingestion.normalizers.alpaca import market_session_for
 from stock_platform.application.market_data.policy import (
     EntitlementSnapshot,
     MarketCalendar,
     PolicyOutcome,
+    alpaca_entitlement_from_settings,
     route_market_data,
 )
 from stock_platform.domain.ingestion.models import (
@@ -13,6 +15,9 @@ from stock_platform.domain.ingestion.models import (
     MarketDataCoverage,
     MarketSession,
 )
+from stock_platform.settings import Settings
+
+NOW = datetime(2026, 8, 24, tzinfo=UTC)
 
 
 def _entitlement(*coverage: MarketDataCoverage, overnight: bool = False) -> EntitlementSnapshot:
@@ -41,9 +46,34 @@ def test_market_calendar_handles_dst_holiday_and_half_day() -> None:
     )
 
 
+def test_default_market_calendar_knows_nyse_holidays_and_early_closes() -> None:
+    calendar = MarketCalendar()
+
+    assert calendar.session_at(datetime(2026, 12, 25, 15, tzinfo=UTC)) is None
+    assert calendar.session_at(datetime(2026, 11, 27, 19, tzinfo=UTC)) is MarketSession.AFTER_HOURS
+
+
 def test_market_calendar_rejects_naive_time() -> None:
     with pytest.raises(ValueError, match="timezone-aware"):
         MarketCalendar().session_at(datetime(2026, 8, 24, 10))
+
+
+def test_normalized_market_session_rejects_naive_time() -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        market_session_for(datetime(2026, 8, 24, 10))
+
+
+def test_normalized_market_session_uses_holiday_and_half_day_calendar() -> None:
+    calendar = MarketCalendar(
+        closures=frozenset({date(2026, 12, 25)}),
+        half_days={date(2026, 11, 27): time(13)},
+    )
+
+    assert market_session_for(datetime(2026, 12, 25, 15, tzinfo=UTC), calendar=calendar) is None
+    assert (
+        market_session_for(datetime(2026, 11, 27, 19, tzinfo=UTC), calendar=calendar)
+        is MarketSession.AFTER_HOURS
+    )
 
 
 def test_entitlement_policy_never_relables_iex_as_sip() -> None:
@@ -106,3 +136,33 @@ def test_entitlement_metadata_requires_aware_observation_and_declared_sip_delay(
         )
     with pytest.raises(ValueError, match="SIP delay"):
         replace(_entitlement(MarketDataCoverage.SIP), sip_delay=None)
+
+
+def test_runtime_entitlement_requires_explicit_credentials_coverage_and_version() -> None:
+    assert alpaca_entitlement_from_settings(Settings(environment="test"), observed_at=NOW) is None
+    with pytest.raises(ValueError, match="configured together"):
+        Settings(environment="test", alpaca_data_key="key-only")
+    with pytest.raises(ValueError, match="entitlement version"):
+        Settings(
+            environment="test",
+            alpaca_data_key="key",
+            alpaca_data_secret="secret",
+            alpaca_entitlement_coverage="IEX",
+        )
+
+    snapshot = alpaca_entitlement_from_settings(
+        Settings(
+            environment="test",
+            alpaca_data_key="key",
+            alpaca_data_secret="secret",
+            alpaca_entitlement_coverage="IEX,SIP",
+            alpaca_entitlement_version="operator-verified-2026-08-24",
+            alpaca_sip_delay_seconds=900,
+        ),
+        observed_at=NOW,
+    )
+
+    assert snapshot is not None
+    assert snapshot.coverage == frozenset({MarketDataCoverage.IEX, MarketDataCoverage.SIP})
+    assert snapshot.version == "operator-verified-2026-08-24"
+    assert snapshot.sip_delay == timedelta(minutes=15)

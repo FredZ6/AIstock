@@ -26,6 +26,11 @@ from stock_platform.application.learning.promotion import (
     PostgresPolicyRepository,
     VersionConflict,
 )
+from stock_platform.application.market_data.policy import (
+    PolicyOutcome,
+    admission_payload,
+    paper_market_data_admission,
+)
 from stock_platform.application.runs import (
     IdempotencyConflict,
     RunAdmissionLimit,
@@ -33,6 +38,7 @@ from stock_platform.application.runs import (
     append_run_event,
 )
 from stock_platform.domain.common.ids import Symbol
+from stock_platform.domain.ingestion.models import DataPurpose
 from stock_platform.infrastructure.db.models.tables import (
     agent_run,
     alert_event,
@@ -263,13 +269,21 @@ def create_research_run(
     settings: SettingsDependency,
     idempotency_key: IdempotencyKey,
 ) -> RunResponse:
+    payload = request.model_dump(mode="json")
+    admission = paper_market_data_admission(
+        settings,
+        cutoff=request.data_cutoff,
+        purpose=DataPurpose.RESEARCH,
+    )
+    if admission is not None:
+        payload.update(admission_payload(admission))
     return _create_run(
         connection,
         settings,
         response,
         run_type="RESEARCH",
         idempotency_key=idempotency_key,
-        payload=request.model_dump(mode="json"),
+        payload=payload,
         symbol=request.symbol,
         decision_time=request.decision_time,
         data_cutoff=request.data_cutoff,
@@ -396,13 +410,23 @@ def create_portfolio_run(
     settings: SettingsDependency,
     idempotency_key: IdempotencyKey,
 ) -> RunResponse:
+    admission = paper_market_data_admission(
+        settings,
+        cutoff=request.data_cutoff,
+        purpose=DataPurpose.PAPER_EXECUTION,
+    )
+    if admission is not None and admission.outcome is PolicyOutcome.DENIED_NO_ACTION:
+        raise ApiError(403, "MARKET_DATA_NOT_ENTITLED", admission.reason or "SIP required")
+    payload = request.model_dump(mode="json")
+    if admission is not None:
+        payload.update(admission_payload(admission))
     return _create_run(
         connection,
         settings,
         response,
         run_type="PORTFOLIO",
         idempotency_key=idempotency_key,
-        payload=request.model_dump(mode="json"),
+        payload=payload,
         symbol=None,
         decision_time=request.decision_time,
         data_cutoff=request.data_cutoff,

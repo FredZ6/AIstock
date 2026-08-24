@@ -391,6 +391,9 @@ class PostgresAlertStore:
                     .returning(normalized_record.c.id)
                 ).scalar_one(),
             )
+            session = market_session_for(item.event_time)
+            if session is None:
+                raise ValueError("market bar falls outside the configured market calendar")
             self.connection.execute(
                 pg_insert(market_bar)
                 .values(
@@ -402,7 +405,7 @@ class PostgresAlertStore:
                     provider=item.provider,
                     feed_type="minute_bars_stream",
                     coverage=MarketDataCoverage.IEX.value,
-                    session=market_session_for(item.event_time).value,
+                    session=session.value,
                     content_hash=item.content_hash,
                     raw_object_key=item.raw_object_key,
                     available_at=item.available_at,

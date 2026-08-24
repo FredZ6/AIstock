@@ -41,6 +41,19 @@ def test_0026_adds_alpaca_fact_schema_and_database_guards(
     assert "market_trade" not in table_names
     market_bar_columns = {column["name"] for column in inspector.get_columns("market_bar")}
     assert {"normalized_record_id", "coverage", "session"} <= market_bar_columns
+    stream_index = next(
+        index
+        for index in inspector.get_indexes("market_bar")
+        if index["name"] == "uq_market_bar_stream_content"
+    )
+    assert stream_index["unique"] is True
+    assert stream_index["column_names"] == [
+        "provider",
+        "feed_type",
+        "content_hash",
+        "event_time",
+        "symbol",
+    ]
     with engine.connect() as connection:
         guarded_tables = set(
             connection.execute(
@@ -67,6 +80,61 @@ def test_0026_adds_alpaca_fact_schema_and_database_guards(
 
     assert guarded_tables == {"market_bar", "news_article"}
     assert lineage_guard == 1
+    engine.dispose()
+
+
+def test_news_pit_eligibility_is_enforced_by_postgres(
+    isolated_database_url: str,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    published_at = datetime(2026, 8, 21, 13, tzinfo=UTC)
+    available_at = datetime(2026, 8, 21, 14, tzinfo=UTC)
+
+    with engine.begin() as connection:
+        raw_id = connection.execute(
+            insert(raw_data_object)
+            .values(
+                provider="ALPACA",
+                feed_type="company_news",
+                event_time=published_at,
+                available_at=available_at,
+                ingested_at=available_at,
+                content_hash="c" * 64,
+                raw_object_key=f"live/ALPACA/company_news/{'c' * 64}.json",
+            )
+            .returning(raw_data_object.c.id)
+        ).scalar_one()
+        normalized_id = connection.execute(
+            insert(normalized_record)
+            .values(
+                raw_data_object_id=raw_id,
+                record_type="news_article",
+                record_key="pit-invalid",
+                normalization_version="alpaca-news-v1",
+                payload={"article_id": "pit-invalid"},
+            )
+            .returning(normalized_record.c.id)
+        ).scalar_one()
+
+    invalid = {
+        "raw_data_object_id": raw_id,
+        "normalized_record_id": normalized_id,
+        "provider": "ALPACA",
+        "article_id": "pit-invalid",
+        "symbols": ["NVDA"],
+        "headline": "Invalid PIT fixture",
+        "source": "fixture-wire",
+        "summary": "",
+        "published_at": published_at,
+        "observed_at": None,
+        "available_at": available_at,
+        "ingested_at": available_at,
+        "pit_eligible": True,
+        "payload": {},
+    }
+    with engine.begin() as connection, pytest.raises(DBAPIError):
+        connection.execute(insert(news_article).values(**invalid))
     engine.dispose()
 
 

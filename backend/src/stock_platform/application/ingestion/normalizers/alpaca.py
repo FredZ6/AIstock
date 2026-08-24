@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
+from stock_platform.application.market_data.policy import MarketCalendar
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.ingestion.models import (
@@ -36,15 +37,13 @@ def _decimal(payload: dict[str, object], key: str) -> Decimal:
     return value
 
 
-def market_session_for(event_time: datetime) -> MarketSession:
-    local_time = event_time.astimezone(NEW_YORK).time()
-    if time(4) <= local_time < time(9, 30):
-        return MarketSession.PRE_MARKET
-    if time(9, 30) <= local_time < time(16):
-        return MarketSession.REGULAR
-    if time(16) <= local_time < time(20):
-        return MarketSession.AFTER_HOURS
-    return MarketSession.OVERNIGHT
+def market_session_for(
+    event_time: datetime,
+    *,
+    calendar: MarketCalendar | None = None,
+) -> MarketSession | None:
+    checked = require_aware(event_time).astimezone(UTC)
+    return (calendar or MarketCalendar()).session_at(checked)
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +76,9 @@ class AlpacaNewsArticle:
 
 
 class AlpacaNormalizer:
+    def __init__(self, *, calendar: MarketCalendar | None = None) -> None:
+        self._calendar = calendar or MarketCalendar()
+
     def normalize_batch(
         self,
         batch: ProviderBatch,
@@ -98,20 +100,33 @@ class AlpacaNormalizer:
         batch: ProviderBatch,
         document: dict[str, object],
     ) -> tuple[AlpacaBar, ...]:
-        grouped = document.get("bars")
-        if not isinstance(grouped, dict):
-            raise ValueError("Alpaca bars payload is missing bars")
-        raw_bars = grouped.get(str(batch.symbol), ())
+        raw_bars = document.get("bars")
         if not isinstance(raw_bars, list):
-            raise ValueError("Alpaca symbol bars must be a list")
-        coverage_value = batch.headers.get("X-Alpaca-Data-Feed", "IEX").upper()
+            raise ValueError("Alpaca bars payload is missing bars")
+        response_symbol = document.get("symbol")
+        if response_symbol is not None and str(response_symbol) != str(batch.symbol):
+            raise ValueError("Alpaca bars response symbol does not match the request")
+        coverage_value = batch.headers.get("X-AIStock-Verified-Coverage")
+        if coverage_value is None:
+            raise ValueError("Alpaca bars require verified entitlement coverage")
+        coverage_value = coverage_value.upper()
         coverage = MarketDataCoverage(coverage_value)
+        timeframe = batch.headers.get("X-AIStock-Timeframe", "1Min")
+        if timeframe not in {"1Min", "1Day"}:
+            raise ValueError("Alpaca bars require a verified timeframe")
         bars: list[AlpacaBar] = []
         for raw_bar in raw_bars:
             if not isinstance(raw_bar, dict):
                 raise ValueError("Alpaca bar must be an object")
             payload = cast(dict[str, object], raw_bar)
             event_time = _timestamp(payload["t"])
+            session = (
+                MarketSession.REGULAR
+                if timeframe == "1Day"
+                else market_session_for(event_time, calendar=self._calendar)
+            )
+            if session is None:
+                raise ValueError("Alpaca bar falls outside the configured market calendar")
             bars.append(
                 AlpacaBar(
                     symbol=batch.symbol,
@@ -123,8 +138,8 @@ class AlpacaNormalizer:
                     close=_decimal(payload, "c"),
                     volume=_decimal(payload, "v"),
                     coverage=coverage,
-                    session=market_session_for(event_time),
-                    payload=payload,
+                    session=session,
+                    payload={**payload, "timeframe": timeframe},
                 )
             )
         return tuple(bars)
