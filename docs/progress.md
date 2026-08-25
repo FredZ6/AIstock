@@ -2056,3 +2056,21 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   the expanded related suite exited 0 with 87 passed. The final post-fix `make verify` exited 0 with
   backend 559 passed / 3 credential-gated live tests skipped and Web 94 passed; all other gates and
   the nine-route build remained clean.
+
+### M7.5 RDB-3 — FRE-26 Task 11 SEC filing ingestion (2026-08-26)
+
+- Replaced SEC adapter-local symbol handling with point-in-time Security master CIK and filing-regime
+  resolution for all 11 Watchlist securities. Domestic and foreign issuers use separate frozen form
+  allowlists. The adapter is read-only, requires an application/version/contact User-Agent, and uses
+  one process-wide thread-safe limiter capped at 5 requests per second.
+- Added deterministic SEC submissions normalization, acceptance-time availability, accession-based
+  idempotency, append-only amendment lineage, and immutable raw HTML filing-document storage. The
+  typed `SecFiling` references both normalized submissions and raw document bytes; no redundant
+  `SecDocument` table was introduced.
+- RED command: `.venv/bin/pytest -q backend/tests/contract/providers/test_sec_ingestion.py
+  backend/tests/integration/ingestion/test_sec_facts.py` exited 2 with the expected missing SEC
+  normalizer/store/schema imports. The raw-artifact regression later exited 1 on the intentionally
+  missing `RawWriter.write_artifact` behavior.
+- GREEN focused SEC plus database append-only command exited 0 with 17 passed. The full SEC adapter,
+  Security master, recorded-contract and persistence compatibility command exited 0 with 48 passed /
+  3 credential-gated live contracts skipped. No live request or result was fabricated.

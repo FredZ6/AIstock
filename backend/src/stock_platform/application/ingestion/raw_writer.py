@@ -87,6 +87,26 @@ class RawWriter:
                     raise ValueError("immutable normalization dispatch conflict")
             return raw_id
 
+    def write_artifact(
+        self,
+        *,
+        record: ProviderRecord,
+        raw_content: bytes,
+        content_type: str,
+    ) -> UUID:
+        """Persist immutable non-JSON source bytes without creating a normalization job."""
+        if hashlib.sha256(raw_content).hexdigest() != record.content_hash:
+            raise ValueError("raw content hash does not match ProviderRecord")
+        filename = record.raw_object_key.rsplit("/", 1)[-1]
+        if not filename.startswith(f"{record.content_hash}."):
+            raise ValueError("raw artifact key must be content-addressed by its SHA-256 hash")
+        try:
+            self._raw_store.put(record.raw_object_key, raw_content, content_type)
+        except Exception as error:
+            raise RawObjectStoreUnavailable("raw object store write failed") from error
+        with self._engine.begin() as connection:
+            return persist_raw_object(connection, record)
+
 
 class RawObjectStoreUnavailable(RuntimeError):
     pass

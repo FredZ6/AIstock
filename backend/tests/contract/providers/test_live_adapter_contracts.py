@@ -272,7 +272,7 @@ def test_live_adapters_use_fixed_read_only_endpoints_and_persist_raw_first(
     adapter: ResearchDataProvider
     if provider == "sec":
         adapter = SecProvider(
-            user_agent="research@example.com",
+                user_agent="AIStock/0.1 research@example.com",
             transport=transport,
             raw_store=store,
             record_store=record_store,
@@ -338,7 +338,7 @@ def test_sec_requires_identity_and_sets_user_agent() -> None:
         clock=lambda: AS_OF,
     ).fetch(FeedType.COMPANY_FACTS, "NVDA", AS_OF)
     configured = SecProvider(
-        user_agent="research@example.com",
+        user_agent="AIStock/0.1 research@example.com",
         transport=successful_transport(requests),
         raw_store=store,
         record_store=RecordingRecordStore(),
@@ -347,7 +347,7 @@ def test_sec_requires_identity_and_sets_user_agent() -> None:
 
     assert missing.status.value == "unavailable"
     assert configured.status.value == "ok"
-    assert requests[-1].headers["User-Agent"] == "research@example.com"
+    assert requests[-1].headers["User-Agent"] == "AIStock/0.1 research@example.com"
 
 
 def test_rate_limit_retries_with_exponential_backoff_and_jitter() -> None:
@@ -387,7 +387,7 @@ def test_governed_provider_opens_circuit_and_skips_transport_until_timeout() -> 
         return HttpResponse(status_code=503, headers={}, body=b"{}")
 
     provider = SecProvider(
-        user_agent="research@example.com",
+        user_agent="AIStock/0.1 research@example.com",
         transport=unavailable,
         raw_store=RecordingStore(),
         record_store=RecordingRecordStore(),
@@ -416,7 +416,7 @@ def test_adapter_timeout_flows_through_fallback_policy() -> None:
         raise TimeoutError
 
     primary = SecProvider(
-        user_agent="research@example.com",
+        user_agent="AIStock/0.1 research@example.com",
         transport=timeout,
         raw_store=store,
         record_store=RecordingRecordStore(),
@@ -464,7 +464,7 @@ def test_conditional_request_reuses_etag_without_changing_endpoint() -> None:
     requests: list[HttpRequest] = []
     store = RecordingStore()
     provider = SecProvider(
-        user_agent="research@example.com",
+        user_agent="AIStock/0.1 research@example.com",
         transport=successful_transport(requests),
         raw_store=store,
         record_store=RecordingRecordStore(),
@@ -531,7 +531,7 @@ def test_sec_unknown_symbol_and_unimplemented_section_are_typed_results() -> Non
         raise AssertionError("network must not run")
 
     adapter = SecProvider(
-        user_agent="research@example.com",
+        user_agent="AIStock/0.1 research@example.com",
         transport=fail_on_network,
         raw_store=RecordingStore(),
         record_store=RecordingRecordStore(),

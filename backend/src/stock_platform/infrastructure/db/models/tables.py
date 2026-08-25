@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -1297,6 +1298,57 @@ news_article = Table(
     ),
 )
 Index("news_article_pit_idx", news_article.c.published_at, news_article.c.available_at)
+sec_filing = Table(
+    "sec_filing",
+    metadata,
+    uuid_pk(),
+    Column("security_id", UUID(as_uuid=True), ForeignKey("security.id"), nullable=False),
+    Column(
+        "raw_data_object_id", UUID(as_uuid=True), ForeignKey("raw_data_object.id"), nullable=False
+    ),
+    Column(
+        "normalized_record_id",
+        UUID(as_uuid=True),
+        ForeignKey("normalized_record.id"),
+        nullable=False,
+    ),
+    Column(
+        "document_raw_data_object_id",
+        UUID(as_uuid=True),
+        ForeignKey("raw_data_object.id"),
+        nullable=False,
+    ),
+    Column("provider", Text, nullable=False),
+    Column("cik", Text, nullable=False),
+    Column("accession_number", Text, nullable=False),
+    Column("form", Text, nullable=False),
+    Column("base_form", Text, nullable=False),
+    Column("filing_date", Date, nullable=False),
+    Column("report_date", Date),
+    Column("accepted_at", DateTime(timezone=True), nullable=False),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("primary_document", Text, nullable=False),
+    Column("description", Text, nullable=False),
+    Column("is_amendment", Boolean, nullable=False),
+    Column("supersedes_id", UUID(as_uuid=True), ForeignKey("sec_filing.id")),
+    Column("payload", JSONB, nullable=False),
+    created_at(),
+    CheckConstraint("accepted_at = available_at", name=conv("ck_sec_filing_availability")),
+    CheckConstraint(
+        "supersedes_id IS NULL OR supersedes_id <> id", name=conv("ck_sec_filing_supersedes_self")
+    ),
+    CheckConstraint(
+        "(is_amendment AND form LIKE '%/A') OR (NOT is_amendment AND form NOT LIKE '%/A')",
+        name=conv("ck_sec_filing_amendment"),
+    ),
+    UniqueConstraint("provider", "accession_number", name="uq_sec_filing_accession"),
+)
+Index(
+    "sec_filing_pit_idx",
+    sec_filing.c.security_id,
+    sec_filing.c.accepted_at,
+    sec_filing.c.available_at,
+)
 option_snapshot = time_series_table(
     "option_snapshot",
     Column("symbol", Text, nullable=False),
