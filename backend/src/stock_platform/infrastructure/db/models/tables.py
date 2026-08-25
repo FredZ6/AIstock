@@ -1349,6 +1349,69 @@ Index(
     sec_filing.c.accepted_at,
     sec_filing.c.available_at,
 )
+financial_fact = Table(
+    "financial_fact",
+    metadata,
+    uuid_pk(),
+    Column("security_id", UUID(as_uuid=True), ForeignKey("security.id"), nullable=False),
+    Column("sec_filing_id", UUID(as_uuid=True), ForeignKey("sec_filing.id"), nullable=False),
+    Column(
+        "raw_data_object_id", UUID(as_uuid=True), ForeignKey("raw_data_object.id"), nullable=False
+    ),
+    Column(
+        "normalized_record_id",
+        UUID(as_uuid=True),
+        ForeignKey("normalized_record.id"),
+        nullable=False,
+    ),
+    Column("provider", Text, nullable=False),
+    Column("taxonomy", Text, nullable=False),
+    Column("source_concept", Text, nullable=False),
+    Column("canonical_concept", Text),
+    Column("value", Numeric, nullable=False),
+    Column("unit", Text, nullable=False),
+    Column("currency", Text),
+    Column("period_start", Date, nullable=False),
+    Column("period_end", Date, nullable=False),
+    Column("accession_number", Text, nullable=False),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("mapping_status", Text, nullable=False),
+    Column("mapping_version", Text, nullable=False),
+    Column("input_provenance", JSONB, nullable=False),
+    Column("supersedes_id", UUID(as_uuid=True), ForeignKey("financial_fact.id")),
+    created_at(),
+    CheckConstraint("period_start <= period_end", name=conv("ck_financial_fact_period")),
+    CheckConstraint(
+        "mapping_status IN ('EXACT', 'DERIVED', 'UNMAPPED', 'AMBIGUOUS')",
+        name=conv("ck_financial_fact_mapping_status"),
+    ),
+    CheckConstraint(
+        "(mapping_status IN ('EXACT', 'DERIVED')) = (canonical_concept IS NOT NULL)",
+        name=conv("ck_financial_fact_canonical_status"),
+    ),
+    CheckConstraint(
+        "supersedes_id IS NULL OR supersedes_id <> id",
+        name=conv("ck_financial_fact_supersedes_self"),
+    ),
+    UniqueConstraint(
+        "provider",
+        "security_id",
+        "taxonomy",
+        "source_concept",
+        "accession_number",
+        "unit",
+        "period_start",
+        "period_end",
+        "mapping_version",
+        name="uq_financial_fact_version",
+    ),
+)
+Index(
+    "financial_fact_pit_idx",
+    financial_fact.c.security_id,
+    financial_fact.c.period_end,
+    financial_fact.c.available_at,
+)
 option_snapshot = time_series_table(
     "option_snapshot",
     Column("symbol", Text, nullable=False),

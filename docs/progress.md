@@ -2074,3 +2074,18 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
 - GREEN focused SEC plus database append-only command exited 0 with 17 passed. The full SEC adapter,
   Security master, recorded-contract and persistence compatibility command exited 0 with 48 passed /
   3 credential-gated live contracts skipped. No live request or result was fabricated.
+
+### M7.5 RDB-3 — FRE-26 Task 12 deterministic financial facts (2026-08-26)
+
+- Added a local versioned financial-concept registry covering deterministic EXACT, DERIVED, UNMAPPED,
+  and AMBIGUOUS outcomes for US-GAAP/IFRS examples. The configuration is JSON-form YAML (valid YAML
+  1.2), parsed only with the standard library; the mapper has no network, LLM, or prompt dependency.
+- `FinancialFactInput` rejects binary floats and non-finite values. Derived free cash flow uses
+  `Decimal`, requires matching units/currency/periods, and preserves both source concepts as input
+  provenance. Unresolved mappings produce typed EvidenceGap-compatible MISSING/CONFLICTED evidence.
+- Added append-only `FinancialFact` versions with taxonomy, unit/currency, period, accession,
+  mapping version/status, normalized/raw lineage, correction supersession, and mandatory SecFiling
+  FK. Missing filing lineage is rejected before insert, preventing an unrepairable append-only gap.
+- Initial RED command exited 2 on missing mapping modules. The mandatory-filing regression exited 1
+  before the FK guard. Final focused mapping, SEC persistence, database append-only and research
+  numeric-verifier command exited 0 with 21 passed. Ruff and strict focused Mypy exited 0.

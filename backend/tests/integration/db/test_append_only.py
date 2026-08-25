@@ -20,6 +20,7 @@ APPEND_ONLY_TABLES = {
     "market_bar",
     "news_article",
     "sec_filing",
+    "financial_fact",
 }
 
 UPDATE_PROBE_COLUMNS = {
@@ -236,6 +237,28 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
         connection.execute(
             text(
                 """
+                INSERT INTO financial_fact (
+                    security_id, sec_filing_id, raw_data_object_id, normalized_record_id,
+                    provider, taxonomy, source_concept, canonical_concept,
+                    value, unit, currency, period_start, period_end,
+                    accession_number, available_at, mapping_status,
+                    mapping_version, input_provenance
+                ) VALUES (
+                    :security_id,
+                    (SELECT id FROM sec_filing WHERE accession_number = '0000000001-26-000001'),
+                    :raw_id,
+                    (SELECT id FROM normalized_record WHERE raw_data_object_id = :raw_id LIMIT 1),
+                    'FIXTURE', 'us-gaap', 'Revenues', 'REVENUE', 1, 'USD', 'USD',
+                    current_date - 1, current_date, '0000000001-26-000001', now(),
+                    'EXACT', 'append-only-v1', '[["us-gaap","Revenues"]]'::jsonb
+                )
+                """
+            ),
+            {"security_id": security_id, "raw_id": raw_id},
+        )
+        connection.execute(
+            text(
+                """
                 INSERT INTO market_context_snapshot (
                     id, as_of, available_at, algorithm_version, source_lineage
                 ) VALUES (
@@ -354,6 +377,7 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
             "market_bar",
             "news_article",
             "sec_filing",
+            "financial_fact",
         }:
             connection.execute(text(f"INSERT INTO {table_name} DEFAULT VALUES"))
 
