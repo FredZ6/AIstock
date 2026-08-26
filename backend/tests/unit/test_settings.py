@@ -1,5 +1,5 @@
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 from stock_platform.settings import Settings
 
 
@@ -30,6 +30,6 @@ def test_fixture_mode_requires_no_provider_credentials() -> None:
 
 
 def test_alpha_vantage_secret_is_optional_and_redacted() -> None:
-    settings = Settings(alpha_vantage_api_key="fixture-secret")
+    settings = Settings(alpha_vantage_api_key=SecretStr("fixture-secret"))
     assert settings.alpha_vantage_api_key is not None
     assert "fixture-secret" not in repr(settings)

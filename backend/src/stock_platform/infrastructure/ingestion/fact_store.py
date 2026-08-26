@@ -19,7 +19,7 @@ from stock_platform.application.ingestion.normalizers.alpaca import (
 from stock_platform.application.ingestion.normalizers.alpha_vantage import EarningsEvent
 from stock_platform.application.ingestion.normalizers.sec import SecFiling
 from stock_platform.domain.common.time import require_aware
-from stock_platform.domain.market_data.concepts import ConceptMappingResult
+from stock_platform.domain.market_data.concepts import ConceptMappingResult, MappingStatus
 from stock_platform.infrastructure.db.models.tables import (
     earnings_event,
     financial_fact,
@@ -294,7 +294,10 @@ class PostgresSecFactStore:
             .mappings()
             .one()
         )
-        if any(existing[key] != value for key, value in values.items()):
+        semantic_keys = tuple(
+            key for key in values if key not in {"raw_data_object_id", "normalized_record_id"}
+        )
+        if any(existing[key] != values[key] for key in semantic_keys):
             raise ValueError("immutable SEC filing conflict")
         return cast(UUID, existing["id"])
 
@@ -350,14 +353,20 @@ class PostgresFinancialFactStore:
         ).scalar_one_or_none()
         if sec_filing_id is None:
             raise ValueError("SEC filing lineage is required for financial facts")
+        stored_taxonomy = "derived" if result.status is MappingStatus.DERIVED else source.taxonomy
+        stored_source_concept = (
+            cast(str, result.canonical_concept)
+            if result.status is MappingStatus.DERIVED
+            else source.concept
+        )
         values = {
             "security_id": security_id,
             "sec_filing_id": sec_filing_id,
             "raw_data_object_id": raw_id,
             "normalized_record_id": normalized_id,
             "provider": lineage,
-            "taxonomy": source.taxonomy,
-            "source_concept": source.concept,
+            "taxonomy": stored_taxonomy,
+            "source_concept": stored_source_concept,
             "canonical_concept": result.canonical_concept,
             "value": result.value,
             "unit": source.unit,
@@ -384,8 +393,8 @@ class PostgresFinancialFactStore:
                 select(financial_fact).where(
                     financial_fact.c.provider == lineage,
                     financial_fact.c.security_id == security_id,
-                    financial_fact.c.taxonomy == source.taxonomy,
-                    financial_fact.c.source_concept == source.concept,
+                    financial_fact.c.taxonomy == stored_taxonomy,
+                    financial_fact.c.source_concept == stored_source_concept,
                     financial_fact.c.accession_number == source.accession_number,
                     financial_fact.c.unit == source.unit,
                     financial_fact.c.period_start == source.period_start,
@@ -396,7 +405,18 @@ class PostgresFinancialFactStore:
             .mappings()
             .one()
         )
-        if any(existing[key] != value for key, value in values.items()):
+        semantic_keys = tuple(
+            key
+            for key in values
+            if key
+            not in {
+                "raw_data_object_id",
+                "normalized_record_id",
+                "available_at",
+                "supersedes_id",
+            }
+        )
+        if any(existing[key] != values[key] for key in semantic_keys):
             raise ValueError("immutable financial fact conflict")
         return cast(UUID, existing["id"])
 

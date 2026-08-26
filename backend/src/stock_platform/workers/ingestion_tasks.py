@@ -10,16 +10,20 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from pathlib import Path
 from typing import Protocol, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import Engine, and_, create_engine, or_, select, update
+from sqlalchemy import Connection, Engine, and_, create_engine, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 
+from stock_platform.application.ingestion.concept_mapping import ConceptMappingRegistry
 from stock_platform.application.ingestion.coordinator import IngestionCoordinator
+from stock_platform.application.ingestion.jobs import IngestionJobSpec
 from stock_platform.application.ingestion.normalizers.alpaca import AlpacaNormalizer
 from stock_platform.application.ingestion.normalizers.alpha_vantage import AlphaVantageNormalizer
+from stock_platform.application.ingestion.normalizers.sec import SecNormalizer
 from stock_platform.application.ingestion.raw_writer import (
     RawObjectStoreUnavailable,
     RawWriter,
@@ -28,10 +32,13 @@ from stock_platform.application.ingestion.raw_writer import (
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.ingestion.models import (
+    DataPurpose,
     FeedType,
     IngestionErrorClass,
+    IngestionRequest,
     MarketDataCoverage,
 )
+from stock_platform.domain.market_data.concepts import FinancialFactInput
 from stock_platform.infrastructure.db.models.tables import (
     ingestion_cursor,
     ingestion_job,
@@ -40,10 +47,13 @@ from stock_platform.infrastructure.db.models.tables import (
     normalization_rejection,
     normalized_record,
     raw_data_object,
+    sec_filing,
 )
 from stock_platform.infrastructure.ingestion.fact_store import (
     PostgresAlpacaFactStore,
     PostgresEarningsEventStore,
+    PostgresFinancialFactStore,
+    PostgresSecFactStore,
 )
 from stock_platform.infrastructure.ingestion.job_store import IngestionJobStore
 from stock_platform.infrastructure.observability.metrics import platform_metrics
@@ -61,6 +71,7 @@ from stock_platform.infrastructure.providers.base import (
 )
 from stock_platform.infrastructure.providers.object_store import MinioRawObjectStore
 from stock_platform.infrastructure.providers.persistence import persist_raw_object
+from stock_platform.infrastructure.providers.sec import PostgresSecIdentityResolver
 from stock_platform.settings import Settings
 from stock_platform.workers.alpaca_stream_supervisor import replay_archived_stream_batches
 
@@ -72,9 +83,18 @@ ORPHAN_LOG_SAMPLE_LIMIT = 20
 logger = logging.getLogger(__name__)
 ALPACA_LEASE = timedelta(minutes=10)
 ALPHA_LEASE = timedelta(minutes=10)
+SEC_LEASE = timedelta(minutes=15)
 
 
 class AlpacaLeaseLost(RuntimeError):
+    pass
+
+
+class SecFilingDependencyUnavailable(RuntimeError):
+    pass
+
+
+class SecLeaseLost(RuntimeError):
     pass
 
 
@@ -97,6 +117,23 @@ class AlphaCalendarTransport(Protocol):
         self,
         feed_type: FeedType,
         symbol: str,
+        as_of: datetime,
+    ) -> ProviderBatch: ...
+
+
+class SecIngestionTransport(Protocol):
+    def fetch_batch(self, feed_type: FeedType, symbol: str, as_of: datetime) -> ProviderBatch: ...
+
+    def fetch_historical_submissions(
+        self, symbol: str, *, file_name: str, as_of: datetime
+    ) -> ProviderBatch: ...
+
+    def fetch_filing_document(
+        self,
+        symbol: str,
+        *,
+        accession_number: str,
+        primary_document: str,
         as_of: datetime,
     ) -> ProviderBatch: ...
 
@@ -564,6 +601,563 @@ def dispatch_queued_alpaca_jobs(
         publish(cast(UUID, queued_job_id))
         dispatched += 1
     return dispatched
+
+
+def _archive_sec_batch(
+    *,
+    engine: Engine,
+    raw_store: RawObjectStore,
+    job_id: UUID,
+    batch: ProviderBatch,
+    ingested_at: datetime,
+    scope: str,
+    heartbeat: Callable[[], None],
+    transaction_guard: Callable[[Connection], None],
+) -> UUID:
+    heartbeat()
+    persisted_at = max(require_aware(ingested_at), batch.observed_at)
+    envelope = json.dumps(
+        {
+            "provider": batch.provider,
+            "feed_type": batch.feed_type.value,
+            "symbol": str(batch.symbol),
+            "scope": scope,
+            "observed_at": batch.observed_at.isoformat(),
+            "body_sha256": hashlib.sha256(batch.body).hexdigest(),
+            "body_base64": b64encode(batch.body).decode("ascii"),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    content_hash = hashlib.sha256(envelope).hexdigest()
+    record = ProviderRecord(
+        symbol=batch.symbol,
+        feed_type=batch.feed_type,
+        provider="SEC",
+        event_time=batch.observed_at,
+        available_at=batch.observed_at,
+        ingested_at=persisted_at,
+        content_hash=content_hash,
+        raw_object_key=f"live/SEC/{batch.feed_type.value}/{content_hash}.json",
+        payload={"scope": scope, "body_sha256": hashlib.sha256(batch.body).hexdigest()},
+    )
+    raw_id = RawWriter(engine=engine, raw_store=raw_store).write_artifact(
+        record=record,
+        raw_content=envelope,
+        content_type="application/json",
+        job_id=job_id,
+        transaction_guard=transaction_guard,
+    )
+    return raw_id
+
+
+def _archive_sec_document(
+    *,
+    engine: Engine,
+    raw_store: RawObjectStore,
+    job_id: UUID,
+    batch: ProviderBatch,
+    ingested_at: datetime,
+    heartbeat: Callable[[], None],
+    transaction_guard: Callable[[Connection], None],
+) -> UUID:
+    heartbeat()
+    content_hash = hashlib.sha256(batch.body).hexdigest()
+    record = ProviderRecord(
+        symbol=batch.symbol,
+        feed_type=FeedType.FILING_SECTIONS,
+        provider="SEC",
+        event_time=batch.observed_at,
+        available_at=batch.observed_at,
+        ingested_at=max(require_aware(ingested_at), batch.observed_at),
+        content_hash=content_hash,
+        raw_object_key=f"live/SEC/filing_sections/{content_hash}.html",
+        payload={},
+    )
+    raw_id = RawWriter(engine=engine, raw_store=raw_store).write_artifact(
+        record=record,
+        raw_content=batch.body,
+        content_type="text/html",
+        job_id=job_id,
+        transaction_guard=transaction_guard,
+    )
+    return raw_id
+
+
+def _persist_sec_filings(
+    *,
+    engine: Engine,
+    raw_store: RawObjectStore,
+    transport: SecIngestionTransport,
+    job_id: UUID,
+    symbol: str,
+    cutoff: datetime,
+    ingested_at: datetime,
+    heartbeat: Callable[[], None],
+    transaction_guard: Callable[[Connection], None],
+) -> None:
+    heartbeat()
+    with engine.connect() as connection:
+        identity = PostgresSecIdentityResolver(connection).resolve(Symbol(symbol), cutoff)
+    if identity is None:
+        raise ValueError("SEC Security identity is unavailable at the job cutoff")
+    normalizer = SecNormalizer()
+    submissions = transport.fetch_batch(FeedType.FILINGS, symbol, cutoff)
+    heartbeat()
+    submissions_raw_id = _archive_sec_batch(
+        engine=engine,
+        raw_store=raw_store,
+        job_id=job_id,
+        batch=submissions,
+        ingested_at=ingested_at,
+        scope="RECENT_SUBMISSIONS",
+        heartbeat=heartbeat,
+        transaction_guard=transaction_guard,
+    )
+    result = normalizer.normalize_submissions(submissions, identity=identity)
+    pages = [(submissions_raw_id, result.filings)]
+    for file_name in result.historical_submission_files:
+        historical = transport.fetch_historical_submissions(
+            symbol, file_name=file_name, as_of=cutoff
+        )
+        heartbeat()
+        historical_raw_id = _archive_sec_batch(
+            engine=engine,
+            raw_store=raw_store,
+            job_id=job_id,
+            batch=historical,
+            ingested_at=ingested_at,
+            scope=file_name,
+            heartbeat=heartbeat,
+            transaction_guard=transaction_guard,
+        )
+        pages.append(
+            (
+                historical_raw_id,
+                normalizer.normalize_historical_submissions(historical, identity=identity),
+            )
+        )
+    if identity.security_id is None:
+        raise ValueError("SEC Security identity is missing its PIT security_id")
+    for raw_id, filings in pages:
+        for filing in filings:
+            with engine.connect() as connection:
+                existing_filing = connection.execute(
+                    select(sec_filing.c.id).where(
+                        sec_filing.c.provider == "SEC",
+                        sec_filing.c.accession_number == filing.accession_number,
+                    )
+                ).scalar_one_or_none()
+            if existing_filing is not None:
+                continue
+            heartbeat()
+            document = transport.fetch_filing_document(
+                symbol,
+                accession_number=filing.accession_number,
+                primary_document=filing.primary_document,
+                as_of=cutoff,
+            )
+            heartbeat()
+            document_raw_id = _archive_sec_document(
+                engine=engine,
+                raw_store=raw_store,
+                job_id=job_id,
+                batch=document,
+                ingested_at=ingested_at,
+                heartbeat=heartbeat,
+                transaction_guard=transaction_guard,
+            )
+            with engine.begin() as connection:
+                transaction_guard(connection)
+                normalized_values = {
+                    "raw_data_object_id": raw_id,
+                    "record_type": "sec_filing",
+                    "record_key": filing.accession_number,
+                    "normalization_version": "sec-filings-v1",
+                    "payload": filing.payload | {"symbol": symbol},
+                }
+                normalized_id = connection.execute(
+                    insert(normalized_record)
+                    .values(**normalized_values)
+                    .on_conflict_do_nothing(constraint="uq_normalized_record_version")
+                    .returning(normalized_record.c.id)
+                ).scalar_one_or_none()
+                if normalized_id is None:
+                    normalized_id = connection.execute(
+                        select(normalized_record.c.id).where(
+                            normalized_record.c.raw_data_object_id == raw_id,
+                            normalized_record.c.record_type == "sec_filing",
+                            normalized_record.c.record_key == filing.accession_number,
+                            normalized_record.c.normalization_version == "sec-filings-v1",
+                        )
+                    ).scalar_one()
+                PostgresSecFactStore(connection).persist_filing(
+                    security_id=identity.security_id,
+                    raw_id=raw_id,
+                    normalized_id=cast(UUID, normalized_id),
+                    document_raw_id=document_raw_id,
+                    filing=filing,
+                )
+
+
+def _persist_sec_company_facts(
+    *,
+    engine: Engine,
+    raw_store: RawObjectStore,
+    transport: SecIngestionTransport,
+    job_id: UUID,
+    symbol: str,
+    cutoff: datetime,
+    ingested_at: datetime,
+    heartbeat: Callable[[], None],
+    transaction_guard: Callable[[Connection], None],
+) -> None:
+    heartbeat()
+    with engine.connect() as connection:
+        identity = PostgresSecIdentityResolver(connection).resolve(Symbol(symbol), cutoff)
+    if identity is None:
+        raise ValueError("SEC Security identity is unavailable at the job cutoff")
+    if identity.security_id is None:
+        raise ValueError("SEC Security identity is missing its PIT security_id")
+    batch = transport.fetch_batch(FeedType.COMPANY_FACTS, symbol, cutoff)
+    heartbeat()
+    raw_id = _archive_sec_batch(
+        engine=engine,
+        raw_store=raw_store,
+        job_id=job_id,
+        batch=batch,
+        ingested_at=ingested_at,
+        scope="COMPANY_FACTS",
+        heartbeat=heartbeat,
+        transaction_guard=transaction_guard,
+    )
+    facts = SecNormalizer().normalize_company_facts(batch, identity=identity)
+    registry = ConceptMappingRegistry.load(
+        Path(__file__).resolve().parents[3] / "config" / "financial_concepts_v1.yaml"
+    )
+    required_accessions = {fact.accession_number for fact in facts}
+    with engine.connect() as connection:
+        available_accessions = set(
+            connection.execute(
+                select(sec_filing.c.accession_number).where(
+                    sec_filing.c.security_id == identity.security_id,
+                    sec_filing.c.accession_number.in_(required_accessions),
+                )
+            ).scalars()
+        )
+    if available_accessions != required_accessions:
+        raise SecFilingDependencyUnavailable("SEC filing lineage has not been ingested yet")
+    normalized_by_source: dict[tuple[object, ...], UUID] = {}
+    for fact in facts:
+        normalized_values = {
+            "raw_data_object_id": raw_id,
+            "record_type": "financial_fact",
+            "record_key": (
+                f"{symbol}:{fact.taxonomy}:{fact.concept}:{fact.accession_number}:"
+                f"{fact.period_start.isoformat()}:{fact.period_end.isoformat()}:{fact.unit}"
+            ),
+            "normalization_version": "sec-company-facts-v1",
+            "payload": {
+                "symbol": symbol,
+                "taxonomy": fact.taxonomy,
+                "concept": fact.concept,
+                "value": str(fact.value),
+                "unit": fact.unit,
+                "currency": fact.currency,
+                "period_start": fact.period_start.isoformat(),
+                "period_end": fact.period_end.isoformat(),
+                "accession_number": fact.accession_number,
+            },
+        }
+        with engine.begin() as connection:
+            transaction_guard(connection)
+            normalized_id = connection.execute(
+                insert(normalized_record)
+                .values(**normalized_values)
+                .on_conflict_do_nothing(constraint="uq_normalized_record_version")
+                .returning(normalized_record.c.id)
+            ).scalar_one_or_none()
+            if normalized_id is None:
+                normalized_id = connection.execute(
+                    select(normalized_record.c.id).where(
+                        normalized_record.c.raw_data_object_id == raw_id,
+                        normalized_record.c.record_type == "financial_fact",
+                        normalized_record.c.record_key == normalized_values["record_key"],
+                        normalized_record.c.normalization_version == "sec-company-facts-v1",
+                    )
+                ).scalar_one()
+            PostgresFinancialFactStore(connection).persist_fact(
+                security_id=identity.security_id,
+                raw_id=raw_id,
+                normalized_id=cast(UUID, normalized_id),
+                available_at=batch.observed_at,
+                result=registry.map_fact(fact),
+            )
+        normalized_by_source[
+            (
+                fact.taxonomy,
+                fact.concept,
+                fact.accession_number,
+                fact.unit,
+                fact.currency,
+                fact.period_start,
+                fact.period_end,
+            )
+        ] = cast(UUID, normalized_id)
+    groups: dict[tuple[object, ...], list[FinancialFactInput]] = {}
+    for fact in facts:
+        key = (
+            fact.accession_number,
+            fact.unit,
+            fact.currency,
+            fact.period_start,
+            fact.period_end,
+        )
+        groups.setdefault(key, []).append(fact)
+    for grouped in groups.values():
+        for result in registry.derive_available(tuple(grouped)):
+            first = result.source_facts[0]
+            with engine.begin() as connection:
+                transaction_guard(connection)
+                PostgresFinancialFactStore(connection).persist_fact(
+                    security_id=identity.security_id,
+                    raw_id=raw_id,
+                    normalized_id=normalized_by_source[
+                        (
+                            first.taxonomy,
+                            first.concept,
+                            first.accession_number,
+                            first.unit,
+                            first.currency,
+                            first.period_start,
+                            first.period_end,
+                        )
+                    ],
+                    available_at=batch.observed_at,
+                    result=result,
+                )
+
+
+def _enqueue_sec_company_facts(
+    engine: Engine,
+    *,
+    symbol: str,
+    cutoff: datetime,
+    now: datetime,
+) -> UUID:
+    checked_cutoff = require_aware(cutoff).astimezone(UTC)
+    return IngestionJobStore(engine).enqueue(
+        IngestionJobSpec(
+            request=IngestionRequest(
+                {
+                    "symbol": symbol,
+                    "snapshot_date": checked_cutoff.date().isoformat(),
+                }
+            ),
+            provider="SEC",
+            dataset=FeedType.COMPANY_FACTS,
+            window_start=checked_cutoff,
+            window_end=checked_cutoff,
+            purpose=DataPurpose.RESEARCH,
+            policy_version="sec-edgar-v1",
+            max_attempts=3,
+        ),
+        now=require_aware(now),
+    )
+
+
+def execute_sec_ingestion_job(
+    *,
+    engine: Engine,
+    raw_store: RawObjectStore,
+    transport: SecIngestionTransport,
+    job_id: UUID,
+    now: datetime,
+    worker_id: str,
+    clock: Callable[[], datetime] | None = None,
+) -> bool:
+    checked_now = require_aware(now).astimezone(UTC)
+    store = IngestionJobStore(engine)
+    lease = store.claim(job_id, worker_id=worker_id, now=checked_now, lease_for=SEC_LEASE)
+    if lease is None:
+        return False
+    time_source = clock or (lambda: datetime.now(UTC))
+
+    def current_time() -> datetime:
+        return max(checked_now, require_aware(time_source()).astimezone(UTC))
+
+    def heartbeat() -> None:
+        if not store.heartbeat(lease, now=current_time(), lease_for=SEC_LEASE):
+            raise SecLeaseLost("SEC ingestion lease is no longer current")
+
+    def transaction_guard(connection: Connection) -> None:
+        guarded_at = current_time()
+        current_job = connection.execute(
+            select(ingestion_job.c.id)
+            .where(
+                ingestion_job.c.id == lease.job_id,
+                ingestion_job.c.state == "RUNNING",
+                ingestion_job.c.lease_token == lease.token,
+                ingestion_job.c.lease_generation == lease.generation,
+                ingestion_job.c.lease_expires_at > guarded_at,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+        if current_job is None:
+            raise SecLeaseLost("SEC ingestion lease is no longer current")
+        connection.execute(
+            update(ingestion_job)
+            .where(ingestion_job.c.id == lease.job_id)
+            .values(
+                lease_expires_at=guarded_at + SEC_LEASE,
+                updated_at=guarded_at,
+            )
+        )
+
+    with engine.connect() as connection:
+        row = (
+            connection.execute(select(ingestion_job).where(ingestion_job.c.id == job_id))
+            .mappings()
+            .one()
+        )
+    if row["provider"] != "SEC" or row["dataset"] not in {
+        FeedType.FILINGS.value,
+        FeedType.COMPANY_FACTS.value,
+    }:
+        store.fail(
+            lease,
+            error_class=IngestionErrorClass.UNSUPPORTED_DATASET,
+            error_detail={"provider": row["provider"], "dataset": row["dataset"]},
+            now=checked_now,
+        )
+        return False
+    request = cast(dict[str, object], row["request_payload"])["request"]
+    symbol = str(cast(dict[str, object], request)["symbol"])
+    try:
+        if row["dataset"] == FeedType.FILINGS.value:
+            _persist_sec_filings(
+                engine=engine,
+                raw_store=raw_store,
+                transport=transport,
+                job_id=job_id,
+                symbol=symbol,
+                cutoff=row["window_end"],
+                ingested_at=checked_now,
+                heartbeat=heartbeat,
+                transaction_guard=transaction_guard,
+            )
+            heartbeat()
+            _enqueue_sec_company_facts(
+                engine,
+                symbol=symbol,
+                cutoff=row["window_end"],
+                now=current_time(),
+            )
+        else:
+            _persist_sec_company_facts(
+                engine=engine,
+                raw_store=raw_store,
+                transport=transport,
+                job_id=job_id,
+                symbol=symbol,
+                cutoff=row["window_end"],
+                ingested_at=checked_now,
+                heartbeat=heartbeat,
+                transaction_guard=transaction_guard,
+            )
+    except ProviderTransportError as error:
+        if error.error_class in {
+            IngestionErrorClass.TIMEOUT,
+            IngestionErrorClass.NETWORK,
+            IngestionErrorClass.RATE_LIMIT,
+            IngestionErrorClass.PROVIDER_5XX,
+        }:
+            store.schedule_retry(
+                lease,
+                error_class=error.error_class,
+                error_detail={"status_code": error.status_code},
+                next_attempt_at=current_time() + (error.retry_after or timedelta(minutes=1)),
+                now=current_time(),
+            )
+        else:
+            store.dead_letter(
+                lease,
+                error_class=error.error_class,
+                error_detail={"status_code": error.status_code},
+                now=current_time(),
+            )
+        return False
+    except RawObjectStoreUnavailable:
+        store.schedule_retry(
+            lease,
+            error_class=IngestionErrorClass.TEMPORARY_OBJECT_STORE,
+            error_detail={"reason": "object_store_write_failed"},
+            next_attempt_at=current_time() + timedelta(minutes=1),
+            now=current_time(),
+        )
+        return False
+    except SecFilingDependencyUnavailable:
+        store.schedule_retry(
+            lease,
+            error_class=IngestionErrorClass.TEMPORARY_DATABASE,
+            error_detail={"reason": "sec_filing_lineage_pending"},
+            next_attempt_at=current_time() + timedelta(minutes=1),
+            now=current_time(),
+        )
+        return False
+    except SQLAlchemyError:
+        store.schedule_retry(
+            lease,
+            error_class=IngestionErrorClass.TEMPORARY_DATABASE,
+            error_detail={"reason": "database_write_failed"},
+            next_attempt_at=current_time() + timedelta(minutes=1),
+            now=current_time(),
+        )
+        return False
+    except ValueError as error:
+        store.dead_letter(
+            lease,
+            error_class=IngestionErrorClass.SCHEMA_DRIFT,
+            error_detail={"error_type": type(error).__name__},
+            now=current_time(),
+        )
+        return False
+    except SecLeaseLost:
+        return False
+    try:
+        heartbeat()
+    except SecLeaseLost:
+        return False
+    if not store.complete(lease, now=current_time()):
+        raise RuntimeError("SEC ingestion completion rejected")
+    return True
+
+
+def dispatch_queued_sec_jobs(
+    engine: Engine,
+    *,
+    publish: PublishIngestion,
+    now: datetime,
+    limit: int = 25,
+) -> int:
+    checked_now = require_aware(now).astimezone(UTC)
+    if limit < 1:
+        raise ValueError("SEC dispatch limit must be positive")
+    store = IngestionJobStore(engine)
+    store.requeue_due(now=checked_now)
+    store.recover_expired(now=checked_now)
+    with engine.connect() as connection:
+        job_ids = tuple(
+            connection.execute(
+                select(ingestion_job.c.id)
+                .where(ingestion_job.c.provider == "SEC", ingestion_job.c.state == "QUEUED")
+                .order_by(ingestion_job.c.created_at, ingestion_job.c.id)
+                .limit(limit)
+            ).scalars()
+        )
+    for queued_job_id in job_ids:
+        publish(cast(UUID, queued_job_id))
+    return len(job_ids)
 
 
 def execute_alpha_earnings_ingestion_job(
@@ -1321,6 +1915,52 @@ def run_alpha_earnings_ingestion_job(job_id: str) -> bool:
             now=datetime.now(UTC),
             worker_id="celery-alpha-earnings",
         )
+    finally:
+        engine.dispose()
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
+    name="stock_platform.workers.ingestion_tasks.dispatch_sec_ingestion_jobs"
+)
+def dispatch_sec_ingestion_jobs() -> int:
+    settings = Settings()
+    engine = create_engine(settings.database_url)
+    try:
+        return dispatch_queued_sec_jobs(
+            engine,
+            publish=lambda job_id: celery_app.send_task(
+                "stock_platform.workers.ingestion_tasks.run_sec_ingestion_job",
+                args=[str(job_id)],
+                queue="ingestion-low",
+            ),
+            now=datetime.now(UTC),
+        )
+    finally:
+        engine.dispose()
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
+    name="stock_platform.workers.ingestion_tasks.run_sec_ingestion_job"
+)
+def run_sec_ingestion_job(job_id: str) -> bool:
+    from stock_platform.infrastructure.providers.sec import SecProvider
+
+    settings = Settings()
+    engine = create_engine(settings.database_url)
+    try:
+        with engine.connect() as connection:
+            resolver = PostgresSecIdentityResolver(connection)
+            return execute_sec_ingestion_job(
+                engine=engine,
+                raw_store=MinioRawObjectStore.from_settings(settings),
+                transport=SecProvider(
+                    user_agent=settings.sec_user_agent,
+                    identity_resolver=resolver,
+                ),
+                job_id=UUID(job_id),
+                now=datetime.now(UTC),
+                worker_id="celery-sec-ingestion",
+            )
     finally:
         engine.dispose()
 

@@ -8,9 +8,10 @@ import time
 from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Protocol
+from uuid import UUID
 
 from sqlalchemy import Connection, or_, select
 
@@ -37,6 +38,7 @@ class SecIdentity:
     symbol: Symbol
     cik: str
     regime: SecFilingRegime
+    security_id: UUID | None = None
 
     def __post_init__(self) -> None:
         normalized_cik = self.cik.removeprefix("CIK").zfill(10)
@@ -50,11 +52,22 @@ class SecIdentityResolver(Protocol):
 
 
 class StaticSecIdentityResolver:
-    def __init__(self, identities: Mapping[Symbol, SecIdentity]) -> None:
+    def __init__(
+        self,
+        identities: Mapping[Symbol, SecIdentity],
+        *,
+        available_at: datetime | None = None,
+    ) -> None:
         self._identities = dict(identities)
+        self._available_at = (
+            require_aware(available_at)
+            if available_at is not None
+            else datetime.min.replace(tzinfo=UTC)
+        )
 
     def resolve(self, symbol: Symbol, as_of: datetime) -> SecIdentity | None:
-        require_aware(as_of)
+        if require_aware(as_of) < self._available_at:
+            return None
         return self._identities.get(symbol)
 
 
@@ -69,6 +82,7 @@ class PostgresSecIdentityResolver:
         row = (
             self._connection.execute(
                 select(
+                    security_identifier_version.c.security_id,
                     security_identifier_version.c.identifier_value,
                     security_profile_version.c.cik,
                     security_profile_version.c.filing_regime,
@@ -111,6 +125,7 @@ class PostgresSecIdentityResolver:
             symbol=Symbol(str(row["identifier_value"])),
             cik=str(row["cik"]),
             regime=SecFilingRegime(str(row["filing_regime"])),
+            security_id=UUID(str(row["security_id"])),
         )
 
 
@@ -163,7 +178,10 @@ class SecRequestLimiter:
 
 
 def _seeded_identity_resolver() -> StaticSecIdentityResolver:
-    from stock_platform.infrastructure.db.security_seed import SECURITY_MASTER
+    from stock_platform.infrastructure.db.security_seed import (
+        SECURITY_MASTER,
+        SECURITY_MASTER_AVAILABLE_AT,
+    )
 
     return StaticSecIdentityResolver(
         {
@@ -173,7 +191,8 @@ def _seeded_identity_resolver() -> StaticSecIdentityResolver:
                 regime=SecFilingRegime(str(item["filing_regime"])),
             )
             for item in SECURITY_MASTER
-        }
+        },
+        available_at=SECURITY_MASTER_AVAILABLE_AT,
     )
 
 
@@ -181,6 +200,7 @@ _GLOBAL_LIMITER = SecRequestLimiter()
 _USER_AGENT = re.compile(r"^[A-Za-z0-9._-]+/[^\s]+\s+[^\s@]+@[^\s@]+$")
 _ACCESSION = re.compile(r"^\d{10}-\d{2}-\d{6}$")
 _DOCUMENT = re.compile(r"^[A-Za-z0-9._-]+$")
+_HISTORICAL_SUBMISSIONS = re.compile(r"^CIK\d{10}-submissions-\d{3}\.json$")
 
 
 class SecProvider(GovernedHttpProvider):
@@ -272,4 +292,29 @@ class SecProvider(GovernedHttpProvider):
             symbol=normalized_symbol,
             query_as_of=query_as_of,
             url=url,
+        )
+
+    def fetch_historical_submissions(
+        self,
+        symbol: str,
+        *,
+        file_name: str,
+        as_of: datetime,
+    ) -> ProviderBatch:
+        query_as_of = require_aware(as_of)
+        normalized_symbol = Symbol(symbol)
+        identity = self._identity(normalized_symbol, query_as_of)
+        if identity is None:
+            raise ValueError(f"unknown SEC Security identity: {symbol}")
+        if not self._configured():
+            raise ValueError("SEC User-Agent requires application/version and contact")
+        if not _HISTORICAL_SUBMISSIONS.fullmatch(file_name) or not file_name.startswith(
+            f"CIK{identity.cik}-"
+        ):
+            raise ValueError("invalid SEC historical submissions file")
+        return self._fetch_batch_from_url(
+            feed_type=FeedType.FILINGS,
+            symbol=normalized_symbol,
+            query_as_of=query_as_of,
+            url=f"https://data.sec.gov/submissions/{file_name}",
         )

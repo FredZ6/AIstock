@@ -128,6 +128,8 @@ class ConceptMappingRegistry:
             for fact in ordered[1:]
         ):
             raise ValueError("derived concept inputs must share unit, currency, and period")
+        if any(fact.accession_number != first.accession_number for fact in ordered[1:]):
+            raise ValueError("derived concept inputs must reference the same SEC filing")
         if rule.operation != "subtract" or len(ordered) != 2:
             raise ValueError("unsupported deterministic derived operation")
         value: Decimal = ordered[0].value - ordered[1].value
@@ -139,3 +141,15 @@ class ConceptMappingRegistry:
             input_provenance=rule.inputs,
             source_facts=ordered,
         )
+
+    def derive_available(
+        self, facts: tuple[FinancialFactInput, ...]
+    ) -> tuple[ConceptMappingResult, ...]:
+        by_source = {(fact.taxonomy, fact.concept): fact for fact in facts}
+        results: list[ConceptMappingResult] = []
+        for canonical, rule in self._derived.items():
+            if all(source in by_source for source in rule.inputs):
+                results.append(
+                    self.derive(canonical, tuple(by_source[source] for source in rule.inputs))
+                )
+        return tuple(results)

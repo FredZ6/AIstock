@@ -26,6 +26,7 @@ celery_app.conf.update(
         "stock_platform.workers.ingestion_tasks.run_alpha_earnings_ingestion_job": {
             "queue": "ingestion-low"
         },
+        "stock_platform.workers.ingestion_tasks.run_sec_ingestion_job": {"queue": "ingestion-low"},
     },
 )
 
@@ -59,6 +60,14 @@ celery_app.conf.beat_schedule = {
     },
     "dispatch-alpha-ingestion-jobs": {
         "task": "stock_platform.workers.ingestion_tasks.dispatch_alpha_ingestion_jobs",
+        "schedule": 30.0,
+    },
+    "schedule-sec-daily-ingestion": {
+        "task": "stock_platform.workers.schedules.schedule_sec_daily_ingestion",
+        "schedule": crontab(minute=0, hour=22, day_of_week="1-5"),
+    },
+    "dispatch-sec-ingestion-jobs": {
+        "task": "stock_platform.workers.ingestion_tasks.dispatch_sec_ingestion_jobs",
         "schedule": 30.0,
     },
 }

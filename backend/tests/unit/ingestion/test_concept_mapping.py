@@ -69,6 +69,26 @@ def test_derived_free_cash_flow_uses_decimal_and_preserves_both_inputs() -> None
     )
 
 
+def test_derived_mapping_rejects_inputs_from_different_filings() -> None:
+    registry = ConceptMappingRegistry.load(CONFIG)
+    operating_cash = _fact(
+        "us-gaap", "NetCashProvidedByUsedInOperatingActivities", Decimal("120.25")
+    )
+    capital_spend = FinancialFactInput(
+        taxonomy="us-gaap",
+        concept="PaymentsToAcquirePropertyPlantAndEquipment",
+        value=Decimal("20.10"),
+        unit="USD",
+        currency="USD",
+        period_start=date(2026, 1, 1),
+        period_end=date(2026, 6, 30),
+        accession_number="0001045810-26-000043",
+    )
+
+    with pytest.raises(ValueError, match="same SEC filing"):
+        registry.derive("FREE_CASH_FLOW", (operating_cash, capital_spend))
+
+
 @pytest.mark.parametrize(
     ("concept", "status", "gap_kind"),
     [

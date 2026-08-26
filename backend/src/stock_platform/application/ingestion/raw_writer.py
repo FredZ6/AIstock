@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from typing import Protocol
 from uuid import UUID
 
-from sqlalchemy import Engine, select
+from sqlalchemy import Connection, Engine, select
 from sqlalchemy.dialects.postgresql import insert
 
 from stock_platform.infrastructure.db.models.tables import (
@@ -93,6 +94,8 @@ class RawWriter:
         record: ProviderRecord,
         raw_content: bytes,
         content_type: str,
+        job_id: UUID | None = None,
+        transaction_guard: Callable[[Connection], None] | None = None,
     ) -> UUID:
         """Persist immutable non-JSON source bytes without creating a normalization job."""
         if hashlib.sha256(raw_content).hexdigest() != record.content_hash:
@@ -105,7 +108,21 @@ class RawWriter:
         except Exception as error:
             raise RawObjectStoreUnavailable("raw object store write failed") from error
         with self._engine.begin() as connection:
-            return persist_raw_object(connection, record)
+            if transaction_guard is not None:
+                transaction_guard(connection)
+            raw_id = persist_raw_object(connection, record)
+            if job_id is not None:
+                connection.execute(
+                    insert(ingestion_raw_link)
+                    .values(job_id=job_id, raw_data_object_id=raw_id)
+                    .on_conflict_do_nothing(
+                        index_elements=[
+                            ingestion_raw_link.c.job_id,
+                            ingestion_raw_link.c.raw_data_object_id,
+                        ]
+                    )
+                )
+            return raw_id
 
 
 class RawObjectStoreUnavailable(RuntimeError):

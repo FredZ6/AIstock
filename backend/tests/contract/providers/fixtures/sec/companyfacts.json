@@ -1,0 +1,31 @@
+{
+  "cik": 1045810,
+  "facts": {
+    "us-gaap": {
+      "Revenues": {
+        "units": {
+          "USD": [
+            {
+              "start": "2026-05-01",
+              "end": "2026-07-31",
+              "val": 44000000000,
+              "accn": "0001045810-26-000042",
+              "form": "10-Q",
+              "filed": "2026-08-20"
+            }
+          ]
+        }
+      },
+      "NetCashProvidedByUsedInOperatingActivities": {
+        "units": {
+          "USD": [{"start":"2026-05-01","end":"2026-07-31","val":12025000000,"accn":"0001045810-26-000042","form":"10-Q","filed":"2026-08-20"}]
+        }
+      },
+      "PaymentsToAcquirePropertyPlantAndEquipment": {
+        "units": {
+          "USD": [{"start":"2026-05-01","end":"2026-07-31","val":2010000000,"accn":"0001045810-26-000042","form":"10-Q","filed":"2026-08-20"}]
+        }
+      }
+    }
+  }
+}

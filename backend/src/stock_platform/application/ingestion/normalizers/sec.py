@@ -9,6 +9,7 @@ from typing import cast
 
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
+from stock_platform.domain.market_data.concepts import FinancialFactInput
 from stock_platform.infrastructure.providers.base import ProviderBatch
 from stock_platform.infrastructure.providers.sec import SecIdentity, allowed_sec_forms
 
@@ -125,7 +126,35 @@ class SecNormalizer:
         if not isinstance(filings, dict) or not isinstance(filings.get("recent"), dict):
             raise ValueError("SEC submissions payload is missing recent filings")
         recent = cast(dict[str, object], filings["recent"])
-        arrays = [recent.get(field) for field in self._FIELDS]
+        normalized = self._normalize_filing_arrays(recent, identity=identity)
+
+        files = filings.get("files", [])
+        if not isinstance(files, list) or any(not isinstance(item, dict) for item in files):
+            raise ValueError("SEC historical submission files must be objects")
+        historical = tuple(str(item["name"]) for item in files if item.get("name"))
+        return SecNormalizationResult(normalized, historical)
+
+    def normalize_historical_submissions(
+        self,
+        batch: ProviderBatch,
+        *,
+        identity: SecIdentity,
+    ) -> tuple[SecFiling, ...]:
+        try:
+            document = json.loads(batch.body)
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise ValueError("SEC historical submissions payload is invalid JSON") from error
+        if not isinstance(document, dict):
+            raise ValueError("SEC historical submissions payload must be an object")
+        return self._normalize_filing_arrays(cast(dict[str, object], document), identity=identity)
+
+    def _normalize_filing_arrays(
+        self,
+        values_by_field: dict[str, object],
+        *,
+        identity: SecIdentity,
+    ) -> tuple[SecFiling, ...]:
+        arrays = [values_by_field.get(field) for field in self._FIELDS]
         if any(not isinstance(values, list) for values in arrays):
             raise ValueError("SEC recent filing fields must be parallel arrays")
         lengths = {len(cast(list[object], values)) for values in arrays}
@@ -135,7 +164,9 @@ class SecNormalizer:
         allowed = allowed_sec_forms(identity.regime)
         normalized: list[SecFiling] = []
         for index in range(next(iter(lengths), 0)):
-            payload = {field: cast(list[object], recent[field])[index] for field in self._FIELDS}
+            payload = {
+                field: cast(list[object], values_by_field[field])[index] for field in self._FIELDS
+            }
             form = str(payload["form"]).strip().upper()
             if form not in allowed:
                 continue
@@ -154,8 +185,69 @@ class SecNormalizer:
                 )
             )
 
-        files = filings.get("files", [])
-        if not isinstance(files, list) or any(not isinstance(item, dict) for item in files):
-            raise ValueError("SEC historical submission files must be objects")
-        historical = tuple(str(item["name"]) for item in files if item.get("name"))
-        return SecNormalizationResult(tuple(normalized), historical)
+        return tuple(normalized)
+
+    def normalize_company_facts(
+        self,
+        batch: ProviderBatch,
+        *,
+        identity: SecIdentity,
+    ) -> tuple[FinancialFactInput, ...]:
+        try:
+            document = json.loads(batch.body, parse_float=str, parse_int=str)
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise ValueError("SEC company facts payload is invalid JSON") from error
+        if not isinstance(document, dict):
+            raise ValueError("SEC company facts payload must be an object")
+        response_cik = document.get("cik")
+        if str(response_cik).removeprefix("CIK").zfill(10) != identity.cik:
+            raise ValueError("SEC company facts CIK does not match requested identity")
+        facts = document.get("facts")
+        if not isinstance(facts, dict):
+            raise ValueError("SEC company facts payload is missing facts")
+        allowed = allowed_sec_forms(identity.regime)
+        normalized: list[FinancialFactInput] = []
+        seen: set[tuple[str, str, str, str, str, str]] = set()
+        for taxonomy, concepts in facts.items():
+            if not isinstance(concepts, dict):
+                raise ValueError("SEC company facts taxonomy must contain concepts")
+            for concept, concept_payload in concepts.items():
+                if not isinstance(concept_payload, dict) or not isinstance(
+                    concept_payload.get("units"), dict
+                ):
+                    raise ValueError("SEC company fact must contain units")
+                for unit, observations in cast(dict[str, object], concept_payload["units"]).items():
+                    if not isinstance(observations, list):
+                        raise ValueError("SEC company fact observations must be a list")
+                    for observation in observations:
+                        if not isinstance(observation, dict):
+                            raise ValueError("SEC company fact observation must be an object")
+                        if str(observation.get("form", "")).upper() not in allowed:
+                            continue
+                        required = ("start", "end", "val", "accn")
+                        if any(observation.get(field) in (None, "") for field in required):
+                            continue
+                        identity_key = (
+                            str(taxonomy),
+                            str(concept),
+                            str(unit),
+                            str(observation["start"]),
+                            str(observation["end"]),
+                            str(observation["accn"]),
+                        )
+                        if identity_key in seen:
+                            continue
+                        seen.add(identity_key)
+                        normalized.append(
+                            FinancialFactInput.from_values(
+                                taxonomy=str(taxonomy),
+                                concept=str(concept),
+                                value=str(observation["val"]),
+                                unit=str(unit),
+                                currency=str(unit) if len(str(unit)) == 3 else None,
+                                period_start=str(observation["start"]),
+                                period_end=str(observation["end"]),
+                                accession_number=str(observation["accn"]),
+                            )
+                        )
+        return tuple(normalized)

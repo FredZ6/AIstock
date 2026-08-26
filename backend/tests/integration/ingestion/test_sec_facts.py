@@ -48,6 +48,12 @@ def test_all_watchlist_securities_resolve_cik_and_filing_regime_point_in_time(
     as_of = datetime(2026, 8, 25, tzinfo=UTC)
     with engine.begin() as connection:
         seed_security_master(connection)
+        expected_nvda_security_id = connection.execute(
+            select(security_identifier_version.c.security_id)
+            .where(security_identifier_version.c.identifier_value == "NVDA")
+            .order_by(security_identifier_version.c.available_at)
+            .limit(1)
+        ).scalar_one()
         resolver = PostgresSecIdentityResolver(connection)
         identities = {
             item["symbol"]: resolver.resolve(Symbol(item["symbol"]), as_of)
@@ -57,6 +63,7 @@ def test_all_watchlist_securities_resolve_cik_and_filing_regime_point_in_time(
     assert len(identities) == 11
     assert all(identity is not None and len(identity.cik) == 10 for identity in identities.values())
     assert identities["NVDA"] is not None
+    assert identities["NVDA"].security_id == expected_nvda_security_id
     assert identities["TSM"] is not None
     assert identities["NVDA"].regime is SecFilingRegime.US_DOMESTIC
     assert identities["TSM"].regime is SecFilingRegime.FOREIGN_PRIVATE_ISSUER
@@ -404,6 +411,42 @@ def test_financial_fact_versions_are_decimal_append_only_and_point_in_time(
             .all()
         )
         assert visible == [first_id]
+
+        operating_cash = FinancialFactInput.from_values(
+            taxonomy="us-gaap",
+            concept="NetCashProvidedByUsedInOperatingActivities",
+            value="120.25",
+            unit="USD",
+            currency="USD",
+            period_start="2026-01-01",
+            period_end="2026-06-30",
+            accession_number="0001045810-26-000042",
+        )
+        capital_spend = FinancialFactInput.from_values(
+            taxonomy="us-gaap",
+            concept="PaymentsToAcquirePropertyPlantAndEquipment",
+            value="20.10",
+            unit="USD",
+            currency="USD",
+            period_start="2026-01-01",
+            period_end="2026-06-30",
+            accession_number="0001045810-26-000042",
+        )
+        operating_cash_id = store.persist_fact(
+            security_id=security_id,
+            raw_id=raw_ids[0],
+            normalized_id=normalized_ids[0],
+            available_at=first_available,
+            result=registry.map_fact(operating_cash),
+        )
+        free_cash_flow_id = store.persist_fact(
+            security_id=security_id,
+            raw_id=raw_ids[0],
+            normalized_id=normalized_ids[0],
+            available_at=first_available,
+            result=registry.derive("FREE_CASH_FLOW", (operating_cash, capital_spend)),
+        )
+        assert operating_cash_id != free_cash_flow_id
     with engine.connect() as connection, pytest.raises(DBAPIError, match="append-only"):
         connection.execute(update(financial_fact).values(value=Decimal("0")))
     engine.dispose()

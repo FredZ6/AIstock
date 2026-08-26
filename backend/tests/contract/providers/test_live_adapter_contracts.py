@@ -21,7 +21,7 @@ from stock_platform.infrastructure.providers.base import (
 from stock_platform.infrastructure.providers.fmp import FmpProvider
 from stock_platform.infrastructure.providers.sec import SecProvider
 
-AS_OF = datetime(2026, 8, 16, 12, tzinfo=UTC)
+AS_OF = datetime(2026, 8, 25, 12, tzinfo=UTC)
 
 
 class RecordingStore:
@@ -118,8 +118,8 @@ def test_alpaca_window_transport_carries_bounds_feed_timeframe_and_resume_token(
     )
 
     assert len(requests) == 1
-    assert "start=2026-08-16T11%3A00%3A00%2B00%3A00" in requests[0].url
-    assert "end=2026-08-16T12%3A00%3A00%2B00%3A00" in requests[0].url
+    assert "start=2026-08-25T11%3A00%3A00%2B00%3A00" in requests[0].url
+    assert "end=2026-08-25T12%3A00%3A00%2B00%3A00" in requests[0].url
     assert "timeframe=1Min" in requests[0].url
     assert "feed=sip" in requests[0].url
     assert "page_token=opaque-page-2" in requests[0].url
@@ -164,7 +164,7 @@ def test_alpaca_transport_parses_http_date_retry_after() -> None:
         data_secret="fixture-secret",
         transport=lambda _: HttpResponse(
             status_code=429,
-            headers={"Retry-After": "Sun, 16 Aug 2026 12:02:00 GMT"},
+            headers={"Retry-After": "Tue, 25 Aug 2026 12:02:00 GMT"},
             body=b"{}",
         ),
         clock=lambda: AS_OF,
@@ -272,7 +272,7 @@ def test_live_adapters_use_fixed_read_only_endpoints_and_persist_raw_first(
     adapter: ResearchDataProvider
     if provider == "sec":
         adapter = SecProvider(
-                user_agent="AIStock/0.1 research@example.com",
+            user_agent="AIStock/0.1 research@example.com",
             transport=transport,
             raw_store=store,
             record_store=record_store,
