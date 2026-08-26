@@ -22,7 +22,10 @@ celery_app.conf.update(
     task_routes={
         "stock_platform.workers.ingestion_tasks.run_alpaca_ingestion_job": {
             "queue": "ingestion-low"
-        }
+        },
+        "stock_platform.workers.ingestion_tasks.run_alpha_earnings_ingestion_job": {
+            "queue": "ingestion-low"
+        },
     },
 )
 
@@ -49,5 +52,13 @@ celery_app.conf.beat_schedule = {
     "schedule-alpaca-daily-ingestion": {
         "task": "stock_platform.workers.schedules.schedule_alpaca_daily_ingestion",
         "schedule": crontab(minute=0, hour=21, day_of_week="1-5"),
+    },
+    "schedule-alpha-earnings-calendar": {
+        "task": "stock_platform.workers.schedules.schedule_alpha_earnings_calendar",
+        "schedule": crontab(minute=30, hour=6),
+    },
+    "dispatch-alpha-ingestion-jobs": {
+        "task": "stock_platform.workers.ingestion_tasks.dispatch_alpha_ingestion_jobs",
+        "schedule": 30.0,
     },
 }

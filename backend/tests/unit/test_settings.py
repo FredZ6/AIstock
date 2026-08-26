@@ -27,3 +27,9 @@ def test_fixture_mode_requires_no_provider_credentials() -> None:
         database_url="postgresql+psycopg://postgres:postgres@localhost:55432/stock_platform",
     )
     assert settings.fixture_mode is True
+
+
+def test_alpha_vantage_secret_is_optional_and_redacted() -> None:
+    settings = Settings(alpha_vantage_api_key="fixture-secret")
+    assert settings.alpha_vantage_api_key is not None
+    assert "fixture-secret" not in repr(settings)

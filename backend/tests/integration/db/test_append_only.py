@@ -21,6 +21,7 @@ APPEND_ONLY_TABLES = {
     "news_article",
     "sec_filing",
     "financial_fact",
+    "earnings_event",
 }
 
 UPDATE_PROBE_COLUMNS = {
@@ -259,6 +260,23 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
         connection.execute(
             text(
                 """
+                INSERT INTO earnings_event (
+                    security_id, raw_data_object_id, normalized_record_id,
+                    provider, provider_symbol, symbol, event_date,
+                    fiscal_date_end, estimate, currency, available_at, payload
+                ) VALUES (
+                    :security_id, :raw_id,
+                    (SELECT id FROM normalized_record WHERE raw_data_object_id = :raw_id LIMIT 1),
+                    'FIXTURE', 'FIXTURE', 'FIXTURE', current_date + 30,
+                    current_date, 1, 'USD', now(), '{}'::jsonb
+                )
+                """
+            ),
+            {"security_id": security_id, "raw_id": raw_id},
+        )
+        connection.execute(
+            text(
+                """
                 INSERT INTO market_context_snapshot (
                     id, as_of, available_at, algorithm_version, source_lineage
                 ) VALUES (
@@ -378,6 +396,7 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
             "news_article",
             "sec_filing",
             "financial_fact",
+            "earnings_event",
         }:
             connection.execute(text(f"INSERT INTO {table_name} DEFAULT VALUES"))
 

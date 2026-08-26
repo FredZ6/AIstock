@@ -16,10 +16,12 @@ from stock_platform.application.ingestion.normalizers.alpaca import (
     AlpacaBar,
     AlpacaNewsArticle,
 )
+from stock_platform.application.ingestion.normalizers.alpha_vantage import EarningsEvent
 from stock_platform.application.ingestion.normalizers.sec import SecFiling
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.market_data.concepts import ConceptMappingResult
 from stock_platform.infrastructure.db.models.tables import (
+    earnings_event,
     financial_fact,
     market_bar,
     news_article,
@@ -396,4 +398,78 @@ class PostgresFinancialFactStore:
         )
         if any(existing[key] != value for key, value in values.items()):
             raise ValueError("immutable financial fact conflict")
+        return cast(UUID, existing["id"])
+
+
+class PostgresEarningsEventStore:
+    def __init__(self, connection: Connection) -> None:
+        self._connection = connection
+
+    def persist_event(
+        self,
+        *,
+        security_id: UUID,
+        raw_id: UUID,
+        normalized_id: UUID,
+        event: EarningsEvent,
+    ) -> UUID:
+        provider = self._connection.execute(
+            select(raw_data_object.c.provider)
+            .select_from(
+                normalized_record.join(
+                    raw_data_object,
+                    normalized_record.c.raw_data_object_id == raw_data_object.c.id,
+                )
+            )
+            .where(normalized_record.c.id == normalized_id, raw_data_object.c.id == raw_id)
+        ).scalar_one_or_none()
+        if provider != "ALPHA_VANTAGE":
+            raise ValueError("earnings event lineage must reference Alpha Vantage raw data")
+        supersedes_id = self._connection.execute(
+            select(earnings_event.c.id)
+            .where(
+                earnings_event.c.security_id == security_id,
+                earnings_event.c.fiscal_date_end == event.fiscal_date_end,
+                earnings_event.c.available_at < event.available_at,
+            )
+            .order_by(earnings_event.c.available_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        values = {
+            "security_id": security_id,
+            "raw_data_object_id": raw_id,
+            "normalized_record_id": normalized_id,
+            "provider": provider,
+            "provider_symbol": event.provider_symbol,
+            "symbol": str(event.symbol),
+            "event_date": event.event_date,
+            "fiscal_date_end": event.fiscal_date_end,
+            "estimate": event.estimate,
+            "currency": event.currency,
+            "available_at": event.available_at,
+            "supersedes_id": supersedes_id,
+            "payload": event.payload,
+        }
+        inserted = self._connection.execute(
+            insert(earnings_event)
+            .values(**values)
+            .on_conflict_do_nothing(constraint="uq_earnings_event_snapshot_version")
+            .returning(earnings_event.c.id)
+        ).scalar_one_or_none()
+        if inserted is not None:
+            return cast(UUID, inserted)
+        existing = (
+            self._connection.execute(
+                select(earnings_event).where(
+                    earnings_event.c.provider == provider,
+                    earnings_event.c.normalized_record_id == normalized_id,
+                    earnings_event.c.provider_symbol == event.provider_symbol,
+                    earnings_event.c.fiscal_date_end == event.fiscal_date_end,
+                )
+            )
+            .mappings()
+            .one()
+        )
+        if any(existing[key] != value for key, value in values.items()):
+            raise ValueError("immutable earnings event conflict")
         return cast(UUID, existing["id"])

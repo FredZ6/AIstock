@@ -24,6 +24,7 @@ class FeedType(StrEnum):
     OPTION_AGGREGATES = "option_aggregates"
     ESTIMATES = "estimates"
     TARGET_CONSENSUS = "target_consensus"
+    EARNINGS_CALENDAR = "earnings_calendar"
 
 
 class IngestionJobState(StrEnum):

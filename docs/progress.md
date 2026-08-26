@@ -2089,3 +2089,23 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
 - Initial RED command exited 2 on missing mapping modules. The mandatory-filing regression exited 1
   before the FK guard. Final focused mapping, SEC persistence, database append-only and research
   numeric-verifier command exited 0 with 21 passed. Ruff and strict focused Mypy exited 0.
+
+### M7.5 RDB-3 — FRE-26 Task 13 Alpha earnings ingestion (2026-08-26)
+
+- Added a read-only Alpha Vantage full-market earnings-calendar CSV adapter, optional redacted
+  `SecretStr` configuration, Security-master provider-symbol resolution, deterministic Watchlist
+  filtering, and Decimal-only earnings estimates. Missing credentials terminate explicitly without
+  creating raw or typed facts.
+- Added one idempotent daily Celery schedule plus durable queued-job dispatcher and low-priority
+  worker. The worker stores an immutable observation envelope containing the complete original CSV,
+  observation time, SHA-256, and base64 bytes before creating normalized `EarningsEvent` facts.
+  Identical CSV bytes observed on different days remain separate point-in-time versions.
+- Added append-only `EarningsEvent` persistence with normalized/raw lineage, report and fiscal dates,
+  estimate/currency, availability, and deterministic supersession for provider date revisions. No
+  redundant `EarningsCalendarSnapshot` table was introduced.
+- Initial RED command exited 2 on missing Alpha normalizer/provider modules. Durable Celery routing,
+  identical cross-day snapshot versioning, missing-credential termination, and arbitrary MinIO
+  failure recovery each received failing regressions before implementation.
+- Final focused provider, worker, schema, settings, schedule and database append-only command exited
+  0 with 22 passed. Ruff and strict focused Mypy exited 0. No Alpha credential or live response was
+  fabricated; recorded CSV fixtures drive the contract suite.

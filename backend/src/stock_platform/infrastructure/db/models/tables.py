@@ -1412,6 +1412,49 @@ Index(
     financial_fact.c.period_end,
     financial_fact.c.available_at,
 )
+earnings_event = Table(
+    "earnings_event",
+    metadata,
+    uuid_pk(),
+    Column("security_id", UUID(as_uuid=True), ForeignKey("security.id"), nullable=False),
+    Column(
+        "raw_data_object_id", UUID(as_uuid=True), ForeignKey("raw_data_object.id"), nullable=False
+    ),
+    Column(
+        "normalized_record_id",
+        UUID(as_uuid=True),
+        ForeignKey("normalized_record.id"),
+        nullable=False,
+    ),
+    Column("provider", Text, nullable=False),
+    Column("provider_symbol", Text, nullable=False),
+    Column("symbol", Text, nullable=False),
+    Column("event_date", Date, nullable=False),
+    Column("fiscal_date_end", Date, nullable=False),
+    Column("estimate", Numeric),
+    Column("currency", Text),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("supersedes_id", UUID(as_uuid=True), ForeignKey("earnings_event.id")),
+    Column("payload", JSONB, nullable=False),
+    created_at(),
+    CheckConstraint(
+        "supersedes_id IS NULL OR supersedes_id <> id",
+        name=conv("ck_earnings_event_supersedes_self"),
+    ),
+    UniqueConstraint(
+        "provider",
+        "normalized_record_id",
+        "provider_symbol",
+        "fiscal_date_end",
+        name="uq_earnings_event_snapshot_version",
+    ),
+)
+Index(
+    "earnings_event_pit_idx",
+    earnings_event.c.security_id,
+    earnings_event.c.event_date,
+    earnings_event.c.available_at,
+)
 option_snapshot = time_series_table(
     "option_snapshot",
     Column("symbol", Text, nullable=False),

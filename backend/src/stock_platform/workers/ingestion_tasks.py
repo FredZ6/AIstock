@@ -19,6 +19,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from stock_platform.application.ingestion.coordinator import IngestionCoordinator
 from stock_platform.application.ingestion.normalizers.alpaca import AlpacaNormalizer
+from stock_platform.application.ingestion.normalizers.alpha_vantage import AlphaVantageNormalizer
 from stock_platform.application.ingestion.raw_writer import (
     RawObjectStoreUnavailable,
     RawWriter,
@@ -34,25 +35,32 @@ from stock_platform.domain.ingestion.models import (
 from stock_platform.infrastructure.db.models.tables import (
     ingestion_cursor,
     ingestion_job,
+    ingestion_raw_link,
     normalization_dispatch,
     normalization_rejection,
     normalized_record,
     raw_data_object,
 )
-from stock_platform.infrastructure.ingestion.fact_store import PostgresAlpacaFactStore
+from stock_platform.infrastructure.ingestion.fact_store import (
+    PostgresAlpacaFactStore,
+    PostgresEarningsEventStore,
+)
 from stock_platform.infrastructure.ingestion.job_store import IngestionJobStore
 from stock_platform.infrastructure.observability.metrics import platform_metrics
 from stock_platform.infrastructure.providers.alpaca_stream import (
     AlpacaStreamPersistenceUnavailable,
     AlpacaStreamReplayWriter,
 )
+from stock_platform.infrastructure.providers.alpha_vantage import PostgresAlphaSymbolResolver
 from stock_platform.infrastructure.providers.base import (
     ProviderBatch,
     ProviderRateLimit,
     ProviderRecord,
+    ProviderTransportError,
     RawObjectStore,
 )
 from stock_platform.infrastructure.providers.object_store import MinioRawObjectStore
+from stock_platform.infrastructure.providers.persistence import persist_raw_object
 from stock_platform.settings import Settings
 from stock_platform.workers.alpaca_stream_supervisor import replay_archived_stream_batches
 
@@ -63,6 +71,7 @@ NORMALIZATION_RETRY_AFTER = timedelta(minutes=1)
 ORPHAN_LOG_SAMPLE_LIMIT = 20
 logger = logging.getLogger(__name__)
 ALPACA_LEASE = timedelta(minutes=10)
+ALPHA_LEASE = timedelta(minutes=10)
 
 
 class AlpacaLeaseLost(RuntimeError):
@@ -80,6 +89,15 @@ class AlpacaWindowTransport(Protocol):
         timeframe: str | None,
         coverage: str,
         page_token: str | None = None,
+    ) -> ProviderBatch: ...
+
+
+class AlphaCalendarTransport(Protocol):
+    def fetch_batch(
+        self,
+        feed_type: FeedType,
+        symbol: str,
+        as_of: datetime,
     ) -> ProviderBatch: ...
 
 
@@ -546,6 +564,215 @@ def dispatch_queued_alpaca_jobs(
         publish(cast(UUID, queued_job_id))
         dispatched += 1
     return dispatched
+
+
+def execute_alpha_earnings_ingestion_job(
+    *,
+    engine: Engine,
+    raw_store: RawObjectStore,
+    transport: AlphaCalendarTransport,
+    job_id: UUID,
+    now: datetime,
+    worker_id: str,
+) -> bool:
+    """Persist one full Alpha CSV snapshot before its filtered typed events."""
+    checked_now = require_aware(now).astimezone(UTC)
+    store = IngestionJobStore(engine)
+    lease = store.claim(
+        job_id,
+        worker_id=worker_id,
+        now=checked_now,
+        lease_for=ALPHA_LEASE,
+    )
+    if lease is None:
+        return False
+    with engine.connect() as connection:
+        row = (
+            connection.execute(select(ingestion_job).where(ingestion_job.c.id == job_id))
+            .mappings()
+            .one()
+        )
+    if row["provider"] != "ALPHA_VANTAGE" or row["dataset"] != FeedType.EARNINGS_CALENDAR.value:
+        store.fail(
+            lease,
+            error_class=IngestionErrorClass.UNSUPPORTED_DATASET,
+            error_detail={"provider": row["provider"], "dataset": row["dataset"]},
+            now=checked_now,
+        )
+        return False
+    try:
+        batch = transport.fetch_batch(
+            FeedType.EARNINGS_CALENDAR,
+            "NVDA",
+            row["window_end"],
+        )
+        persisted_at = max(checked_now, batch.observed_at)
+        body_hash = hashlib.sha256(batch.body).hexdigest()
+        raw_envelope = json.dumps(
+            {
+                "provider": batch.provider,
+                "feed_type": batch.feed_type.value,
+                "scope": "FULL_MARKET",
+                "observed_at": batch.observed_at.isoformat(),
+                "body_sha256": body_hash,
+                "body_base64": b64encode(batch.body).decode("ascii"),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+        content_hash = hashlib.sha256(raw_envelope).hexdigest()
+        object_key = f"live/ALPHA_VANTAGE/earnings_calendar/{content_hash}.json"
+        try:
+            raw_store.put(object_key, raw_envelope, "application/json")
+        except Exception as error:
+            raise RawObjectStoreUnavailable("raw object store write failed") from error
+        record = ProviderRecord(
+            symbol=Symbol("NVDA"),
+            feed_type=FeedType.EARNINGS_CALENDAR,
+            provider="ALPHA_VANTAGE",
+            event_time=batch.observed_at,
+            available_at=batch.observed_at,
+            ingested_at=persisted_at,
+            content_hash=content_hash,
+            raw_object_key=object_key,
+            payload={"scope": "FULL_MARKET", "body_sha256": body_hash},
+        )
+        with engine.begin() as connection:
+            raw_id = persist_raw_object(connection, record)
+            connection.execute(
+                insert(ingestion_raw_link)
+                .values(job_id=job_id, raw_data_object_id=raw_id)
+                .on_conflict_do_nothing(
+                    index_elements=[
+                        ingestion_raw_link.c.job_id,
+                        ingestion_raw_link.c.raw_data_object_id,
+                    ]
+                )
+            )
+            identities = PostgresAlphaSymbolResolver(connection).identities(batch.observed_at)
+            events = AlphaVantageNormalizer().normalize_calendar(
+                batch,
+                provider_to_canonical={
+                    provider_symbol: str(identity.symbol)
+                    for provider_symbol, identity in identities.items()
+                },
+            )
+            fact_store = PostgresEarningsEventStore(connection)
+            for event in events:
+                normalized_values = {
+                    "raw_data_object_id": raw_id,
+                    "record_type": "earnings_event",
+                    "record_key": (f"{event.provider_symbol}:{event.fiscal_date_end.isoformat()}"),
+                    "normalization_version": "alpha-earnings-v1",
+                    "payload": {
+                        **event.payload,
+                        "symbol": str(event.symbol),
+                        "estimate": str(event.estimate) if event.estimate is not None else None,
+                    },
+                }
+                normalized_id = connection.execute(
+                    insert(normalized_record)
+                    .values(**normalized_values)
+                    .on_conflict_do_nothing(constraint="uq_normalized_record_version")
+                    .returning(normalized_record.c.id)
+                ).scalar_one_or_none()
+                if normalized_id is None:
+                    normalized_id = connection.execute(
+                        select(normalized_record.c.id).where(
+                            normalized_record.c.raw_data_object_id == raw_id,
+                            normalized_record.c.record_type == "earnings_event",
+                            normalized_record.c.record_key == normalized_values["record_key"],
+                            normalized_record.c.normalization_version == "alpha-earnings-v1",
+                        )
+                    ).scalar_one()
+                identity = identities[event.provider_symbol]
+                fact_store.persist_event(
+                    security_id=identity.security_id,
+                    raw_id=raw_id,
+                    normalized_id=cast(UUID, normalized_id),
+                    event=event,
+                )
+    except ProviderTransportError as error:
+        if error.error_class in {
+            IngestionErrorClass.TIMEOUT,
+            IngestionErrorClass.NETWORK,
+            IngestionErrorClass.RATE_LIMIT,
+            IngestionErrorClass.PROVIDER_5XX,
+        }:
+            store.schedule_retry(
+                lease,
+                error_class=error.error_class,
+                error_detail={"status_code": error.status_code},
+                next_attempt_at=checked_now + (error.retry_after or timedelta(minutes=1)),
+                now=checked_now,
+            )
+        else:
+            store.dead_letter(
+                lease,
+                error_class=error.error_class,
+                error_detail={"status_code": error.status_code},
+                now=checked_now,
+            )
+        return False
+    except SQLAlchemyError:
+        store.schedule_retry(
+            lease,
+            error_class=IngestionErrorClass.TEMPORARY_DATABASE,
+            error_detail={"reason": "database_write_failed"},
+            next_attempt_at=checked_now + timedelta(minutes=1),
+            now=checked_now,
+        )
+        return False
+    except RawObjectStoreUnavailable:
+        store.schedule_retry(
+            lease,
+            error_class=IngestionErrorClass.TEMPORARY_OBJECT_STORE,
+            error_detail={"reason": "object_store_write_failed"},
+            next_attempt_at=checked_now + timedelta(minutes=1),
+            now=checked_now,
+        )
+        return False
+    except ValueError as error:
+        store.dead_letter(
+            lease,
+            error_class=IngestionErrorClass.SCHEMA_DRIFT,
+            error_detail={"error_type": type(error).__name__},
+            now=checked_now,
+        )
+        return False
+    if not store.complete(lease, now=max(checked_now, batch.observed_at)):
+        raise RuntimeError("Alpha earnings ingestion completion rejected")
+    return True
+
+
+def dispatch_queued_alpha_jobs(
+    engine: Engine,
+    *,
+    publish: PublishIngestion,
+    now: datetime,
+    limit: int = 10,
+) -> int:
+    checked_now = require_aware(now).astimezone(UTC)
+    if limit < 1:
+        raise ValueError("Alpha dispatch limit must be positive")
+    store = IngestionJobStore(engine)
+    store.requeue_due(now=checked_now)
+    store.recover_expired(now=checked_now)
+    with engine.connect() as connection:
+        job_ids = tuple(
+            connection.execute(
+                select(ingestion_job.c.id)
+                .where(
+                    ingestion_job.c.provider == "ALPHA_VANTAGE",
+                    ingestion_job.c.state == "QUEUED",
+                )
+                .order_by(ingestion_job.c.created_at, ingestion_job.c.id)
+                .limit(limit)
+            ).scalars()
+        )
+    for queued_job_id in job_ids:
+        publish(cast(UUID, queued_job_id))
+    return len(job_ids)
 
 
 def normalize_dispatched_record(
@@ -1047,6 +1274,52 @@ def run_alpaca_ingestion_job(job_id: str) -> bool:
             now=datetime.now(UTC),
             worker_id="celery-alpaca-ingestion",
             clock=lambda: datetime.now(UTC),
+        )
+    finally:
+        engine.dispose()
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
+    name="stock_platform.workers.ingestion_tasks.dispatch_alpha_ingestion_jobs"
+)
+def dispatch_alpha_ingestion_jobs() -> int:
+    settings = Settings()
+    engine = create_engine(settings.database_url)
+    try:
+        return dispatch_queued_alpha_jobs(
+            engine,
+            publish=lambda job_id: celery_app.send_task(
+                "stock_platform.workers.ingestion_tasks.run_alpha_earnings_ingestion_job",
+                args=[str(job_id)],
+                queue="ingestion-low",
+            ),
+            now=datetime.now(UTC),
+        )
+    finally:
+        engine.dispose()
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
+    name="stock_platform.workers.ingestion_tasks.run_alpha_earnings_ingestion_job"
+)
+def run_alpha_earnings_ingestion_job(job_id: str) -> bool:
+    from stock_platform.infrastructure.providers.alpha_vantage import AlphaVantageProvider
+
+    settings = Settings()
+    engine = create_engine(settings.database_url)
+    api_key = (
+        settings.alpha_vantage_api_key.get_secret_value()
+        if settings.alpha_vantage_api_key is not None
+        else None
+    )
+    try:
+        return execute_alpha_earnings_ingestion_job(
+            engine=engine,
+            raw_store=MinioRawObjectStore.from_settings(settings),
+            transport=AlphaVantageProvider(api_key=api_key),
+            job_id=UUID(job_id),
+            now=datetime.now(UTC),
+            worker_id="celery-alpha-earnings",
         )
     finally:
         engine.dispose()
