@@ -2109,3 +2109,35 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
 - Final focused provider, worker, schema, settings, schedule and database append-only command exited
   0 with 22 passed. Ruff and strict focused Mypy exited 0. No Alpha credential or live response was
   fabricated; recorded CSV fixtures drive the contract suite.
+
+### M7.5 RDB-3 — FRE-26 Task 14 acceptance and professional-review closure (2026-08-27)
+
+- Four professional review passes closed all Critical/Important findings before delivery. SEC is now
+  a production Celery/IngestionJob/MinIO/PostgreSQL lane rather than disconnected components: daily
+  scheduling first admits 11 filings jobs, successful filings ingestion then admits company-facts,
+  and the dispatcher routes both to the low-priority worker. Historical submissions pages and filing
+  documents are archived before normalized `SecFiling` and `FinancialFact` writes.
+- PIT and immutable lineage were hardened: the default seeded SEC identity respects Security-master
+  availability; subsequent security-ID resolution applies `available_at`, `effective_from`, and
+  `effective_to`; derived inputs must share one accession; derived facts have a distinct stable
+  identity and full period/accession normalized lineage; repeated daily SEC snapshots preserve new
+  raw observations without duplicating or conflicting with semantically identical typed facts.
+- Long SEC work heartbeats its lease around provider calls and persistence boundaries. A superseded
+  worker stops before further writes. Real response timestamps use `ingested_at >= available_at`;
+  company-facts cannot race filings; MinIO failure remains retryable without fabricated PostgreSQL
+  lineage. The historical-page, delayed-response, cross-day repeat, lease-loss, semantic-idempotency,
+  and dependency-order regressions were all added before their final fixes.
+- The final focused SEC/Alpha review suite exited 0 with 34 passed. The combined concurrency, lease recovery,
+  pagination resume, Alpaca/Alpha/SEC object-store failure, real MinIO lineage, historical SEC and PIT
+  command exited 0 with 85 passed. The Alpha object-store fault regression also passed independently;
+  no live provider result was fabricated.
+- Alembic `upgrade head` was executed twice against the validation database; both commands exited 0
+  and the second was a no-op. Final fresh `make verify` exited 0: 288 files format clean, Ruff clean,
+  strict Mypy clean over 250 source files, no Alembic/MCP/OpenAPI drift, backend 598 passed / 3
+  credential-gated live contracts skipped, Web TypeScript and ESLint clean, Vitest 14 files / 94
+  tests passed, and the nine-route Next.js production build succeeded.
+- Remaining non-blocking notes: SEC live smoke remains skipped until real User-Agent/provider access
+  is explicitly configured; instant SEC facts without a period start are conservatively omitted;
+  the process-wide SEC limiter is not cross-process distributed; the existing Node
+  `--localstorage-file` warning remains non-functional. No live brokerage, real-money execution, or
+  provider credentials were added.
