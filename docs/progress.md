@@ -2166,3 +2166,22 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   source files. The quality, reconciliation, append-only, empty/upgrade migration, schema, Alpaca
   lineage, and market replay suite exited 0 with 47 passed. No provider credential or live result was
   used or fabricated.
+
+### M7.5 RDB-4 — FRE-27 Task 16 corporate-action and ADR versions (2026-08-27)
+
+- Extended the unmerged forward-only `0033` migration with append-only CorporateAction versions,
+  mandatory NormalizedRecord lineage, optional canonical Security identity, provider action identity,
+  supersession, explicit source/settlement currency, and structured details. Legacy rows receive a
+  deterministic normalized record during upgrade; the migration can also safely downgrade an older
+  Task-15-only `0033` database.
+- Added typed SPLIT, CASH_DIVIDEND, STOCK_DIVIDEND, ADR_RATIO_CHANGE, SPIN_OFF, SYMBOL_CHANGE, and
+  MERGER_ACQUISITION facts. Point-in-time reads require both effective and available timestamps and
+  expose only the latest version visible at the decision cutoff.
+- Position views apply Decimal-only split, stock-dividend, and ADR-ratio adjustments without changing
+  historical fills or ledger rows. Reference actions emit explicit unsupported-action gaps, and cash
+  dividends reject implicit cross-currency conversion.
+- RED exited 2 with the expected missing typed-action imports. Focused GREEN exited 0 with 7 passed.
+  A migration-replay failure against the earlier Task-15-only `0033` exposed and fixed conditional
+  downgrade compatibility. Final related portfolio, ingestion, migration, and append-only tests exited
+  0 with 18 passed; Alembic upgrade was a no-op and `alembic check` reported no drift. Ruff format,
+  Ruff lint, and strict Mypy over 162 source files all exited 0.

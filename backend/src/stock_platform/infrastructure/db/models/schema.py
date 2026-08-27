@@ -65,5 +65,6 @@ APPEND_ONLY_TABLES = frozenset(
         "lesson_approval",
         "replay_run",
         "policy_promotion_audit",
+        "corporate_action",
     }
 )

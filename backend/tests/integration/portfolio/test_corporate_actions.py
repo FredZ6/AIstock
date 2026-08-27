@@ -22,6 +22,7 @@ DECISION_TIME = datetime(2026, 8, 21, 14, 30, tzinfo=UTC)
 def test_corporate_actions_are_point_in_time_and_idempotent(engine: Engine) -> None:
     portfolio_id = uuid4()
     raw_id = uuid4()
+    normalized_id = uuid4()
     split_id = uuid4()
     dividend_id = uuid4()
     raw_hash = uuid4().hex * 2
@@ -52,18 +53,35 @@ def test_corporate_actions_are_point_in_time_and_idempotent(engine: Engine) -> N
         connection.execute(
             text(
                 """
+                INSERT INTO normalized_record (
+                    id, raw_data_object_id, record_type, record_key,
+                    normalization_version, payload
+                ) VALUES (
+                    :id, :raw_id, 'corporate_action', 'NVDA:fixture',
+                    'corporate-action-v2', '{}'::jsonb
+                )
+                """
+            ),
+            {"id": normalized_id, "raw_id": raw_id},
+        )
+        connection.execute(
+            text(
+                """
                 INSERT INTO corporate_action (
-                    id, raw_data_object_id, symbol, action_type, effective_at, available_at,
+                    id, raw_data_object_id, normalized_record_id, provider_action_id,
+                    symbol, action_type, effective_at, available_at,
                     ingested_at, provider, feed_type, content_hash, raw_object_key, split_ratio,
                     cash_per_share, currency
                 ) VALUES
                 (
-                    :split_id, :raw_id, 'NVDA', 'SPLIT', :effective_at, :split_available,
+                    :split_id, :raw_id, :normalized_id, 'split-1', 'NVDA', 'SPLIT',
+                    :effective_at, :split_available,
                     :ingested_at, 'FIXTURE', 'corporate_action', :split_hash, :split_key,
                     2, NULL, 'USD'
                 ),
                 (
-                    :dividend_id, :raw_id, 'NVDA', 'CASH_DIVIDEND', :effective_at,
+                    :dividend_id, :raw_id, :normalized_id, 'dividend-1', 'NVDA',
+                    'CASH_DIVIDEND', :effective_at,
                     :dividend_available, :ingested_at, 'FIXTURE', 'corporate_action',
                     :dividend_hash, :dividend_key, NULL, 0.5, 'USD'
                 )
@@ -73,6 +91,7 @@ def test_corporate_actions_are_point_in_time_and_idempotent(engine: Engine) -> N
                 "split_id": split_id,
                 "dividend_id": dividend_id,
                 "raw_id": raw_id,
+                "normalized_id": normalized_id,
                 "effective_at": DECISION_TIME - timedelta(minutes=30),
                 "split_available": DECISION_TIME - timedelta(minutes=10),
                 "dividend_available": DECISION_TIME + timedelta(minutes=10),
