@@ -2185,3 +2185,23 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   downgrade compatibility. Final related portfolio, ingestion, migration, and append-only tests exited
   0 with 18 passed; Alembic upgrade was a no-op and `alembic check` reported no drift. Ruff format,
   Ruff lint, and strict Mypy over 162 source files all exited 0.
+
+### M7.5 RDB-4 — FRE-27 Task 17 replay, recovery, metrics, and release gates (2026-08-27)
+
+- Added provider-free replay from immutable object storage. Replay verifies PostgreSQL identity and
+  SHA-256 before invoking a supplied newer normalizer, creates a new versioned normalization outbox
+  row, preserves prior NormalizedRecord facts, and rejects semantic conflicts on idempotent retry.
+- Added bounded Prometheus signals for job lag/state, cursor lag, durable backlog, normalization
+  rejection, quality status, provider rate-limit remainder, and opt-in live-smoke outcomes. Gauge
+  regressions verify that repeated observations replace rather than accumulate values.
+- Extended central telemetry redaction to provider URL query credentials and serialized WebSocket auth
+  messages while preserving safe URL fields. Headers and recursively nested credentials retain the
+  existing redaction boundary.
+- Added `scripts/verify-ingestion.sh`: recorded replay/recovery/quality/security checks always run;
+  Alpaca, SEC, and Alpha live smoke is individually opt-in and explicitly reports SKIP when its flag
+  or secret is absent. No default CI path enables provider traffic.
+- Initial RED exited 2 on the missing replay module. A new gauge regression then failed on cumulative
+  semantics and drove the shared gauge-family fix. Final release script exited 0 with 17 passed and
+  three explicit opt-in skips. The expanded ingestion/MinIO/failure-boundary suite exited 0 with 98
+  passed / 1 live contract skipped. Additional metrics/assets/Alpha checks exited 0 with 10 passed /
+  1 live test skipped. Ruff format/lint and strict Mypy over 163 source files exited 0.

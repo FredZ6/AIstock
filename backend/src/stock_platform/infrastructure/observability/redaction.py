@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 REDACTED = "[REDACTED]"
 _SENSITIVE_KEYS = (
@@ -43,6 +45,27 @@ def redact(value: Any) -> Any:
         }
     if isinstance(value, (list, tuple)):
         return [redact(item) for item in value]
-    if isinstance(value, str) and value.lower().startswith("bearer "):
-        return REDACTED
+    if isinstance(value, str):
+        if value.lower().startswith("bearer "):
+            return REDACTED
+        if value.startswith("{"):
+            try:
+                decoded = json.loads(value)
+            except json.JSONDecodeError:
+                pass
+            else:
+                if (
+                    isinstance(decoded, Mapping)
+                    and str(decoded.get("action", "")).lower() == "auth"
+                ):
+                    return json.dumps(redact(decoded), separators=(",", ":"))
+        parts = urlsplit(value)
+        if parts.scheme and parts.netloc and parts.query:
+            query = [
+                (key, REDACTED if _sensitive_key(key) else item)
+                for key, item in parse_qsl(parts.query, keep_blank_values=True)
+            ]
+            return urlunsplit(
+                (parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)
+            )
     return value

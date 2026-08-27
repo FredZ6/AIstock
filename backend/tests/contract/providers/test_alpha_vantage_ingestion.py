@@ -1,7 +1,9 @@
+import os
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
 from stock_platform.application.ingestion.normalizers.alpha_vantage import AlphaVantageNormalizer
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.ingestion.models import FeedType
@@ -52,6 +54,22 @@ def test_alpha_calendar_transport_fetches_one_full_csv_snapshot_read_only() -> N
 
 def test_alpha_provider_is_explicitly_unconfigured_without_credentials() -> None:
     assert not AlphaVantageProvider(api_key=None).configured
+
+
+@pytest.mark.live
+def test_alpha_live_contract() -> None:
+    if os.getenv("LIVE_PROVIDER_TESTS") != "1":
+        pytest.skip("LIVE_PROVIDER_TESTS=1 is not set")
+    api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
+    if not api_key:
+        pytest.skip("missing requirement: ALPHA_VANTAGE_API_KEY")
+
+    batch = AlphaVantageProvider(api_key=api_key).fetch_batch(
+        FeedType.EARNINGS_CALENDAR, "NVDA", datetime.now(UTC)
+    )
+
+    assert batch.provider == "ALPHA_VANTAGE"
+    assert batch.body
 
 
 def test_alpha_calendar_filters_watchlist_resolves_aliases_and_uses_decimal() -> None:
