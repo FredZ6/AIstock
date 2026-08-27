@@ -2205,3 +2205,26 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   three explicit opt-in skips. The expanded ingestion/MinIO/failure-boundary suite exited 0 with 98
   passed / 1 live contract skipped. Additional metrics/assets/Alpha checks exited 0 with 10 passed /
   1 live test skipped. Ruff format/lint and strict Mypy over 163 source files exited 0.
+
+### M7.5 RDB-4 — FRE-27 Task 18 final acceptance (2026-08-27)
+
+- A disposable PostgreSQL 17/TimescaleDB container with no persistent volume validated a completely
+  empty upgrade to `0033_ingestion_quality` (exit 0), then a full `head → 0024 → head` cycle and
+  `alembic check` (exit 0). This exposed and fixed an Alembic naming-convention bug in the new
+  CorporateAction downgrade; a dedicated automated regression now covers the path.
+- Alembic test configuration now preserves an explicitly supplied per-test database URL while CLI
+  default configuration remains overridable by `DATABASE_URL`. The regression passed against the
+  isolated server and prevents environment configuration from redirecting migrations out of their
+  disposable test databases.
+- Fixture seed ran twice against the disposable validation database (both exit 0): the first created
+  11 Watchlist securities and 31 normalized records; the second created 0 securities and 0 normalized
+  records. `verify-ingestion.sh` then ran twice (both exit 0), each with 17 passed and explicit SKIP
+  notices for Alpaca, SEC, and Alpha live smoke because opt-in flags/real credentials were absent.
+- Final `make verify` ran twice after all fixes and both exited 0 with identical results: 299 files
+  format clean, Ruff clean, strict Mypy clean over 260 source/test files, Alembic/MCP/OpenAPI clean,
+  backend 627 passed / 4 credential-gated live tests skipped, Web TypeScript/ESLint clean, Vitest 14
+  files / 94 tests passed, and the nine-route Next.js production build succeeded.
+- Local infrastructure note: the preserved fixed-name `ai_stock_m0_postgres` Docker volume contains
+  a pre-existing invalid checkpoint and cannot start. It was not deleted or repaired. Acceptance used
+  a disposable healthy database; provider/MinIO tests remained recorded-only. The existing Node
+  `--localstorage-file` warning remains non-functional. No live provider result was fabricated.

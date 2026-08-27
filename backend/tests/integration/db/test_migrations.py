@@ -59,6 +59,7 @@ def migration_database_url() -> Iterator[str]:
 def _alembic_config(database_url: str) -> Config:
     backend_dir = Path(__file__).parents[3]
     config = Config(str(backend_dir / "alembic.ini"))
+    config.attributes["database_url"] = database_url
     config.set_main_option("sqlalchemy.url", database_url)
     return config
 
@@ -75,6 +76,23 @@ def test_fresh_upgrade_does_not_invent_legacy_market_context(
         assert (
             connection.execute(text("SELECT count(*) FROM market_context_snapshot")).scalar_one()
             == 0
+        )
+    engine.dispose()
+
+
+def test_head_can_downgrade_to_0024_and_upgrade_again(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+
+    command.upgrade(config, "head")
+    command.downgrade(config, "0024_observability_correlation")
+    command.upgrade(config, "head")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
+            "0033_ingestion_quality"
         )
     engine.dispose()
 

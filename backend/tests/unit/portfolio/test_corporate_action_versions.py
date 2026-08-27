@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import cast
 from uuid import uuid4
 
 import pytest
@@ -8,6 +9,7 @@ from stock_platform.application.portfolio.corporate_actions import (
     CashDividend,
     CorporateActionProcessor,
     ReferenceAction,
+    ReferenceActionType,
     StockDividend,
 )
 from stock_platform.domain.common.ids import Symbol
@@ -36,7 +38,14 @@ def test_stock_dividend_and_adr_ratio_adjust_views_without_rewriting_history() -
     ["SPIN_OFF", "SYMBOL_CHANGE", "MERGER_ACQUISITION"],
 )
 def test_reference_actions_emit_explicit_gaps(action_type: str) -> None:
-    action = ReferenceAction(uuid4(), Symbol("NVDA"), NOW, NOW, action_type, {"target": "FIXTURE"})
+    action = ReferenceAction(
+        uuid4(),
+        Symbol("NVDA"),
+        NOW,
+        NOW,
+        cast(ReferenceActionType, action_type),
+        {"target": "FIXTURE"},
+    )
 
     result = CorporateActionProcessor().adjust_position_with_gaps(
         Position(Symbol("NVDA"), Decimal("10")), (action,)

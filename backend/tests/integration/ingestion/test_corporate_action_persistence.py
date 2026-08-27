@@ -1,9 +1,9 @@
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import DBAPIError
 from stock_platform.application.portfolio.corporate_actions import (
     PostgresCorporateActionStore,
@@ -15,9 +15,9 @@ from stock_platform.domain.common.ids import Symbol
 NOW = datetime(2026, 8, 27, 12, tzinfo=UTC)
 
 
-def _insert_lineage(connection: object) -> tuple[object, object, object]:
+def _insert_lineage(connection: Connection) -> tuple[UUID, UUID, UUID]:
     raw_id, normalized_id, security_id = uuid4(), uuid4(), uuid4()
-    connection.execute(  # type: ignore[attr-defined]
+    connection.execute(
         text("INSERT INTO security (id, instrument_type) VALUES (:id, 'COMMON_STOCK')"),
         {"id": security_id},
     )
@@ -30,7 +30,7 @@ def _insert_lineage(connection: object) -> tuple[object, object, object]:
           repeat('a', 64), 'fixture/actions.json'
         )
         """),
-        {"id": raw_id, "now": NOW},  # type: ignore[attr-defined]
+        {"id": raw_id, "now": NOW},
     )
     connection.execute(
         text("""
@@ -38,7 +38,7 @@ def _insert_lineage(connection: object) -> tuple[object, object, object]:
           normalization_version, payload)
         VALUES (:id, :raw_id, 'corporate_action', 'NVDA:split', 'v2', '{}'::jsonb)
         """),
-        {"id": normalized_id, "raw_id": raw_id},  # type: ignore[attr-defined]
+        {"id": normalized_id, "raw_id": raw_id},
     )
     return raw_id, normalized_id, security_id
 
@@ -82,7 +82,8 @@ def test_corporate_action_versions_are_append_only_and_point_in_time(engine: Eng
         )
 
         assert len(first) == 1 and isinstance(first[0], SplitAction) and first[0].ratio == 2
-        assert len(revised) == 1 and revised[0].id == revision_id and revised[0].ratio == 4
+        assert len(revised) == 1 and isinstance(revised[0], SplitAction)
+        assert revised[0].id == revision_id and revised[0].ratio == 4
         for statement in (
             "UPDATE corporate_action SET symbol='AMD' WHERE id=:id",
             "DELETE FROM corporate_action WHERE id=:id",

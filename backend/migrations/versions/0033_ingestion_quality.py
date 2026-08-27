@@ -192,17 +192,19 @@ def downgrade() -> None:
     columns = {item["name"] for item in sa.inspect(op.get_bind()).get_columns("corporate_action")}
     if "normalized_record_id" in columns:
         op.execute("DROP TRIGGER IF EXISTS enforce_append_only ON corporate_action")
-        op.drop_constraint("uq_corporate_action_version", "corporate_action", type_="unique")
-        op.drop_constraint("ck_corporate_action_supersedes_self", "corporate_action", type_="check")
-        op.drop_constraint("ck_corporate_action_value", "corporate_action", type_="check")
-        op.drop_constraint("ck_corporate_action_type", "corporate_action", type_="check")
+        op.drop_constraint(op.f("uq_corporate_action_version"), "corporate_action", type_="unique")
+        op.drop_constraint(
+            op.f("ck_corporate_action_supersedes_self"), "corporate_action", type_="check"
+        )
+        op.drop_constraint(op.f("ck_corporate_action_value"), "corporate_action", type_="check")
+        op.drop_constraint(op.f("ck_corporate_action_type"), "corporate_action", type_="check")
         op.create_check_constraint(
-            "ck_corporate_action_type",
+            op.f("ck_corporate_action_type"),
             "corporate_action",
             "action_type IN ('SPLIT', 'CASH_DIVIDEND')",
         )
         op.create_check_constraint(
-            "ck_corporate_action_value",
+            op.f("ck_corporate_action_value"),
             "corporate_action",
             "(action_type = 'SPLIT' AND split_ratio > 0 AND cash_per_share IS NULL) OR "
             "(action_type = 'CASH_DIVIDEND' AND cash_per_share >= 0 AND split_ratio IS NULL)",
@@ -212,7 +214,7 @@ def downgrade() -> None:
             "fk_corporate_action_security_id_security",
             "fk_corporate_action_normalized_record_id_normalized_record",
         ):
-            op.drop_constraint(constraint, "corporate_action", type_="foreignkey")
+            op.drop_constraint(op.f(constraint), "corporate_action", type_="foreignkey")
         for column in (
             "supersedes_id",
             "details",

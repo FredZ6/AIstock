@@ -1,6 +1,6 @@
 import hashlib
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import func, select, text
@@ -23,7 +23,7 @@ class ReadOnlyArchive:
         return self.content
 
 
-def _raw(engine: Engine, content: bytes) -> tuple[object, str]:
+def _raw(engine: Engine, content: bytes) -> tuple[UUID, str]:
     raw_id = uuid4()
     digest = hashlib.sha256(content).hexdigest()
     key = f"fixture/replay/{digest}.json"
