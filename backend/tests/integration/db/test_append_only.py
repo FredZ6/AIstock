@@ -22,6 +22,7 @@ APPEND_ONLY_TABLES = {
     "sec_filing",
     "financial_fact",
     "earnings_event",
+    "data_quality_observation",
 }
 
 UPDATE_PROBE_COLUMNS = {
@@ -184,6 +185,24 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
                     (SELECT id FROM normalized_record WHERE raw_data_object_id = :raw_id LIMIT 1),
                     'FIXTURE', 'price_bars', 'IEX', 'REGULAR', repeat('a', 64),
                     'append-only/raw.json', now() - interval '1 minute', now(), 1, 1
+                )
+                """
+            ),
+            {"raw_id": raw_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO data_quality_observation (
+                    raw_data_object_id, normalized_record_id, provider, dataset,
+                    dimension, status, observed_at, freshness, coverage, delay,
+                    conflict, policy_version, details
+                ) VALUES (
+                    :raw_id,
+                    (SELECT id FROM normalized_record WHERE raw_data_object_id = :raw_id LIMIT 1),
+                    'FIXTURE', 'price_bars', 'FRESHNESS', 'PASS', now(),
+                    interval '1 minute', 'IEX', interval '0 seconds', false,
+                    'append-only-v1', '{}'::jsonb
                 )
                 """
             ),
@@ -397,6 +416,7 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
             "sec_filing",
             "financial_fact",
             "earnings_event",
+            "data_quality_observation",
         }:
             connection.execute(text(f"INSERT INTO {table_name} DEFAULT VALUES"))
 

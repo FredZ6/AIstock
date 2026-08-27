@@ -2141,3 +2141,28 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   the process-wide SEC limiter is not cross-process distributed; the existing Node
   `--localstorage-file` warning remains non-functional. No live brokerage, real-money execution, or
   provider credentials were added.
+
+### M7.5 RDB-4 — FRE-27 Task 15 deterministic ingestion quality (2026-08-27)
+
+- Started from clean `main@9d3dea7` in isolated branch `codex/fre-27-rdb-4`; the primary worktree's
+  user-owned UI changes remain untouched. The locked plan's historical `0028` migration name was
+  advanced to forward-only `0033_ingestion_quality` because main already contains migrations through
+  `0032`.
+- Added versioned local quality thresholds for Alpaca news/bars and heartbeat, SEC filings, and Alpha
+  earnings. SIP freshness is evaluated relative to the entitlement-declared delay; IEX health uses
+  stream heartbeat lag rather than absence of symbol trades. Provider health is derived from job,
+  cursor, and quality signals without a persisted ProviderHealthSnapshot.
+- Added deterministic coverage-scoped bar reconciliation for missing intervals, duplicates,
+  revisions, OHLC errors, invalid volume, and minute-to-daily volume mismatch. IEX and SIP remain
+  separate series and are never treated as conflicts merely because their values differ.
+- Added append-only `DataQualityObservation` with RawDataObject and NormalizedRecord lineage plus raw
+  freshness, coverage, provider, delay, conflict, reconciliation/status, observed time, details, and
+  policy version. No A/B/C/D grade, ReconciliationResult table, or health snapshot table exists.
+- Initial RED command exited 2 with three expected missing-module import errors. Unit GREEN exited 0
+  with 14 passed; focused quality-history integration exited 0 with 2 passed. The first acceptance
+  command stopped correctly because the shared validation database was still at 0032. Alembic then
+  upgraded to 0033 and a second upgrade was a no-op; metadata drift check exited 0.
+- Final Task 15 static gates exited 0: 289 files format clean, Ruff clean, strict Mypy clean over 255
+  source files. The quality, reconciliation, append-only, empty/upgrade migration, schema, Alpaca
+  lineage, and market replay suite exited 0 with 47 passed. No provider credential or live result was
+  used or fabricated.

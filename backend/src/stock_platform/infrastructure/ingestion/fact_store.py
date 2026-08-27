@@ -18,9 +18,11 @@ from stock_platform.application.ingestion.normalizers.alpaca import (
 )
 from stock_platform.application.ingestion.normalizers.alpha_vantage import EarningsEvent
 from stock_platform.application.ingestion.normalizers.sec import SecFiling
+from stock_platform.application.market_data.quality import QualityAssessment
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.market_data.concepts import ConceptMappingResult, MappingStatus
 from stock_platform.infrastructure.db.models.tables import (
+    data_quality_observation,
     earnings_event,
     financial_fact,
     market_bar,
@@ -492,4 +494,80 @@ class PostgresEarningsEventStore:
         )
         if any(existing[key] != value for key, value in values.items()):
             raise ValueError("immutable earnings event conflict")
+        return cast(UUID, existing["id"])
+
+
+class PostgresQualityFactStore:
+    def __init__(self, connection: Connection) -> None:
+        self._connection = connection
+
+    def persist(
+        self,
+        *,
+        raw_id: UUID,
+        normalized_id: UUID,
+        assessment: QualityAssessment,
+    ) -> UUID:
+        lineage = (
+            self._connection.execute(
+                select(
+                    raw_data_object.c.provider,
+                    raw_data_object.c.feed_type,
+                    normalized_record.c.raw_data_object_id,
+                )
+                .select_from(
+                    normalized_record.join(
+                        raw_data_object,
+                        normalized_record.c.raw_data_object_id == raw_data_object.c.id,
+                    )
+                )
+                .where(
+                    normalized_record.c.id == normalized_id,
+                    raw_data_object.c.id == raw_id,
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if lineage is None or lineage["raw_data_object_id"] != raw_id:
+            raise ValueError("quality observation lineage does not match raw object")
+        if lineage["provider"] != assessment.provider or lineage["feed_type"] != assessment.dataset:
+            raise ValueError("quality observation identity does not match raw object")
+        values = {
+            "raw_data_object_id": raw_id,
+            "normalized_record_id": normalized_id,
+            "provider": assessment.provider,
+            "dataset": assessment.dataset,
+            "dimension": assessment.dimension.value,
+            "status": assessment.status.value,
+            "observed_at": assessment.observed_at,
+            "freshness": assessment.freshness,
+            "coverage": assessment.coverage,
+            "delay": assessment.delay,
+            "conflict": assessment.conflict,
+            "policy_version": assessment.policy_version,
+            "details": _json_safe(assessment.details),
+        }
+        inserted = self._connection.execute(
+            insert(data_quality_observation)
+            .values(**values)
+            .on_conflict_do_nothing(constraint="uq_data_quality_observation_version")
+            .returning(data_quality_observation.c.id)
+        ).scalar_one_or_none()
+        if inserted is not None:
+            return cast(UUID, inserted)
+        existing = (
+            self._connection.execute(
+                select(data_quality_observation).where(
+                    data_quality_observation.c.normalized_record_id == normalized_id,
+                    data_quality_observation.c.dimension == assessment.dimension.value,
+                    data_quality_observation.c.observed_at == assessment.observed_at,
+                    data_quality_observation.c.policy_version == assessment.policy_version,
+                )
+            )
+            .mappings()
+            .one()
+        )
+        if any(existing[key] != value for key, value in values.items()):
+            raise ValueError("immutable quality observation conflict")
         return cast(UUID, existing["id"])
