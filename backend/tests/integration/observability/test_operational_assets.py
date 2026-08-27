@@ -79,3 +79,14 @@ def test_security_guide_and_each_recovery_runbook_state_commands_rpo_and_rto() -
         assert "## RPO" in content
         assert "## RTO" in content
         assert "```" in content
+
+
+def test_ingestion_release_gate_is_recorded_first_and_opt_in_live() -> None:
+    script = (ROOT / "scripts" / "verify-ingestion.sh").read_text()
+
+    assert "test_raw_replay.py" in script
+    assert "test_alpaca_recovery.py" in script
+    assert "RUN_ALPACA_LIVE_SMOKE" in script
+    assert "RUN_SEC_LIVE_SMOKE" in script
+    assert "RUN_ALPHA_LIVE_SMOKE" in script
+    assert "SKIP" in script

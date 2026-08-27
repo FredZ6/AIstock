@@ -59,6 +59,7 @@ def migration_database_url() -> Iterator[str]:
 def _alembic_config(database_url: str) -> Config:
     backend_dir = Path(__file__).parents[3]
     config = Config(str(backend_dir / "alembic.ini"))
+    config.attributes["database_url"] = database_url
     config.set_main_option("sqlalchemy.url", database_url)
     return config
 
@@ -75,6 +76,23 @@ def test_fresh_upgrade_does_not_invent_legacy_market_context(
         assert (
             connection.execute(text("SELECT count(*) FROM market_context_snapshot")).scalar_one()
             == 0
+        )
+    engine.dispose()
+
+
+def test_head_can_downgrade_to_0024_and_upgrade_again(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+
+    command.upgrade(config, "head")
+    command.downgrade(config, "0024_observability_correlation")
+    command.upgrade(config, "head")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
+            "0033_ingestion_quality"
         )
     engine.dispose()
 
@@ -443,4 +461,63 @@ def test_0026_preserves_existing_market_bars_and_backfills_normalized_lineage(
             ),
             {"bar_id": bar_id},
         ).one() == (bar_id, raw_id, normalized_id, "181")
+    engine.dispose()
+
+
+def test_0033_preserves_legacy_action_currency_and_uses_exact_generated_lineage(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "0032_earnings_events")
+    engine = create_engine(migration_database_url)
+    raw_id = "91000000-0000-0000-0000-000000000033"
+    action_id = "92000000-0000-0000-0000-000000000033"
+    unrelated_id = "93000000-0000-0000-0000-000000000033"
+    with engine.begin() as connection:
+        connection.execute(
+            text("""
+            INSERT INTO raw_data_object (
+              id, provider, feed_type, event_time, available_at, ingested_at,
+              content_hash, raw_object_key)
+            VALUES (:raw, 'FIXTURE', 'corporate_action', '2026-08-20T00:00:00Z',
+              '2026-08-20T01:00:00Z', '2026-08-20T02:00:00Z', repeat('a',64),
+              'fixture/legacy-action.json')
+            """),
+            {"raw": raw_id},
+        )
+        connection.execute(
+            text("""
+            INSERT INTO normalized_record (
+              id, raw_data_object_id, record_type, record_key, normalization_version, payload)
+            VALUES (:id, :raw, 'corporate_action', 'unrelated', 'corporate-action-v2', '{}'::jsonb)
+            """),
+            {"id": unrelated_id, "raw": raw_id},
+        )
+        connection.execute(
+            text("""
+            INSERT INTO corporate_action (
+              id, raw_data_object_id, symbol, action_type, effective_at, available_at,
+              ingested_at, provider, feed_type, content_hash, raw_object_key,
+              cash_per_share, currency)
+            VALUES (:id, :raw, 'NVDA', 'CASH_DIVIDEND', '2026-08-20T00:00:00Z',
+              '2026-08-20T01:00:00Z', '2026-08-20T02:00:00Z', 'FIXTURE',
+              'corporate_action', repeat('b',64), 'fixture/legacy-action.json', 1, 'EUR')
+            """),
+            {"id": action_id, "raw": raw_id},
+        )
+    engine.dispose()
+
+    command.upgrade(config, "head")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("""
+            SELECT ca.source_currency, nr.record_key
+            FROM corporate_action ca
+            JOIN normalized_record nr ON nr.id = ca.normalized_record_id
+            WHERE ca.id = :id
+            """),
+            {"id": action_id},
+        ).one() == ("EUR", f"legacy:{raw_id}")
     engine.dispose()

@@ -17,6 +17,7 @@ from alembic.config import Config
 from celery.contrib.testing.worker import start_worker  # type: ignore[import-untyped]
 from minio import Minio
 from sqlalchemy import create_engine, func, select
+from sqlalchemy.exc import SQLAlchemyError
 from stock_platform.application.market_data.policy import EntitlementSnapshot
 from stock_platform.application.market_data.repositories import PostgresMarketDataRepository
 from stock_platform.domain.common.ids import Symbol
@@ -28,6 +29,7 @@ from stock_platform.domain.ingestion.models import (
     MarketSession,
 )
 from stock_platform.infrastructure.db.models.tables import (
+    data_quality_observation,
     ingestion_attempt,
     ingestion_cursor,
     ingestion_job,
@@ -500,24 +502,29 @@ class PaginatedTransport:
 def _enqueue(
     engine: object,
     *,
+    dataset: FeedType = FeedType.PRICE_BARS,
+    timeframe: BarTimeframe | None = BarTimeframe.MINUTE,
     start: datetime = NOW - timedelta(minutes=2),
     end: datetime = NOW,
     required_coverage: MarketDataCoverage = MarketDataCoverage.IEX,
     entitlement_coverage: frozenset[MarketDataCoverage] = frozenset({MarketDataCoverage.IEX}),
+    sip_delay: timedelta | None = None,
 ) -> UUID:
     entitlement = EntitlementSnapshot(
         provider="ALPACA",
         coverage=entitlement_coverage,
         overnight=False,
-        sip_delay=(timedelta(0) if MarketDataCoverage.SIP in entitlement_coverage else None),
+        sip_delay=(
+            sip_delay or timedelta(0) if MarketDataCoverage.SIP in entitlement_coverage else None
+        ),
         observed_at=NOW,
         version="alpaca-entitlement-test-v1",
     )
     scheduled = schedule_alpaca_backfills(
         IngestionJobStore(engine),  # type: ignore[arg-type]
         symbol="NVDA",
-        dataset=FeedType.PRICE_BARS,
-        timeframe=BarTimeframe.MINUTE,
+        dataset=dataset,
+        timeframe=timeframe,
         start=start,
         end=end,
         purpose=DataPurpose.RESEARCH,
@@ -527,6 +534,56 @@ def _enqueue(
         now=NOW,
     )
     return scheduled.job_ids[0]
+
+
+def test_company_news_quality_does_not_inherit_sip_coverage_or_delay(
+    isolated_database_url: str,
+    isolated_minio_store: MinioRawObjectStore,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    job_id = _enqueue(
+        engine,
+        dataset=FeedType.COMPANY_NEWS,
+        timeframe=None,
+        required_coverage=MarketDataCoverage.SIP,
+        entitlement_coverage=frozenset({MarketDataCoverage.SIP}),
+        sip_delay=timedelta(minutes=15),
+    )
+
+    class NewsTransport(PaginatedTransport):
+        def fetch_window(self, *args: object, **kwargs: object) -> ProviderBatch:
+            return ProviderBatch(
+                provider="ALPACA",
+                feed_type=FeedType.COMPANY_NEWS,
+                symbol=Symbol("NVDA"),
+                query_as_of=NOW,
+                observed_at=NOW - timedelta(minutes=12),
+                body=(
+                    b'{"news":[{"id":"news-1","symbols":["NVDA"],'
+                    b'"headline":"Recorded headline","created_at":"2026-08-24T15:47:00Z",'
+                    b'"observed_at":"2026-08-24T15:48:00Z","source":"fixture"}]}'
+                ),
+                headers={},
+                next_page_token=None,
+                rate_limit=ProviderRateLimit(),
+            )
+
+    assert execute_alpaca_ingestion_job(
+        engine=engine,
+        raw_store=isolated_minio_store,
+        transport=NewsTransport(),
+        job_id=job_id,
+        now=NOW,
+        worker_id="news-quality-worker",
+    )
+    with engine.connect() as connection:
+        row = connection.execute(select(data_quality_observation)).mappings().one()
+        assert row["status"] == "DEGRADED"
+        assert row["coverage"] is None
+        assert row["delay"] == timedelta(0)
+        assert row["freshness"] == timedelta(minutes=12)
+    engine.dispose()
 
 
 def test_identical_iex_and_sip_bodies_remain_separate_fact_series(
@@ -577,6 +634,49 @@ def test_identical_iex_and_sip_bodies_remain_separate_fact_series(
         )
         assert connection.execute(select(func.count()).select_from(market_bar)).scalar_one() == 2
         assert set(connection.execute(select(market_bar.c.coverage)).scalars()) == {"IEX", "SIP"}
+    engine.dispose()
+
+
+def test_sip_quality_uses_frozen_entitlement_delay(
+    isolated_database_url: str,
+    isolated_minio_store: MinioRawObjectStore,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    job_id = _enqueue(
+        engine,
+        required_coverage=MarketDataCoverage.SIP,
+        entitlement_coverage=frozenset({MarketDataCoverage.SIP}),
+        sip_delay=timedelta(minutes=15),
+    )
+
+    class DelayedSipTransport(PaginatedTransport):
+        def fetch_window(self, *args: object, **kwargs: object) -> ProviderBatch:
+            return ProviderBatch(
+                provider=PAGE_2.provider,
+                feed_type=PAGE_2.feed_type,
+                symbol=PAGE_2.symbol,
+                query_as_of=PAGE_2.query_as_of,
+                observed_at=NOW - timedelta(minutes=17),
+                body=PAGE_2.body,
+                headers=PAGE_2.headers,
+                next_page_token=None,
+                rate_limit=PAGE_2.rate_limit,
+            )
+
+    assert execute_alpaca_ingestion_job(
+        engine=engine,
+        raw_store=isolated_minio_store,
+        transport=DelayedSipTransport(),
+        job_id=job_id,
+        now=NOW,
+        worker_id="delayed-sip-worker",
+    )
+    with engine.connect() as connection:
+        row = connection.execute(select(data_quality_observation)).mappings().one()
+        assert row["status"] == "PASS"
+        assert row["delay"] == timedelta(minutes=15)
+        assert row["freshness"] == timedelta(minutes=17)
     engine.dispose()
 
 
@@ -736,6 +836,63 @@ def test_expired_lease_cannot_advance_cursor_after_fact_commit(
         assert (
             connection.execute(select(func.count()).select_from(ingestion_cursor)).scalar_one() == 0
         )
+    engine.dispose()
+
+
+def test_quality_failure_is_retried_before_cursor_advances(
+    isolated_database_url: str,
+    isolated_minio_store: MinioRawObjectStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    store = IngestionJobStore(engine)
+    job_id = _enqueue(engine)
+    original = ingestion_tasks._persist_alpaca_quality
+
+    def fail_quality(**_kwargs: object) -> None:
+        raise SQLAlchemyError("simulated quality database failure")
+
+    monkeypatch.setattr(ingestion_tasks, "_persist_alpaca_quality", fail_quality)
+    assert not execute_alpaca_ingestion_job(
+        engine=engine,
+        raw_store=isolated_minio_store,
+        transport=PaginatedTransport(),
+        job_id=job_id,
+        now=NOW,
+        worker_id="quality-failure-worker",
+    )
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(func.count()).select_from(data_quality_observation)
+            ).scalar_one()
+            == 0
+        )
+        assert (
+            connection.execute(select(func.count()).select_from(ingestion_cursor)).scalar_one() == 0
+        )
+        assert connection.execute(select(ingestion_job.c.state)).scalar_one() == "RETRY_SCHEDULED"
+
+    assert store.requeue_due(now=NOW + timedelta(minutes=1)) == 1
+    monkeypatch.setattr(ingestion_tasks, "_persist_alpaca_quality", original)
+    assert execute_alpaca_ingestion_job(
+        engine=engine,
+        raw_store=isolated_minio_store,
+        transport=PaginatedTransport(),
+        job_id=job_id,
+        now=NOW + timedelta(minutes=1),
+        worker_id="quality-retry-worker",
+    )
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(func.count()).select_from(data_quality_observation)
+            ).scalar_one()
+            == 2
+        )
+        assert connection.execute(select(ingestion_cursor.c.generation)).scalar_one() == 2
+        assert connection.execute(select(ingestion_job.c.state)).scalar_one() == "SUCCEEDED"
     engine.dispose()
 
 

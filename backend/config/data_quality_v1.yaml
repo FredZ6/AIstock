@@ -1,0 +1,17 @@
+{
+  "version": "data-quality-v1",
+  "freshness": {
+    "ALPACA:company_news": {"degraded_after_seconds": 600, "unavailable_after_seconds": 1800},
+    "ALPACA:price_bars": {"degraded_after_seconds": 180, "unavailable_after_seconds": 600},
+    "SEC:filings": {"degraded_after_seconds": 900, "unavailable_after_seconds": 3600},
+    "ALPHA_VANTAGE:earnings_calendar": {"degraded_after_seconds": 129600, "unavailable_after_seconds": 259200}
+  },
+  "heartbeat": {
+    "ALPACA:IEX": {"degraded_after_seconds": 30, "unavailable_after_seconds": 120},
+    "ALPACA:SIP": {"degraded_after_seconds": 30, "unavailable_after_seconds": 120}
+  },
+  "delay": {
+    "ALPACA:price_bars": {"degraded_after_seconds": 300, "unavailable_after_seconds": 1800},
+    "ALPACA:cursor_lag": {"degraded_after_seconds": 300, "unavailable_after_seconds": 1800}
+  }
+}

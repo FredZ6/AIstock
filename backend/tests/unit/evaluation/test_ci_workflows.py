@@ -43,6 +43,10 @@ def test_weekly_live_provider_smoke_is_explicitly_credential_gated() -> None:
     assert "scripts/run_offline_eval.py" in text
     assert "LIVE_PROVIDER_TESTS" in text
     assert "secrets.ALPACA_DATA_KEY" in text
+    assert "secrets.ALPHA_VANTAGE_API_KEY" in text
+    assert "FMP_API_KEY" not in text
+    assert "Alpha Vantage provider smoke when configured" in text
+    assert text.count("Report skipped") == 3
     assert "if:" in text
     assert "if: always()" in text
     lowered = text.lower()

@@ -33,18 +33,21 @@ jobs:
         env:
           ALPACA_DATA_KEY: ${{ secrets.ALPACA_DATA_KEY }}
           ALPACA_DATA_SECRET: ${{ secrets.ALPACA_DATA_SECRET }}
-          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: |
           test -n "$SEC_USER_AGENT" && echo "sec=true" >> "$GITHUB_OUTPUT" || echo "sec=false" >> "$GITHUB_OUTPUT"
           test -n "$ALPACA_DATA_KEY" && test -n "$ALPACA_DATA_SECRET" && echo "alpaca=true" >> "$GITHUB_OUTPUT" || echo "alpaca=false" >> "$GITHUB_OUTPUT"
-          test -n "$FMP_API_KEY" && echo "fmp=true" >> "$GITHUB_OUTPUT" || echo "fmp=false" >> "$GITHUB_OUTPUT"
+          test -n "$ALPHA_VANTAGE_API_KEY" && echo "alpha=true" >> "$GITHUB_OUTPUT" || echo "alpha=false" >> "$GITHUB_OUTPUT"
       - name: SEC provider smoke when configured
         if: steps.provider_credentials.outputs.sec == 'true'
         env:
           LIVE_PROVIDER_TESTS: "1"
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: uv run pytest backend/tests/contract/providers/test_live_adapter_contracts.py -m live -k sec -q
+      - name: Report skipped SEC provider smoke
+        if: steps.provider_credentials.outputs.sec != 'true'
+        run: echo "SKIP SEC live smoke - SEC_USER_AGENT is not configured"
       - name: Alpaca market-data smoke when configured
         if: steps.provider_credentials.outputs.alpaca == 'true'
         env:
@@ -52,12 +55,18 @@ jobs:
           ALPACA_DATA_KEY: ${{ secrets.ALPACA_DATA_KEY }}
           ALPACA_DATA_SECRET: ${{ secrets.ALPACA_DATA_SECRET }}
         run: uv run pytest backend/tests/contract/providers/test_live_adapter_contracts.py -m live -k alpaca -q
-      - name: FMP provider smoke when configured
-        if: steps.provider_credentials.outputs.fmp == 'true'
+      - name: Report skipped Alpaca provider smoke
+        if: steps.provider_credentials.outputs.alpaca != 'true'
+        run: echo "SKIP Alpaca live smoke - market-data credentials are not configured"
+      - name: Alpha Vantage provider smoke when configured
+        if: steps.provider_credentials.outputs.alpha == 'true'
         env:
           LIVE_PROVIDER_TESTS: "1"
-          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
-        run: uv run pytest backend/tests/contract/providers/test_live_adapter_contracts.py -m live -k fmp -q
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+        run: uv run pytest backend/tests/contract/providers/test_alpha_vantage_ingestion.py -m live -k alpha_live_contract -q
+      - name: Report skipped Alpha Vantage provider smoke
+        if: steps.provider_credentials.outputs.alpha != 'true'
+        run: echo "SKIP Alpha Vantage live smoke - ALPHA_VANTAGE_API_KEY is not configured"
       - name: Upload evaluation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -7,7 +7,12 @@ from stock_platform.infrastructure.db.base import Base
 from stock_platform.infrastructure.db.models import tables as _tables  # noqa: F401
 
 config = context.config
-if database_url := os.getenv("DATABASE_URL"):
+default_url = "postgresql+psycopg://postgres:postgres@localhost:55432/stock_platform"
+configured_url = config.get_main_option("sqlalchemy.url")
+database_url = config.attributes.get("database_url")
+if database_url is None and configured_url == default_url:
+    database_url = os.getenv("DATABASE_URL")
+if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

@@ -6,21 +6,27 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, func, insert, select
 from stock_platform.application.alerting.features import MinuteBar
+from stock_platform.application.ingestion.jobs import IngestionJobSpec
 from stock_platform.application.runs import append_run_event
 from stock_platform.domain.common.ids import Symbol
+from stock_platform.domain.ingestion.models import DataPurpose, FeedType, IngestionRequest
 from stock_platform.infrastructure.db.models.tables import (
     agent_event,
     agent_run,
     cash_ledger,
     paper_fill,
 )
+from stock_platform.infrastructure.ingestion.job_store import IngestionJobStore
 from stock_platform.infrastructure.messaging.market_stream import RedisMarketStream
 from stock_platform.infrastructure.recovery import (
     CircuitBreaker,
     RecoveryDecision,
     recover_expired_run,
 )
-from stock_platform.infrastructure.recovery_probe import persist_paper_fill_probe
+from stock_platform.infrastructure.recovery_probe import (
+    persist_paper_fill_probe,
+    recover_ingestion_leases,
+)
 from stock_platform.workers.schedules import recover_queued_runs
 
 
@@ -100,6 +106,37 @@ def test_paper_fill_recovery_probe_is_nonempty_and_idempotent(
     assert replay == first
     assert fill_count == 1
     assert ledger_count == 3
+
+
+def test_ingestion_lease_recovery_probe_is_nonempty_and_idempotent(
+    isolated_database_url: str,
+) -> None:
+    config = Config("backend/alembic.ini")
+    config.set_main_option("sqlalchemy.url", isolated_database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(isolated_database_url)
+    now = datetime(2026, 8, 28, 1, tzinfo=UTC)
+    store = IngestionJobStore(engine)
+    job_id = store.enqueue(
+        IngestionJobSpec(
+            request=IngestionRequest(
+                {"provider": "ALPACA", "dataset": "price_bars", "symbol": "NVDA"}
+            ),
+            provider="ALPACA",
+            dataset=FeedType.PRICE_BARS,
+            window_start=now - timedelta(minutes=1),
+            window_end=now,
+            purpose=DataPurpose.RESEARCH,
+            policy_version="ingestion-v1",
+            max_attempts=3,
+        ),
+        now=now,
+    )
+    assert store.claim(job_id, worker_id="lost", now=now, lease_for=timedelta(seconds=1))
+    engine.dispose()
+
+    assert recover_ingestion_leases(isolated_database_url, at=now + timedelta(seconds=2)) == 1
+    assert recover_ingestion_leases(isolated_database_url, at=now + timedelta(seconds=2)) == 0
 
 
 def test_redis_stream_loss_keeps_authoritative_events_and_requeues_expired_work(

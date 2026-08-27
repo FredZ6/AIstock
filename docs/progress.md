@@ -2141,3 +2141,212 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   the process-wide SEC limiter is not cross-process distributed; the existing Node
   `--localstorage-file` warning remains non-functional. No live brokerage, real-money execution, or
   provider credentials were added.
+
+### M7.5 RDB-4 — FRE-27 Task 15 deterministic ingestion quality (2026-08-27)
+
+- Started from clean `main@9d3dea7` in isolated branch `codex/fre-27-rdb-4`; the primary worktree's
+  user-owned UI changes remain untouched. The locked plan's historical `0028` migration name was
+  advanced to forward-only `0033_ingestion_quality` because main already contains migrations through
+  `0032`.
+- Added versioned local quality thresholds for Alpaca news/bars and heartbeat, SEC filings, and Alpha
+  earnings. SIP freshness is evaluated relative to the entitlement-declared delay; IEX health uses
+  stream heartbeat lag rather than absence of symbol trades. Provider health is derived from job,
+  cursor, and quality signals without a persisted ProviderHealthSnapshot.
+- Added deterministic coverage-scoped bar reconciliation for missing intervals, duplicates,
+  revisions, OHLC errors, invalid volume, and minute-to-daily volume mismatch. IEX and SIP remain
+  separate series and are never treated as conflicts merely because their values differ.
+- Added append-only `DataQualityObservation` with RawDataObject and NormalizedRecord lineage plus raw
+  freshness, coverage, provider, delay, conflict, reconciliation/status, observed time, details, and
+  policy version. No A/B/C/D grade, ReconciliationResult table, or health snapshot table exists.
+- Initial RED command exited 2 with three expected missing-module import errors. Unit GREEN exited 0
+  with 14 passed; focused quality-history integration exited 0 with 2 passed. The first acceptance
+  command stopped correctly because the shared validation database was still at 0032. Alembic then
+  upgraded to 0033 and a second upgrade was a no-op; metadata drift check exited 0.
+- Final Task 15 static gates exited 0: 289 files format clean, Ruff clean, strict Mypy clean over 255
+  source files. The quality, reconciliation, append-only, empty/upgrade migration, schema, Alpaca
+  lineage, and market replay suite exited 0 with 47 passed. No provider credential or live result was
+  used or fabricated.
+
+### M7.5 RDB-4 — FRE-27 Task 16 corporate-action and ADR versions (2026-08-27)
+
+- Extended the unmerged forward-only `0033` migration with append-only CorporateAction versions,
+  mandatory NormalizedRecord lineage, optional canonical Security identity, provider action identity,
+  supersession, explicit source/settlement currency, and structured details. Legacy rows receive a
+  deterministic normalized record during upgrade; the migration can also safely downgrade an older
+  Task-15-only `0033` database.
+- Added typed SPLIT, CASH_DIVIDEND, STOCK_DIVIDEND, ADR_RATIO_CHANGE, SPIN_OFF, SYMBOL_CHANGE, and
+  MERGER_ACQUISITION facts. Point-in-time reads require both effective and available timestamps and
+  expose only the latest version visible at the decision cutoff.
+- Position views apply Decimal-only split, stock-dividend, and ADR-ratio adjustments without changing
+  historical fills or ledger rows. Reference actions emit explicit unsupported-action gaps, and cash
+  dividends reject implicit cross-currency conversion.
+- RED exited 2 with the expected missing typed-action imports. Focused GREEN exited 0 with 7 passed.
+  A migration-replay failure against the earlier Task-15-only `0033` exposed and fixed conditional
+  downgrade compatibility. Final related portfolio, ingestion, migration, and append-only tests exited
+  0 with 18 passed; Alembic upgrade was a no-op and `alembic check` reported no drift. Ruff format,
+  Ruff lint, and strict Mypy over 162 source files all exited 0.
+
+### M7.5 RDB-4 — FRE-27 Task 17 replay, recovery, metrics, and release gates (2026-08-27)
+
+- Added provider-free replay from immutable object storage. Replay verifies PostgreSQL identity and
+  SHA-256 before invoking a supplied newer normalizer, creates a new versioned normalization outbox
+  row, preserves prior NormalizedRecord facts, and rejects semantic conflicts on idempotent retry.
+- Added bounded Prometheus signals for job lag/state, cursor lag, durable backlog, normalization
+  rejection, quality status, provider rate-limit remainder, and opt-in live-smoke outcomes. Gauge
+  regressions verify that repeated observations replace rather than accumulate values.
+- Extended central telemetry redaction to provider URL query credentials and serialized WebSocket auth
+  messages while preserving safe URL fields. Headers and recursively nested credentials retain the
+  existing redaction boundary.
+- Added `scripts/verify-ingestion.sh`: recorded replay/recovery/quality/security checks always run;
+  Alpaca, SEC, and Alpha live smoke is individually opt-in and explicitly reports SKIP when its flag
+  or secret is absent. No default CI path enables provider traffic.
+- Initial RED exited 2 on the missing replay module. A new gauge regression then failed on cumulative
+  semantics and drove the shared gauge-family fix. Final release script exited 0 with 17 passed and
+  three explicit opt-in skips. The expanded ingestion/MinIO/failure-boundary suite exited 0 with 98
+  passed / 1 live contract skipped. Additional metrics/assets/Alpha checks exited 0 with 10 passed /
+  1 live test skipped. Ruff format/lint and strict Mypy over 163 source files exited 0.
+
+### M7.5 RDB-4 — FRE-27 Task 18 final acceptance (2026-08-27)
+
+- A disposable PostgreSQL 17/TimescaleDB container with no persistent volume validated a completely
+  empty upgrade to `0033_ingestion_quality` (exit 0), then a full `head → 0024 → head` cycle and
+  `alembic check` (exit 0). This exposed and fixed an Alembic naming-convention bug in the new
+  CorporateAction downgrade; a dedicated automated regression now covers the path.
+- Alembic test configuration now preserves an explicitly supplied per-test database URL while CLI
+  default configuration remains overridable by `DATABASE_URL`. The regression passed against the
+  isolated server and prevents environment configuration from redirecting migrations out of their
+  disposable test databases.
+- Fixture seed ran twice against the disposable validation database (both exit 0): the first created
+  11 Watchlist securities and 31 normalized records; the second created 0 securities and 0 normalized
+  records. `verify-ingestion.sh` then ran twice (both exit 0), each with 17 passed and explicit SKIP
+  notices for Alpaca, SEC, and Alpha live smoke because opt-in flags/real credentials were absent.
+- Final `make verify` ran twice after all fixes and both exited 0 with identical results: 299 files
+  format clean, Ruff clean, strict Mypy clean over 260 source/test files, Alembic/MCP/OpenAPI clean,
+  backend 627 passed / 4 credential-gated live tests skipped, Web TypeScript/ESLint clean, Vitest 14
+  files / 94 tests passed, and the nine-route Next.js production build succeeded.
+- Local infrastructure note: the preserved fixed-name `ai_stock_m0_postgres` Docker volume contains
+  a pre-existing invalid checkpoint and cannot start. It was not deleted or repaired. Acceptance used
+  a disposable healthy database; provider/MinIO tests remained recorded-only. The existing Node
+  `--localstorage-file` warning remains non-functional. No live provider result was fabricated.
+
+### M7.5 RDB-4 — FRE-27 professional-review closure (2026-08-27)
+
+- Closed all eight Important findings from the first professional review. Telemetry redaction now
+  normalizes real hyphenated Alpaca and generic API-key headers and covers Alpha Vantage `apikey`
+  query parameters. DELAY and CONFLICT are first-class quality assessments; cursor lag must carry a
+  status derived from versioned delay thresholds and can no longer produce a silent healthy state.
+- CorporateAction point-in-time selection is scoped by provider and revision availability rather
+  than effective-date order. Database constraints now require mutually exclusive action values and
+  strictly positive stock-dividend ratios. The 0033 legacy upgrade preserves the original currency
+  and binds only the exact generated legacy NormalizedRecord even when another v2 record exists.
+- Weekly CI replaced the obsolete FMP lane with credential-gated Alpha Vantage and reports explicit
+  SEC/Alpaca/Alpha SKIP steps. The ingestion release gate now covers raw/MinIO replay, outbox and
+  normalization, fact and quality persistence, lease recovery, pagination, cursor compare-and-swap,
+  and secret redaction. `docs/runbooks/ingestion-recovery.md` documents all seven commit boundaries.
+- RED evidence: focused quality imports failed before DELAY/CONFLICT existed; workflow/assets tests
+  failed 3 tests before Alpha/SKIP/gate/runbook changes. GREEN evidence: expanded
+  `verify-ingestion.sh` exited 0 with 52 passed and three explicit credential-gated skips; the focused
+  quality/CI/CorporateAction/migration suite exited 0 with 26 passed.
+- Fresh full `make verify` exited 0: 300 files format clean, Ruff clean, strict Mypy clean over 261
+  source files, no Alembic/MCP/OpenAPI drift, backend 638 passed / 4 credential-gated live tests
+  skipped, Web TypeScript/ESLint clean, Vitest 14 files / 94 tests passed, and all nine Next.js routes
+  built successfully. The existing Node `--localstorage-file` warning remains non-functional; no
+  provider credential, live response, or live-broker path was added.
+
+### M7.5 RDB-4 — FRE-27 second-review closure (2026-08-28)
+
+- The second professional review found three additional Important semantic gaps. CorporateAction
+  revisions now carry `supersedes_id`: if an earlier split, stock dividend, or ADR adjustment has
+  already changed an incremental Position, the revised row emits an explicit
+  `REVISED_CORPORATE_ACTION_REQUIRES_REPLAY` gap instead of multiplying again. A revised cash
+  dividend whose predecessor is already in CashLedger is rejected until an explicit append-only
+  reversal is supplied; it can no longer double-credit cash.
+- The 0033 migration now uses the USD server default only to backfill legacy rows from their existing
+  `currency`, then drops the default. New CorporateAction versions must provide source currency
+  explicitly, and a database regression proves omission is rejected.
+- `verify-ingestion.sh` now executes the real raw-dispatch fault suite, including object-store failure,
+  PostgreSQL failure after MinIO PUT/orphan reporting, durable outbox retry, and normalization
+  quarantine. A new quality-to-cursor boundary regression proves failed quality persistence leaves no
+  observation or cursor, while retry creates one observation and one CAS cursor generation.
+- Added the production `ingestion-leases` recovery probe backed by `IngestionJobStore.recover_expired`;
+  its integration test proves one expired lease is recovered once and a repeat is a zero-change no-op.
+  The focused CorporateAction/quality/recovery command exited 0 with 14 passed. The strengthened
+  ingestion gate exited 0 with 64 passed plus three explicit credential-gated provider skips. Ruff
+  format/lint and strict Mypy over 261 source files exited 0.
+- Fresh full `make verify` after these fixes exited 0: 300 files format clean, Ruff clean, strict
+  Mypy clean over 261 source files, no Alembic/MCP/OpenAPI drift, backend 642 passed / 4 live tests
+  skipped, Web TypeScript/ESLint clean, Vitest 14 files / 94 tests passed, and all nine Next.js routes
+  built successfully.
+
+### M7.5 RDB-4 — FRE-27 third-review closure (2026-08-28)
+
+- Closed the remaining multi-hop revision gap. A database insert trigger requires every subsequent
+  `(provider, provider_action_id)` version to directly supersede the latest version with increasing
+  availability. Point-in-time reads traverse the full stored ancestry, so an applied A is detected
+  even when the visible latest action is C in `A → B → C`. Missing-link and multi-hop regressions
+  pass; revised position/cash facts remain explicit replay/reversal gaps rather than silent mutation.
+- Wired versioned Alpaca freshness quality into the production page-ingestion path after normalized
+  facts and before cursor CAS. A simulated quality database failure now schedules the real durable
+  job for retry with zero quality rows and zero cursor generations; replay idempotently persists
+  quality, advances both page generations, and completes the job.
+- Added the service recovery probe integration suite to `verify-ingestion.sh`. The final strengthened
+  focused gate exited 0 with 72 passed plus explicit Alpaca/SEC/Alpha credential-gated skips. The
+  focused multi-hop, missing-link, source-currency, ledger, and production quality-retry command
+  exited 0 with 12 passed. Ruff format/lint and strict Mypy over 261 source files exited 0.
+- Fresh full `make verify` after the third-review fixes exited 0: 300 files format clean, Ruff clean,
+  strict Mypy clean over 261 source files, no Alembic/MCP/OpenAPI drift, backend 644 passed / 4 live
+  tests skipped, Web TypeScript/ESLint clean, Vitest 14 files / 94 tests passed, and all nine Next.js
+  routes built successfully.
+
+### M7.5 RDB-4 — FRE-27 fourth-review closure (2026-08-28)
+
+- Serialized CorporateAction revision insertion with a transaction-scoped PostgreSQL advisory lock
+  keyed by `(provider, provider_action_id)` before the latest-version check. A two-connection barrier
+  regression proves concurrent roots cannot both commit or fork the chain.
+- Production Alpaca quality now reads the persisted entitlement snapshot. SIP pages pass the frozen
+  `sip_delay_seconds` to deterministic freshness evaluation; IEX/non-SIP remains zero-delay. A live-
+  path recorded regression proves a 17-minute-old SIP page with a frozen 15-minute entitlement delay
+  remains PASS with both raw freshness and declared delay preserved.
+- Concurrent-revision, SIP-delay, and quality-retry regressions exited 0 with 3 passed. The final
+  ingestion release gate exited 0 with 73 passed plus explicit Alpaca/SEC/Alpha credential-gated
+  skips. Ruff format/lint and strict Mypy over 261 source files exited 0.
+- The concurrency fixture was then made repeat-safe with unique immutable raw identity and an
+  isolated AAPL symbol. The CorporateAction integration suite passed twice consecutively against the
+  same database (9 passed each run). Fresh full `make verify` exited 0: 300 files format clean, Ruff
+  clean, strict Mypy clean over 261 source files, no Alembic/MCP/OpenAPI drift, backend 646 passed / 4
+  live tests skipped, Web TypeScript/ESLint clean, Vitest 14 files / 94 tests passed, and all nine
+  Next.js routes built successfully.
+
+### M7.5 RDB-4 — FRE-27 fifth-review closure (2026-08-28)
+
+- Removed market-feed entitlement semantics from Alpaca company-news quality. A recorded production
+  worker regression proves that 12-minute-old news is DEGRADED under the versioned 10-minute news
+  threshold, with no IEX/SIP coverage and zero declared market-feed delay, even when the scheduling
+  entitlement snapshot contains SIP with a 15-minute delay.
+- Wired SEC filing and Alpha Vantage earnings-calendar freshness assessment into their production
+  persistence transactions. Every normalized filing/event now receives an immutable
+  DataQualityObservation before job completion; SEC quality persistence retains the active lease
+  transaction guard.
+- RED evidence: the three recorded worker regressions failed with Alpaca news PASS instead of
+  DEGRADED and zero SEC/Alpha quality rows. GREEN evidence: the same command exited 0 with 3 passed.
+  The strengthened ingestion release gate exited 0 with 74 passed plus explicit Alpaca/SEC/Alpha
+  credential-gated skips.
+- Fresh full `make verify` exited 0: 300 files format clean, Ruff clean, strict Mypy clean over 261
+  source files, no Alembic/MCP/OpenAPI drift, backend 647 passed / 4 live tests skipped, Web
+  TypeScript/ESLint clean, Vitest 14 files / 94 tests passed, and all nine Next.js routes built
+  successfully. No live provider response or credential was fabricated.
+
+### M7.5 RDB-4 — FRE-27 sixth-review closure (2026-08-28)
+
+- Closed the final professional-review blocker for successful SEC polls with unchanged filings.
+  Every fetched SEC page now creates snapshot-specific NormalizedRecord lineage even when its typed
+  SecFiling fact already exists. This lets the new raw snapshot carry immutable freshness evidence
+  without duplicating the append-only typed filing or downstream financial facts.
+- RED evidence: the existing next-day unchanged-filings integration flow retained only the original
+  three quality observations instead of the expected six. GREEN evidence: it now preserves three
+  SecFiling facts and four FinancialFacts while recording six page-snapshot quality observations.
+  The complete SEC/Alpha/Alpaca-news related suite exited 0 with 10 passed.
+- Final ingestion release gate exited 0 with 74 passed and three explicit credential-gated provider
+  skips. Fresh `make verify` exited 0: 300 files format clean, Ruff clean, strict Mypy clean over 261
+  source files, no Alembic/MCP/OpenAPI drift, backend 647 passed / 4 skipped, Web TypeScript/ESLint
+  clean, Vitest 14 files / 94 tests passed, and all nine Next.js routes built successfully.

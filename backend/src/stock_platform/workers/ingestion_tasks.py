@@ -29,6 +29,7 @@ from stock_platform.application.ingestion.raw_writer import (
     RawWriter,
     report_orphaned_raw_objects,
 )
+from stock_platform.application.market_data.quality import QualityPolicy, evaluate_freshness
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.ingestion.models import (
@@ -53,6 +54,7 @@ from stock_platform.infrastructure.ingestion.fact_store import (
     PostgresAlpacaFactStore,
     PostgresEarningsEventStore,
     PostgresFinancialFactStore,
+    PostgresQualityFactStore,
     PostgresSecFactStore,
 )
 from stock_platform.infrastructure.ingestion.job_store import IngestionJobStore
@@ -316,9 +318,12 @@ def _persist_alpaca_batch(
     timeframe: str | None,
     request_identity: str,
     now: datetime,
+    declared_delay: timedelta = timedelta(0),
 ) -> None:
     if batch.feed_type is FeedType.PRICE_BARS and coverage is None:
         raise ValueError("Alpaca bars require verified entitlement coverage")
+    quality_coverage = coverage if batch.feed_type is FeedType.PRICE_BARS else None
+    quality_delay = declared_delay if batch.feed_type is FeedType.PRICE_BARS else timedelta(0)
     verified_batch = (
         ProviderBatch(
             provider=batch.provider,
@@ -348,7 +353,7 @@ def _persist_alpaca_batch(
             "provider": batch.provider,
             "feed_type": batch.feed_type.value,
             "symbol": str(batch.symbol),
-            "coverage": coverage.value if coverage is not None else None,
+            "coverage": quality_coverage.value if quality_coverage is not None else None,
             "timeframe": timeframe,
             "request_identity": request_identity,
             "body_sha256": hashlib.sha256(batch.body).hexdigest(),
@@ -381,6 +386,77 @@ def _persist_alpaca_batch(
             terminal=isinstance(error, ValueError),
         )
         raise
+    _persist_alpaca_quality(
+        engine=engine,
+        raw_id=raw_id,
+        batch=verified_batch,
+        coverage=quality_coverage,
+        observed_at=now,
+        declared_delay=quality_delay,
+    )
+
+
+def _persist_alpaca_quality(
+    *,
+    engine: Engine,
+    raw_id: UUID,
+    batch: ProviderBatch,
+    coverage: MarketDataCoverage | None,
+    observed_at: datetime,
+    declared_delay: timedelta,
+) -> None:
+    """Persist versioned quality before the caller is allowed to advance its cursor."""
+    with engine.begin() as connection:
+        _persist_freshness_quality(
+            connection=connection,
+            raw_id=raw_id,
+            provider=batch.provider,
+            dataset=batch.feed_type.value,
+            observed_at=observed_at,
+            latest_available_at=batch.observed_at,
+            coverage=coverage,
+            declared_delay=declared_delay,
+        )
+
+
+def _persist_freshness_quality(
+    *,
+    connection: Connection,
+    raw_id: UUID,
+    provider: str,
+    dataset: str,
+    observed_at: datetime,
+    latest_available_at: datetime,
+    coverage: MarketDataCoverage | None = None,
+    declared_delay: timedelta = timedelta(0),
+    require_normalized: bool = True,
+) -> int:
+    """Attach one immutable freshness fact to every normalized record for a raw object."""
+    policy = QualityPolicy.load(Path(__file__).parents[3] / "config" / "data_quality_v1.yaml")
+    assessment = evaluate_freshness(
+        provider=provider,
+        dataset=dataset,
+        observed_at=observed_at,
+        latest_available_at=latest_available_at,
+        coverage=coverage,
+        declared_delay=declared_delay,
+        policy=policy,
+    )
+    normalized_ids = tuple(
+        connection.execute(
+            select(normalized_record.c.id).where(normalized_record.c.raw_data_object_id == raw_id)
+        ).scalars()
+    )
+    if not normalized_ids and require_normalized:
+        raise ValueError("quality persistence requires normalized lineage")
+    quality = PostgresQualityFactStore(connection)
+    for normalized_id in normalized_ids:
+        quality.persist(
+            raw_id=raw_id,
+            normalized_id=cast(UUID, normalized_id),
+            assessment=assessment,
+        )
+    return len(normalized_ids)
 
 
 def _job_cursor(
@@ -464,6 +540,23 @@ def execute_alpaca_ingestion_job(
             now=checked_now,
         )
         return False
+    raw_sip_delay = entitlement.get("sip_delay_seconds")
+    if coverage is MarketDataCoverage.SIP:
+        if (
+            not isinstance(raw_sip_delay, int)
+            or isinstance(raw_sip_delay, bool)
+            or raw_sip_delay < 0
+        ):
+            store.fail(
+                lease,
+                error_class=IngestionErrorClass.INVALID_AUTH,
+                error_detail={"reason": "invalid_sip_delay_snapshot"},
+                now=checked_now,
+            )
+            return False
+        declared_delay = timedelta(seconds=raw_sip_delay)
+    else:
+        declared_delay = timedelta(0)
     symbol = str(request["symbol"])
     timeframe = request.get("timeframe")
     scope_key = str(job_id)
@@ -492,6 +585,7 @@ def execute_alpaca_ingestion_job(
                 timeframe=str(timeframe) if timeframe is not None else None,
                 request_identity=str(row["request_hash"]),
                 now=max(persisted_at, fetched.observed_at),
+                declared_delay=declared_delay,
             )
 
         coordinator = IngestionCoordinator(
@@ -715,7 +809,7 @@ def _persist_sec_filings(
         transaction_guard=transaction_guard,
     )
     result = normalizer.normalize_submissions(submissions, identity=identity)
-    pages = [(submissions_raw_id, result.filings)]
+    pages = [(submissions_raw_id, submissions, result.filings)]
     for file_name in result.historical_submission_files:
         historical = transport.fetch_historical_submissions(
             symbol, file_name=file_name, as_of=cutoff
@@ -734,13 +828,38 @@ def _persist_sec_filings(
         pages.append(
             (
                 historical_raw_id,
+                historical,
                 normalizer.normalize_historical_submissions(historical, identity=identity),
             )
         )
     if identity.security_id is None:
         raise ValueError("SEC Security identity is missing its PIT security_id")
-    for raw_id, filings in pages:
+    for raw_id, batch, filings in pages:
         for filing in filings:
+            normalized_values = {
+                "raw_data_object_id": raw_id,
+                "record_type": "sec_filing",
+                "record_key": filing.accession_number,
+                "normalization_version": "sec-filings-v1",
+                "payload": filing.payload | {"symbol": symbol},
+            }
+            with engine.begin() as connection:
+                transaction_guard(connection)
+                normalized_id = connection.execute(
+                    insert(normalized_record)
+                    .values(**normalized_values)
+                    .on_conflict_do_nothing(constraint="uq_normalized_record_version")
+                    .returning(normalized_record.c.id)
+                ).scalar_one_or_none()
+                if normalized_id is None:
+                    normalized_id = connection.execute(
+                        select(normalized_record.c.id).where(
+                            normalized_record.c.raw_data_object_id == raw_id,
+                            normalized_record.c.record_type == "sec_filing",
+                            normalized_record.c.record_key == filing.accession_number,
+                            normalized_record.c.normalization_version == "sec-filings-v1",
+                        )
+                    ).scalar_one()
             with engine.connect() as connection:
                 existing_filing = connection.execute(
                     select(sec_filing.c.id).where(
@@ -769,28 +888,6 @@ def _persist_sec_filings(
             )
             with engine.begin() as connection:
                 transaction_guard(connection)
-                normalized_values = {
-                    "raw_data_object_id": raw_id,
-                    "record_type": "sec_filing",
-                    "record_key": filing.accession_number,
-                    "normalization_version": "sec-filings-v1",
-                    "payload": filing.payload | {"symbol": symbol},
-                }
-                normalized_id = connection.execute(
-                    insert(normalized_record)
-                    .values(**normalized_values)
-                    .on_conflict_do_nothing(constraint="uq_normalized_record_version")
-                    .returning(normalized_record.c.id)
-                ).scalar_one_or_none()
-                if normalized_id is None:
-                    normalized_id = connection.execute(
-                        select(normalized_record.c.id).where(
-                            normalized_record.c.raw_data_object_id == raw_id,
-                            normalized_record.c.record_type == "sec_filing",
-                            normalized_record.c.record_key == filing.accession_number,
-                            normalized_record.c.normalization_version == "sec-filings-v1",
-                        )
-                    ).scalar_one()
                 PostgresSecFactStore(connection).persist_filing(
                     security_id=identity.security_id,
                     raw_id=raw_id,
@@ -798,6 +895,16 @@ def _persist_sec_filings(
                     document_raw_id=document_raw_id,
                     filing=filing,
                 )
+        with engine.begin() as connection:
+            transaction_guard(connection)
+            _persist_freshness_quality(
+                connection=connection,
+                raw_id=raw_id,
+                provider="SEC",
+                dataset=FeedType.FILINGS.value,
+                observed_at=max(require_aware(ingested_at), batch.observed_at),
+                latest_available_at=batch.observed_at,
+            )
 
 
 def _persist_sec_company_facts(
@@ -1286,6 +1393,14 @@ def execute_alpha_earnings_ingestion_job(
                     normalized_id=cast(UUID, normalized_id),
                     event=event,
                 )
+            _persist_freshness_quality(
+                connection=connection,
+                raw_id=raw_id,
+                provider="ALPHA_VANTAGE",
+                dataset=FeedType.EARNINGS_CALENDAR.value,
+                observed_at=persisted_at,
+                latest_available_at=batch.observed_at,
+            )
     except ProviderTransportError as error:
         if error.error_class in {
             IngestionErrorClass.TIMEOUT,

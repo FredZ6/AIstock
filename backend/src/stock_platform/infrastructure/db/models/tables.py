@@ -882,6 +882,14 @@ corporate_action = Table(
     Column(
         "raw_data_object_id", UUID(as_uuid=True), ForeignKey("raw_data_object.id"), nullable=False
     ),
+    Column(
+        "normalized_record_id",
+        UUID(as_uuid=True),
+        ForeignKey("normalized_record.id"),
+        nullable=False,
+    ),
+    Column("security_id", UUID(as_uuid=True), ForeignKey("security.id")),
+    Column("provider_action_id", Text, nullable=False),
     Column("symbol", Text, nullable=False),
     Column("action_type", Text, nullable=False),
     Column("effective_at", DateTime(timezone=True), nullable=False),
@@ -893,18 +901,41 @@ corporate_action = Table(
     Column("raw_object_key", Text, nullable=False),
     Column("split_ratio", Numeric),
     Column("cash_per_share", Numeric),
+    Column("stock_ratio", Numeric),
+    Column("old_adr_ratio", Numeric),
+    Column("new_adr_ratio", Numeric),
     Column("currency", Text, nullable=False, server_default=text("'USD'")),
+    Column("source_currency", Text, nullable=False),
+    Column("details", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    Column("supersedes_id", UUID(as_uuid=True), ForeignKey("corporate_action.id")),
     created_at(),
     CheckConstraint(
-        "action_type IN ('SPLIT', 'CASH_DIVIDEND')",
+        "action_type IN ('SPLIT', 'CASH_DIVIDEND', 'STOCK_DIVIDEND', 'SPIN_OFF', "
+        "'SYMBOL_CHANGE', 'MERGER_ACQUISITION', 'ADR_RATIO_CHANGE')",
         name=conv("ck_corporate_action_type"),
     ),
     CheckConstraint(
-        "(action_type = 'SPLIT' AND split_ratio > 0 AND cash_per_share IS NULL) OR "
-        "(action_type = 'CASH_DIVIDEND' AND cash_per_share >= 0 AND split_ratio IS NULL)",
+        "(action_type = 'SPLIT' AND split_ratio > 0 AND cash_per_share IS NULL "
+        " AND stock_ratio IS NULL AND old_adr_ratio IS NULL AND new_adr_ratio IS NULL) OR "
+        "(action_type = 'CASH_DIVIDEND' AND cash_per_share >= 0 AND split_ratio IS NULL "
+        " AND stock_ratio IS NULL AND old_adr_ratio IS NULL AND new_adr_ratio IS NULL) OR "
+        "(action_type = 'STOCK_DIVIDEND' AND stock_ratio > 0 AND split_ratio IS NULL "
+        " AND cash_per_share IS NULL AND old_adr_ratio IS NULL AND new_adr_ratio IS NULL) OR "
+        "(action_type = 'ADR_RATIO_CHANGE' AND old_adr_ratio > 0 AND new_adr_ratio > 0 "
+        " AND split_ratio IS NULL AND cash_per_share IS NULL AND stock_ratio IS NULL) OR "
+        "(action_type IN ('SPIN_OFF', 'SYMBOL_CHANGE', 'MERGER_ACQUISITION') "
+        " AND split_ratio IS NULL AND cash_per_share IS NULL AND stock_ratio IS NULL "
+        " AND old_adr_ratio IS NULL AND new_adr_ratio IS NULL)",
         name=conv("ck_corporate_action_value"),
     ),
+    CheckConstraint(
+        "supersedes_id IS NULL OR supersedes_id <> id",
+        name=conv("ck_corporate_action_supersedes_self"),
+    ),
     CheckConstraint("available_at <= ingested_at", name=conv("ck_corporate_action_times")),
+    UniqueConstraint(
+        "provider", "provider_action_id", "available_at", name="uq_corporate_action_version"
+    ),
 )
 Index(
     "corporate_action_visible_idx",
@@ -1454,6 +1485,66 @@ Index(
     earnings_event.c.security_id,
     earnings_event.c.event_date,
     earnings_event.c.available_at,
+)
+data_quality_observation = Table(
+    "data_quality_observation",
+    metadata,
+    uuid_pk(),
+    Column(
+        "raw_data_object_id",
+        UUID(as_uuid=True),
+        ForeignKey("raw_data_object.id"),
+        nullable=False,
+    ),
+    Column(
+        "normalized_record_id",
+        UUID(as_uuid=True),
+        ForeignKey("normalized_record.id"),
+        nullable=False,
+    ),
+    Column("provider", Text, nullable=False),
+    Column("dataset", Text, nullable=False),
+    Column("dimension", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("observed_at", DateTime(timezone=True), nullable=False),
+    Column("freshness", Interval),
+    Column("coverage", Text),
+    Column("delay", Interval),
+    Column("conflict", Boolean, nullable=False, server_default=text("false")),
+    Column("policy_version", Text, nullable=False),
+    Column("details", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    created_at(),
+    CheckConstraint(
+        "dimension IN ('FRESHNESS', 'COVERAGE', 'PROVIDER', 'DELAY', "
+        "'CONFLICT', 'RECONCILIATION', 'HEARTBEAT')",
+        name=conv("ck_data_quality_dimension"),
+    ),
+    CheckConstraint(
+        "status IN ('PASS', 'DEGRADED', 'UNAVAILABLE', 'FAIL')",
+        name=conv("ck_data_quality_status"),
+    ),
+    CheckConstraint(
+        "coverage IS NULL OR coverage IN ('IEX', 'SIP')",
+        name=conv("ck_data_quality_coverage"),
+    ),
+    CheckConstraint(
+        "(freshness IS NULL OR freshness >= interval '0 seconds') "
+        "AND (delay IS NULL OR delay >= interval '0 seconds')",
+        name=conv("ck_data_quality_intervals"),
+    ),
+    UniqueConstraint(
+        "normalized_record_id",
+        "dimension",
+        "observed_at",
+        "policy_version",
+        name="uq_data_quality_observation_version",
+    ),
+)
+Index(
+    "data_quality_provider_observed_idx",
+    data_quality_observation.c.provider,
+    data_quality_observation.c.dataset,
+    data_quality_observation.c.observed_at,
 )
 option_snapshot = time_series_table(
     "option_snapshot",
