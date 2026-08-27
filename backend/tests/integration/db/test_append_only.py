@@ -19,11 +19,15 @@ APPEND_ONLY_TABLES = {
     "ingestion_raw_link",
     "market_bar",
     "news_article",
+    "sec_filing",
+    "financial_fact",
+    "earnings_event",
 }
 
 UPDATE_PROBE_COLUMNS = {
     "market_bar": "event_time",
     "news_article": "published_at",
+    "sec_filing": "accepted_at",
 }
 
 
@@ -98,6 +102,7 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
         risk_decision_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         market_context_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         transaction_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
+        security_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         raw_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         ingestion_job_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         ingestion_fixtures = (
@@ -201,6 +206,73 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
                 """
             ),
             {"raw_id": raw_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO security (id, instrument_type)
+                VALUES (:security_id, 'COMMON_STOCK')
+                """
+            ),
+            {"security_id": security_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO sec_filing (
+                    security_id, raw_data_object_id, normalized_record_id,
+                    document_raw_data_object_id, provider, cik, accession_number,
+                    form, base_form, filing_date, accepted_at, available_at,
+                    primary_document, description, is_amendment, payload
+                ) VALUES (
+                    :security_id, :raw_id,
+                    (SELECT id FROM normalized_record WHERE raw_data_object_id = :raw_id LIMIT 1),
+                    :raw_id, 'FIXTURE', '0000000001', '0000000001-26-000001',
+                    '10-Q', '10-Q', current_date, now() - interval '1 minute',
+                    now() - interval '1 minute', 'fixture.htm', '', false, '{}'::jsonb
+                )
+                """
+            ),
+            {"security_id": security_id, "raw_id": raw_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO financial_fact (
+                    security_id, sec_filing_id, raw_data_object_id, normalized_record_id,
+                    provider, taxonomy, source_concept, canonical_concept,
+                    value, unit, currency, period_start, period_end,
+                    accession_number, available_at, mapping_status,
+                    mapping_version, input_provenance
+                ) VALUES (
+                    :security_id,
+                    (SELECT id FROM sec_filing WHERE accession_number = '0000000001-26-000001'),
+                    :raw_id,
+                    (SELECT id FROM normalized_record WHERE raw_data_object_id = :raw_id LIMIT 1),
+                    'FIXTURE', 'us-gaap', 'Revenues', 'REVENUE', 1, 'USD', 'USD',
+                    current_date - 1, current_date, '0000000001-26-000001', now(),
+                    'EXACT', 'append-only-v1', '[["us-gaap","Revenues"]]'::jsonb
+                )
+                """
+            ),
+            {"security_id": security_id, "raw_id": raw_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO earnings_event (
+                    security_id, raw_data_object_id, normalized_record_id,
+                    provider, provider_symbol, symbol, event_date,
+                    fiscal_date_end, estimate, currency, available_at, payload
+                ) VALUES (
+                    :security_id, :raw_id,
+                    (SELECT id FROM normalized_record WHERE raw_data_object_id = :raw_id LIMIT 1),
+                    'FIXTURE', 'FIXTURE', 'FIXTURE', current_date + 30,
+                    current_date, 1, 'USD', now(), '{}'::jsonb
+                )
+                """
+            ),
+            {"security_id": security_id, "raw_id": raw_id},
         )
         connection.execute(
             text(
@@ -322,6 +394,9 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
             "ingestion_raw_link",
             "market_bar",
             "news_article",
+            "sec_filing",
+            "financial_fact",
+            "earnings_event",
         }:
             connection.execute(text(f"INSERT INTO {table_name} DEFAULT VALUES"))
 

@@ -1,0 +1,25 @@
+{
+  "version": "financial-concepts-v1",
+  "exact": [
+    {"taxonomy": "us-gaap", "concept": "Revenues", "canonical": "REVENUE"},
+    {"taxonomy": "us-gaap", "concept": "RevenueFromContractWithCustomerExcludingAssessedTax", "canonical": "REVENUE"},
+    {"taxonomy": "ifrs-full", "concept": "Revenue", "canonical": "REVENUE"},
+    {"taxonomy": "us-gaap", "concept": "NetIncomeLoss", "canonical": "NET_INCOME"},
+    {"taxonomy": "ifrs-full", "concept": "ProfitLoss", "canonical": "NET_INCOME"},
+    {"taxonomy": "us-gaap", "concept": "NetCashProvidedByUsedInOperatingActivities", "canonical": "OPERATING_CASH_FLOW"},
+    {"taxonomy": "us-gaap", "concept": "PaymentsToAcquirePropertyPlantAndEquipment", "canonical": "CAPITAL_EXPENDITURES"}
+  ],
+  "ambiguous": [
+    {"taxonomy": "us-gaap", "concept": "OtherOperatingIncomeExpenseNet"}
+  ],
+  "derived": [
+    {
+      "canonical": "FREE_CASH_FLOW",
+      "operation": "subtract",
+      "inputs": [
+        {"taxonomy": "us-gaap", "concept": "NetCashProvidedByUsedInOperatingActivities"},
+        {"taxonomy": "us-gaap", "concept": "PaymentsToAcquirePropertyPlantAndEquipment"}
+      ]
+    }
+  ]
+}

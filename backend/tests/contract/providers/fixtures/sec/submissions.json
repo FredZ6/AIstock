@@ -1,0 +1,16 @@
+{
+  "cik": "0001045810",
+  "name": "NVIDIA CORP",
+  "filings": {
+    "recent": {
+      "accessionNumber": ["0001045810-26-000042", "0001045810-26-000043"],
+      "filingDate": ["2026-08-20", "2026-08-21"],
+      "acceptanceDateTime": ["2026-08-20T16:01:02.000Z", "2026-08-21T17:02:03.000Z"],
+      "reportDate": ["2026-07-31", "2026-07-31"],
+      "form": ["10-Q", "10-Q/A"],
+      "primaryDocument": ["nvda-20260731.htm", "nvda-20260731x10qa.htm"],
+      "primaryDocDescription": ["Quarterly report", "Quarterly report amendment"]
+    },
+    "files": [{"name": "CIK0001045810-submissions-001.json", "filingCount": 1}]
+  }
+}

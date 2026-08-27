@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -1297,6 +1298,163 @@ news_article = Table(
     ),
 )
 Index("news_article_pit_idx", news_article.c.published_at, news_article.c.available_at)
+sec_filing = Table(
+    "sec_filing",
+    metadata,
+    uuid_pk(),
+    Column("security_id", UUID(as_uuid=True), ForeignKey("security.id"), nullable=False),
+    Column(
+        "raw_data_object_id", UUID(as_uuid=True), ForeignKey("raw_data_object.id"), nullable=False
+    ),
+    Column(
+        "normalized_record_id",
+        UUID(as_uuid=True),
+        ForeignKey("normalized_record.id"),
+        nullable=False,
+    ),
+    Column(
+        "document_raw_data_object_id",
+        UUID(as_uuid=True),
+        ForeignKey("raw_data_object.id"),
+        nullable=False,
+    ),
+    Column("provider", Text, nullable=False),
+    Column("cik", Text, nullable=False),
+    Column("accession_number", Text, nullable=False),
+    Column("form", Text, nullable=False),
+    Column("base_form", Text, nullable=False),
+    Column("filing_date", Date, nullable=False),
+    Column("report_date", Date),
+    Column("accepted_at", DateTime(timezone=True), nullable=False),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("primary_document", Text, nullable=False),
+    Column("description", Text, nullable=False),
+    Column("is_amendment", Boolean, nullable=False),
+    Column("supersedes_id", UUID(as_uuid=True), ForeignKey("sec_filing.id")),
+    Column("payload", JSONB, nullable=False),
+    created_at(),
+    CheckConstraint("accepted_at = available_at", name=conv("ck_sec_filing_availability")),
+    CheckConstraint(
+        "supersedes_id IS NULL OR supersedes_id <> id", name=conv("ck_sec_filing_supersedes_self")
+    ),
+    CheckConstraint(
+        "(is_amendment AND form LIKE '%/A') OR (NOT is_amendment AND form NOT LIKE '%/A')",
+        name=conv("ck_sec_filing_amendment"),
+    ),
+    UniqueConstraint("provider", "accession_number", name="uq_sec_filing_accession"),
+)
+Index(
+    "sec_filing_pit_idx",
+    sec_filing.c.security_id,
+    sec_filing.c.accepted_at,
+    sec_filing.c.available_at,
+)
+financial_fact = Table(
+    "financial_fact",
+    metadata,
+    uuid_pk(),
+    Column("security_id", UUID(as_uuid=True), ForeignKey("security.id"), nullable=False),
+    Column("sec_filing_id", UUID(as_uuid=True), ForeignKey("sec_filing.id"), nullable=False),
+    Column(
+        "raw_data_object_id", UUID(as_uuid=True), ForeignKey("raw_data_object.id"), nullable=False
+    ),
+    Column(
+        "normalized_record_id",
+        UUID(as_uuid=True),
+        ForeignKey("normalized_record.id"),
+        nullable=False,
+    ),
+    Column("provider", Text, nullable=False),
+    Column("taxonomy", Text, nullable=False),
+    Column("source_concept", Text, nullable=False),
+    Column("canonical_concept", Text),
+    Column("value", Numeric, nullable=False),
+    Column("unit", Text, nullable=False),
+    Column("currency", Text),
+    Column("period_start", Date, nullable=False),
+    Column("period_end", Date, nullable=False),
+    Column("accession_number", Text, nullable=False),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("mapping_status", Text, nullable=False),
+    Column("mapping_version", Text, nullable=False),
+    Column("input_provenance", JSONB, nullable=False),
+    Column("supersedes_id", UUID(as_uuid=True), ForeignKey("financial_fact.id")),
+    created_at(),
+    CheckConstraint("period_start <= period_end", name=conv("ck_financial_fact_period")),
+    CheckConstraint(
+        "mapping_status IN ('EXACT', 'DERIVED', 'UNMAPPED', 'AMBIGUOUS')",
+        name=conv("ck_financial_fact_mapping_status"),
+    ),
+    CheckConstraint(
+        "(mapping_status IN ('EXACT', 'DERIVED')) = (canonical_concept IS NOT NULL)",
+        name=conv("ck_financial_fact_canonical_status"),
+    ),
+    CheckConstraint(
+        "supersedes_id IS NULL OR supersedes_id <> id",
+        name=conv("ck_financial_fact_supersedes_self"),
+    ),
+    UniqueConstraint(
+        "provider",
+        "security_id",
+        "taxonomy",
+        "source_concept",
+        "accession_number",
+        "unit",
+        "period_start",
+        "period_end",
+        "mapping_version",
+        name="uq_financial_fact_version",
+    ),
+)
+Index(
+    "financial_fact_pit_idx",
+    financial_fact.c.security_id,
+    financial_fact.c.period_end,
+    financial_fact.c.available_at,
+)
+earnings_event = Table(
+    "earnings_event",
+    metadata,
+    uuid_pk(),
+    Column("security_id", UUID(as_uuid=True), ForeignKey("security.id"), nullable=False),
+    Column(
+        "raw_data_object_id", UUID(as_uuid=True), ForeignKey("raw_data_object.id"), nullable=False
+    ),
+    Column(
+        "normalized_record_id",
+        UUID(as_uuid=True),
+        ForeignKey("normalized_record.id"),
+        nullable=False,
+    ),
+    Column("provider", Text, nullable=False),
+    Column("provider_symbol", Text, nullable=False),
+    Column("symbol", Text, nullable=False),
+    Column("event_date", Date, nullable=False),
+    Column("fiscal_date_end", Date, nullable=False),
+    Column("estimate", Numeric),
+    Column("currency", Text),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("supersedes_id", UUID(as_uuid=True), ForeignKey("earnings_event.id")),
+    Column("payload", JSONB, nullable=False),
+    created_at(),
+    CheckConstraint(
+        "supersedes_id IS NULL OR supersedes_id <> id",
+        name=conv("ck_earnings_event_supersedes_self"),
+    ),
+    UniqueConstraint(
+        "provider",
+        "normalized_record_id",
+        "provider_symbol",
+        "fiscal_date_end",
+        name="uq_earnings_event_snapshot_version",
+    ),
+)
+Index(
+    "earnings_event_pit_idx",
+    earnings_event.c.security_id,
+    earnings_event.c.event_date,
+    earnings_event.c.available_at,
+)
 option_snapshot = time_series_table(
     "option_snapshot",
     Column("symbol", Text, nullable=False),

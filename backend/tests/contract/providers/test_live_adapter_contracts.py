@@ -21,7 +21,7 @@ from stock_platform.infrastructure.providers.base import (
 from stock_platform.infrastructure.providers.fmp import FmpProvider
 from stock_platform.infrastructure.providers.sec import SecProvider
 
-AS_OF = datetime(2026, 8, 16, 12, tzinfo=UTC)
+AS_OF = datetime(2026, 8, 25, 12, tzinfo=UTC)
 
 
 class RecordingStore:
@@ -118,8 +118,8 @@ def test_alpaca_window_transport_carries_bounds_feed_timeframe_and_resume_token(
     )
 
     assert len(requests) == 1
-    assert "start=2026-08-16T11%3A00%3A00%2B00%3A00" in requests[0].url
-    assert "end=2026-08-16T12%3A00%3A00%2B00%3A00" in requests[0].url
+    assert "start=2026-08-25T11%3A00%3A00%2B00%3A00" in requests[0].url
+    assert "end=2026-08-25T12%3A00%3A00%2B00%3A00" in requests[0].url
     assert "timeframe=1Min" in requests[0].url
     assert "feed=sip" in requests[0].url
     assert "page_token=opaque-page-2" in requests[0].url
@@ -164,7 +164,7 @@ def test_alpaca_transport_parses_http_date_retry_after() -> None:
         data_secret="fixture-secret",
         transport=lambda _: HttpResponse(
             status_code=429,
-            headers={"Retry-After": "Sun, 16 Aug 2026 12:02:00 GMT"},
+            headers={"Retry-After": "Tue, 25 Aug 2026 12:02:00 GMT"},
             body=b"{}",
         ),
         clock=lambda: AS_OF,
@@ -272,7 +272,7 @@ def test_live_adapters_use_fixed_read_only_endpoints_and_persist_raw_first(
     adapter: ResearchDataProvider
     if provider == "sec":
         adapter = SecProvider(
-            user_agent="research@example.com",
+            user_agent="AIStock/0.1 research@example.com",
             transport=transport,
             raw_store=store,
             record_store=record_store,
@@ -338,7 +338,7 @@ def test_sec_requires_identity_and_sets_user_agent() -> None:
         clock=lambda: AS_OF,
     ).fetch(FeedType.COMPANY_FACTS, "NVDA", AS_OF)
     configured = SecProvider(
-        user_agent="research@example.com",
+        user_agent="AIStock/0.1 research@example.com",
         transport=successful_transport(requests),
         raw_store=store,
         record_store=RecordingRecordStore(),
@@ -347,7 +347,7 @@ def test_sec_requires_identity_and_sets_user_agent() -> None:
 
     assert missing.status.value == "unavailable"
     assert configured.status.value == "ok"
-    assert requests[-1].headers["User-Agent"] == "research@example.com"
+    assert requests[-1].headers["User-Agent"] == "AIStock/0.1 research@example.com"
 
 
 def test_rate_limit_retries_with_exponential_backoff_and_jitter() -> None:
@@ -387,7 +387,7 @@ def test_governed_provider_opens_circuit_and_skips_transport_until_timeout() -> 
         return HttpResponse(status_code=503, headers={}, body=b"{}")
 
     provider = SecProvider(
-        user_agent="research@example.com",
+        user_agent="AIStock/0.1 research@example.com",
         transport=unavailable,
         raw_store=RecordingStore(),
         record_store=RecordingRecordStore(),
@@ -416,7 +416,7 @@ def test_adapter_timeout_flows_through_fallback_policy() -> None:
         raise TimeoutError
 
     primary = SecProvider(
-        user_agent="research@example.com",
+        user_agent="AIStock/0.1 research@example.com",
         transport=timeout,
         raw_store=store,
         record_store=RecordingRecordStore(),
@@ -464,7 +464,7 @@ def test_conditional_request_reuses_etag_without_changing_endpoint() -> None:
     requests: list[HttpRequest] = []
     store = RecordingStore()
     provider = SecProvider(
-        user_agent="research@example.com",
+        user_agent="AIStock/0.1 research@example.com",
         transport=successful_transport(requests),
         raw_store=store,
         record_store=RecordingRecordStore(),
@@ -531,7 +531,7 @@ def test_sec_unknown_symbol_and_unimplemented_section_are_typed_results() -> Non
         raise AssertionError("network must not run")
 
     adapter = SecProvider(
-        user_agent="research@example.com",
+        user_agent="AIStock/0.1 research@example.com",
         transport=fail_on_network,
         raw_store=RecordingStore(),
         record_store=RecordingRecordStore(),

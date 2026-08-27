@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     alpaca_overnight: bool = False
     alpaca_sip_delay_seconds: int | None = Field(default=None, ge=0)
     fmp_api_key: str | None = None
+    alpha_vantage_api_key: SecretStr | None = None
 
     @property
     def fixture_mode(self) -> bool:

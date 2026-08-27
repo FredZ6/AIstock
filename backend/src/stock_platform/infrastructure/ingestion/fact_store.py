@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import cast
@@ -15,11 +16,18 @@ from stock_platform.application.ingestion.normalizers.alpaca import (
     AlpacaBar,
     AlpacaNewsArticle,
 )
+from stock_platform.application.ingestion.normalizers.alpha_vantage import EarningsEvent
+from stock_platform.application.ingestion.normalizers.sec import SecFiling
+from stock_platform.domain.common.time import require_aware
+from stock_platform.domain.market_data.concepts import ConceptMappingResult, MappingStatus
 from stock_platform.infrastructure.db.models.tables import (
+    earnings_event,
+    financial_fact,
     market_bar,
     news_article,
     normalized_record,
     raw_data_object,
+    sec_filing,
 )
 
 
@@ -178,4 +186,310 @@ class PostgresAlpacaFactStore:
         )
         if any(existing[key] != value for key, value in values.items()):
             raise ValueError("immutable Alpaca news article conflict")
+        return cast(UUID, existing["id"])
+
+
+class PostgresSecFactStore:
+    def __init__(self, connection: Connection) -> None:
+        self._connection = connection
+
+    def _lineage(
+        self,
+        *,
+        raw_id: UUID,
+        normalized_id: UUID,
+        document_raw_id: UUID,
+    ) -> Mapping[str, object]:
+        row = (
+            self._connection.execute(
+                select(
+                    raw_data_object.c.provider,
+                    normalized_record.c.raw_data_object_id,
+                )
+                .select_from(
+                    normalized_record.join(
+                        raw_data_object,
+                        normalized_record.c.raw_data_object_id == raw_data_object.c.id,
+                    )
+                )
+                .where(normalized_record.c.id == normalized_id, raw_data_object.c.id == raw_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        document_provider = self._connection.execute(
+            select(raw_data_object.c.provider).where(raw_data_object.c.id == document_raw_id)
+        ).scalar_one_or_none()
+        if (
+            row is None
+            or row["raw_data_object_id"] != raw_id
+            or row["provider"] != "SEC"
+            or document_provider != "SEC"
+        ):
+            raise ValueError("SEC filing lineage does not match raw objects")
+        return dict(row)
+
+    def persist_filing(
+        self,
+        *,
+        security_id: UUID,
+        raw_id: UUID,
+        normalized_id: UUID,
+        document_raw_id: UUID,
+        filing: SecFiling,
+    ) -> UUID:
+        lineage = self._lineage(
+            raw_id=raw_id,
+            normalized_id=normalized_id,
+            document_raw_id=document_raw_id,
+        )
+        supersedes_id = None
+        if filing.is_amendment:
+            supersedes_id = self._connection.execute(
+                select(sec_filing.c.id)
+                .where(
+                    sec_filing.c.security_id == security_id,
+                    sec_filing.c.base_form == filing.base_form,
+                    sec_filing.c.report_date == filing.report_date,
+                    sec_filing.c.accepted_at < filing.accepted_at,
+                )
+                .order_by(sec_filing.c.accepted_at.desc())
+                .limit(1)
+            ).scalar_one_or_none()
+        values = {
+            "security_id": security_id,
+            "raw_data_object_id": raw_id,
+            "normalized_record_id": normalized_id,
+            "document_raw_data_object_id": document_raw_id,
+            "provider": lineage["provider"],
+            "cik": filing.cik,
+            "accession_number": filing.accession_number,
+            "form": filing.form,
+            "base_form": filing.base_form,
+            "filing_date": filing.filing_date,
+            "report_date": filing.report_date,
+            "accepted_at": filing.accepted_at,
+            "available_at": filing.available_at,
+            "primary_document": filing.primary_document,
+            "description": filing.description,
+            "is_amendment": filing.is_amendment,
+            "supersedes_id": supersedes_id,
+            "payload": _json_safe(filing.payload),
+        }
+        inserted = self._connection.execute(
+            insert(sec_filing)
+            .values(**values)
+            .on_conflict_do_nothing(constraint="uq_sec_filing_accession")
+            .returning(sec_filing.c.id)
+        ).scalar_one_or_none()
+        if inserted is not None:
+            return cast(UUID, inserted)
+        existing = (
+            self._connection.execute(
+                select(sec_filing).where(
+                    sec_filing.c.provider == lineage["provider"],
+                    sec_filing.c.accession_number == filing.accession_number,
+                )
+            )
+            .mappings()
+            .one()
+        )
+        semantic_keys = tuple(
+            key for key in values if key not in {"raw_data_object_id", "normalized_record_id"}
+        )
+        if any(existing[key] != values[key] for key in semantic_keys):
+            raise ValueError("immutable SEC filing conflict")
+        return cast(UUID, existing["id"])
+
+
+class PostgresFinancialFactStore:
+    def __init__(self, connection: Connection) -> None:
+        self._connection = connection
+
+    def persist_fact(
+        self,
+        *,
+        security_id: UUID,
+        raw_id: UUID,
+        normalized_id: UUID,
+        available_at: datetime,
+        result: ConceptMappingResult,
+    ) -> UUID:
+        available_at = require_aware(available_at)
+        lineage = self._connection.execute(
+            select(raw_data_object.c.provider)
+            .select_from(
+                normalized_record.join(
+                    raw_data_object,
+                    normalized_record.c.raw_data_object_id == raw_data_object.c.id,
+                )
+            )
+            .where(
+                normalized_record.c.id == normalized_id,
+                raw_data_object.c.id == raw_id,
+            )
+        ).scalar_one_or_none()
+        if lineage != "SEC":
+            raise ValueError("financial fact lineage must reference SEC raw data")
+        source = result.source_facts[0]
+        supersedes_id = self._connection.execute(
+            select(financial_fact.c.id)
+            .where(
+                financial_fact.c.security_id == security_id,
+                financial_fact.c.canonical_concept == result.canonical_concept,
+                financial_fact.c.unit == source.unit,
+                financial_fact.c.period_start == source.period_start,
+                financial_fact.c.period_end == source.period_end,
+                financial_fact.c.available_at < available_at,
+            )
+            .order_by(financial_fact.c.available_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        sec_filing_id = self._connection.execute(
+            select(sec_filing.c.id).where(
+                sec_filing.c.security_id == security_id,
+                sec_filing.c.accession_number == source.accession_number,
+            )
+        ).scalar_one_or_none()
+        if sec_filing_id is None:
+            raise ValueError("SEC filing lineage is required for financial facts")
+        stored_taxonomy = "derived" if result.status is MappingStatus.DERIVED else source.taxonomy
+        stored_source_concept = (
+            cast(str, result.canonical_concept)
+            if result.status is MappingStatus.DERIVED
+            else source.concept
+        )
+        values = {
+            "security_id": security_id,
+            "sec_filing_id": sec_filing_id,
+            "raw_data_object_id": raw_id,
+            "normalized_record_id": normalized_id,
+            "provider": lineage,
+            "taxonomy": stored_taxonomy,
+            "source_concept": stored_source_concept,
+            "canonical_concept": result.canonical_concept,
+            "value": result.value,
+            "unit": source.unit,
+            "currency": source.currency,
+            "period_start": source.period_start,
+            "period_end": source.period_end,
+            "accession_number": source.accession_number,
+            "available_at": available_at,
+            "mapping_status": result.status.value,
+            "mapping_version": result.mapping_version,
+            "input_provenance": [list(item) for item in result.input_provenance],
+            "supersedes_id": supersedes_id,
+        }
+        inserted = self._connection.execute(
+            insert(financial_fact)
+            .values(**values)
+            .on_conflict_do_nothing(constraint="uq_financial_fact_version")
+            .returning(financial_fact.c.id)
+        ).scalar_one_or_none()
+        if inserted is not None:
+            return cast(UUID, inserted)
+        existing = (
+            self._connection.execute(
+                select(financial_fact).where(
+                    financial_fact.c.provider == lineage,
+                    financial_fact.c.security_id == security_id,
+                    financial_fact.c.taxonomy == stored_taxonomy,
+                    financial_fact.c.source_concept == stored_source_concept,
+                    financial_fact.c.accession_number == source.accession_number,
+                    financial_fact.c.unit == source.unit,
+                    financial_fact.c.period_start == source.period_start,
+                    financial_fact.c.period_end == source.period_end,
+                    financial_fact.c.mapping_version == result.mapping_version,
+                )
+            )
+            .mappings()
+            .one()
+        )
+        semantic_keys = tuple(
+            key
+            for key in values
+            if key
+            not in {
+                "raw_data_object_id",
+                "normalized_record_id",
+                "available_at",
+                "supersedes_id",
+            }
+        )
+        if any(existing[key] != values[key] for key in semantic_keys):
+            raise ValueError("immutable financial fact conflict")
+        return cast(UUID, existing["id"])
+
+
+class PostgresEarningsEventStore:
+    def __init__(self, connection: Connection) -> None:
+        self._connection = connection
+
+    def persist_event(
+        self,
+        *,
+        security_id: UUID,
+        raw_id: UUID,
+        normalized_id: UUID,
+        event: EarningsEvent,
+    ) -> UUID:
+        provider = self._connection.execute(
+            select(raw_data_object.c.provider)
+            .select_from(
+                normalized_record.join(
+                    raw_data_object,
+                    normalized_record.c.raw_data_object_id == raw_data_object.c.id,
+                )
+            )
+            .where(normalized_record.c.id == normalized_id, raw_data_object.c.id == raw_id)
+        ).scalar_one_or_none()
+        if provider != "ALPHA_VANTAGE":
+            raise ValueError("earnings event lineage must reference Alpha Vantage raw data")
+        supersedes_id = self._connection.execute(
+            select(earnings_event.c.id)
+            .where(
+                earnings_event.c.security_id == security_id,
+                earnings_event.c.fiscal_date_end == event.fiscal_date_end,
+                earnings_event.c.available_at < event.available_at,
+            )
+            .order_by(earnings_event.c.available_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        values = {
+            "security_id": security_id,
+            "raw_data_object_id": raw_id,
+            "normalized_record_id": normalized_id,
+            "provider": provider,
+            "provider_symbol": event.provider_symbol,
+            "symbol": str(event.symbol),
+            "event_date": event.event_date,
+            "fiscal_date_end": event.fiscal_date_end,
+            "estimate": event.estimate,
+            "currency": event.currency,
+            "available_at": event.available_at,
+            "supersedes_id": supersedes_id,
+            "payload": event.payload,
+        }
+        inserted = self._connection.execute(
+            insert(earnings_event)
+            .values(**values)
+            .on_conflict_do_nothing(constraint="uq_earnings_event_snapshot_version")
+            .returning(earnings_event.c.id)
+        ).scalar_one_or_none()
+        if inserted is not None:
+            return cast(UUID, inserted)
+        existing = (
+            self._connection.execute(
+                select(earnings_event).where(
+                    earnings_event.c.provider == provider,
+                    earnings_event.c.normalized_record_id == normalized_id,
+                    earnings_event.c.provider_symbol == event.provider_symbol,
+                    earnings_event.c.fiscal_date_end == event.fiscal_date_end,
+                )
+            )
+            .mappings()
+            .one()
+        )
+        if any(existing[key] != value for key, value in values.items()):
+            raise ValueError("immutable earnings event conflict")
         return cast(UUID, existing["id"])

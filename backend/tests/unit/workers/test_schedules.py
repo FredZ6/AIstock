@@ -50,6 +50,9 @@ def test_celery_is_at_least_once_without_authoritative_result_backend() -> None:
     assert celery_app.conf.task_routes[
         "stock_platform.workers.ingestion_tasks.run_alpaca_ingestion_job"
     ] == {"queue": "ingestion-low"}
+    assert celery_app.conf.task_routes[
+        "stock_platform.workers.ingestion_tasks.run_alpha_earnings_ingestion_job"
+    ] == {"queue": "ingestion-low"}
     assert set(beat_schedule) == {
         "daily-research-after-close",
         "intraday-market-monitor",
@@ -75,6 +78,13 @@ def test_celery_is_at_least_once_without_authoritative_result_backend() -> None:
     assert celery_app.conf.beat_schedule["schedule-alpaca-daily-ingestion"]["task"] == (
         "stock_platform.workers.schedules.schedule_alpaca_daily_ingestion"
     )
+    assert celery_app.conf.beat_schedule["schedule-alpha-earnings-calendar"]["task"] == (
+        "stock_platform.workers.schedules.schedule_alpha_earnings_calendar"
+    )
+    assert celery_app.conf.beat_schedule["dispatch-alpha-ingestion-jobs"] == {
+        "task": "stock_platform.workers.ingestion_tasks.dispatch_alpha_ingestion_jobs",
+        "schedule": 30.0,
+    }
     assert (
         celery_app.tasks["stock_platform.workers.ingestion_tasks.run_alpaca_ingestion_job"]
         is not None
@@ -85,6 +95,9 @@ def test_celery_is_at_least_once_without_authoritative_result_backend() -> None:
     ]
     assert celery_app.tasks["stock_platform.workers.schedules.schedule_alpaca_reconnect_ingestion"]
     assert celery_app.tasks["stock_platform.workers.schedules.schedule_alpaca_bounded_backfill"]
+    assert celery_app.tasks[
+        "stock_platform.workers.ingestion_tasks.run_alpha_earnings_ingestion_job"
+    ]
 
 
 def test_documented_worker_consumes_the_low_priority_ingestion_queue() -> None:

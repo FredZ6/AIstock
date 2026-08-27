@@ -2056,3 +2056,88 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   the expanded related suite exited 0 with 87 passed. The final post-fix `make verify` exited 0 with
   backend 559 passed / 3 credential-gated live tests skipped and Web 94 passed; all other gates and
   the nine-route build remained clean.
+
+### M7.5 RDB-3 — FRE-26 Task 11 SEC filing ingestion (2026-08-26)
+
+- Replaced SEC adapter-local symbol handling with point-in-time Security master CIK and filing-regime
+  resolution for all 11 Watchlist securities. Domestic and foreign issuers use separate frozen form
+  allowlists. The adapter is read-only, requires an application/version/contact User-Agent, and uses
+  one process-wide thread-safe limiter capped at 5 requests per second.
+- Added deterministic SEC submissions normalization, acceptance-time availability, accession-based
+  idempotency, append-only amendment lineage, and immutable raw HTML filing-document storage. The
+  typed `SecFiling` references both normalized submissions and raw document bytes; no redundant
+  `SecDocument` table was introduced.
+- RED command: `.venv/bin/pytest -q backend/tests/contract/providers/test_sec_ingestion.py
+  backend/tests/integration/ingestion/test_sec_facts.py` exited 2 with the expected missing SEC
+  normalizer/store/schema imports. The raw-artifact regression later exited 1 on the intentionally
+  missing `RawWriter.write_artifact` behavior.
+- GREEN focused SEC plus database append-only command exited 0 with 17 passed. The full SEC adapter,
+  Security master, recorded-contract and persistence compatibility command exited 0 with 48 passed /
+  3 credential-gated live contracts skipped. No live request or result was fabricated.
+
+### M7.5 RDB-3 — FRE-26 Task 12 deterministic financial facts (2026-08-26)
+
+- Added a local versioned financial-concept registry covering deterministic EXACT, DERIVED, UNMAPPED,
+  and AMBIGUOUS outcomes for US-GAAP/IFRS examples. The configuration is JSON-form YAML (valid YAML
+  1.2), parsed only with the standard library; the mapper has no network, LLM, or prompt dependency.
+- `FinancialFactInput` rejects binary floats and non-finite values. Derived free cash flow uses
+  `Decimal`, requires matching units/currency/periods, and preserves both source concepts as input
+  provenance. Unresolved mappings produce typed EvidenceGap-compatible MISSING/CONFLICTED evidence.
+- Added append-only `FinancialFact` versions with taxonomy, unit/currency, period, accession,
+  mapping version/status, normalized/raw lineage, correction supersession, and mandatory SecFiling
+  FK. Missing filing lineage is rejected before insert, preventing an unrepairable append-only gap.
+- Initial RED command exited 2 on missing mapping modules. The mandatory-filing regression exited 1
+  before the FK guard. Final focused mapping, SEC persistence, database append-only and research
+  numeric-verifier command exited 0 with 21 passed. Ruff and strict focused Mypy exited 0.
+
+### M7.5 RDB-3 — FRE-26 Task 13 Alpha earnings ingestion (2026-08-26)
+
+- Added a read-only Alpha Vantage full-market earnings-calendar CSV adapter, optional redacted
+  `SecretStr` configuration, Security-master provider-symbol resolution, deterministic Watchlist
+  filtering, and Decimal-only earnings estimates. Missing credentials terminate explicitly without
+  creating raw or typed facts.
+- Added one idempotent daily Celery schedule plus durable queued-job dispatcher and low-priority
+  worker. The worker stores an immutable observation envelope containing the complete original CSV,
+  observation time, SHA-256, and base64 bytes before creating normalized `EarningsEvent` facts.
+  Identical CSV bytes observed on different days remain separate point-in-time versions.
+- Added append-only `EarningsEvent` persistence with normalized/raw lineage, report and fiscal dates,
+  estimate/currency, availability, and deterministic supersession for provider date revisions. No
+  redundant `EarningsCalendarSnapshot` table was introduced.
+- Initial RED command exited 2 on missing Alpha normalizer/provider modules. Durable Celery routing,
+  identical cross-day snapshot versioning, missing-credential termination, and arbitrary MinIO
+  failure recovery each received failing regressions before implementation.
+- Final focused provider, worker, schema, settings, schedule and database append-only command exited
+  0 with 22 passed. Ruff and strict focused Mypy exited 0. No Alpha credential or live response was
+  fabricated; recorded CSV fixtures drive the contract suite.
+
+### M7.5 RDB-3 — FRE-26 Task 14 acceptance and professional-review closure (2026-08-27)
+
+- Four professional review passes closed all Critical/Important findings before delivery. SEC is now
+  a production Celery/IngestionJob/MinIO/PostgreSQL lane rather than disconnected components: daily
+  scheduling first admits 11 filings jobs, successful filings ingestion then admits company-facts,
+  and the dispatcher routes both to the low-priority worker. Historical submissions pages and filing
+  documents are archived before normalized `SecFiling` and `FinancialFact` writes.
+- PIT and immutable lineage were hardened: the default seeded SEC identity respects Security-master
+  availability; subsequent security-ID resolution applies `available_at`, `effective_from`, and
+  `effective_to`; derived inputs must share one accession; derived facts have a distinct stable
+  identity and full period/accession normalized lineage; repeated daily SEC snapshots preserve new
+  raw observations without duplicating or conflicting with semantically identical typed facts.
+- Long SEC work heartbeats its lease around provider calls and persistence boundaries. A superseded
+  worker stops before further writes. Real response timestamps use `ingested_at >= available_at`;
+  company-facts cannot race filings; MinIO failure remains retryable without fabricated PostgreSQL
+  lineage. The historical-page, delayed-response, cross-day repeat, lease-loss, semantic-idempotency,
+  and dependency-order regressions were all added before their final fixes.
+- The final focused SEC/Alpha review suite exited 0 with 34 passed. The combined concurrency, lease recovery,
+  pagination resume, Alpaca/Alpha/SEC object-store failure, real MinIO lineage, historical SEC and PIT
+  command exited 0 with 85 passed. The Alpha object-store fault regression also passed independently;
+  no live provider result was fabricated.
+- Alembic `upgrade head` was executed twice against the validation database; both commands exited 0
+  and the second was a no-op. Final fresh `make verify` exited 0: 288 files format clean, Ruff clean,
+  strict Mypy clean over 250 source files, no Alembic/MCP/OpenAPI drift, backend 598 passed / 3
+  credential-gated live contracts skipped, Web TypeScript and ESLint clean, Vitest 14 files / 94
+  tests passed, and the nine-route Next.js production build succeeded.
+- Remaining non-blocking notes: SEC live smoke remains skipped until real User-Agent/provider access
+  is explicitly configured; instant SEC facts without a period start are conservatively omitted;
+  the process-wide SEC limiter is not cross-process distributed; the existing Node
+  `--localstorage-file` warning remains non-functional. No live brokerage, real-money execution, or
+  provider credentials were added.

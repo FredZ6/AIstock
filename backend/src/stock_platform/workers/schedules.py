@@ -337,6 +337,64 @@ def schedule_alpaca_daily_jobs(
     return scheduled
 
 
+def schedule_alpha_earnings_job(engine: Engine, *, now: datetime) -> UUID:
+    """Enqueue one idempotent full-market earnings-calendar snapshot per UTC day."""
+    cutoff = require_aware(now).astimezone(UTC).replace(hour=6, minute=30, second=0, microsecond=0)
+    return IngestionJobStore(engine).enqueue(
+        IngestionJobSpec(
+            request=IngestionRequest(
+                {
+                    "scope": "FULL_MARKET",
+                    "horizon": "12month",
+                    "snapshot_date": cutoff.date().isoformat(),
+                }
+            ),
+            provider="ALPHA_VANTAGE",
+            dataset=FeedType.EARNINGS_CALENDAR,
+            window_start=cutoff,
+            window_end=cutoff,
+            purpose=DataPurpose.RESEARCH,
+            policy_version="alpha-earnings-v1",
+            max_attempts=3,
+        ),
+        now=require_aware(now),
+    )
+
+
+def schedule_sec_daily_jobs(engine: Engine, *, now: datetime) -> int:
+    """Enqueue filings; successful workers admit the dependent company-facts jobs."""
+    cutoff = require_aware(now).astimezone(UTC).replace(hour=22, minute=0, second=0, microsecond=0)
+    with engine.connect() as connection:
+        symbols = tuple(
+            connection.execute(
+                select(watchlist_item.c.symbol)
+                .where(watchlist_item.c.daily_research.is_(True))
+                .order_by(watchlist_item.c.symbol)
+            ).scalars()
+        )
+    store = IngestionJobStore(engine)
+    for symbol in symbols:
+        store.enqueue(
+            IngestionJobSpec(
+                request=IngestionRequest(
+                    {
+                        "symbol": str(symbol),
+                        "snapshot_date": cutoff.date().isoformat(),
+                    }
+                ),
+                provider="SEC",
+                dataset=FeedType.FILINGS,
+                window_start=cutoff,
+                window_end=cutoff,
+                purpose=DataPurpose.RESEARCH,
+                policy_version="sec-edgar-v1",
+                max_attempts=3,
+            ),
+            now=require_aware(now),
+        )
+    return len(symbols)
+
+
 def _dispatch(task: str, run_id: str) -> None:
     from stock_platform.workers.celery_app import celery_app
 
@@ -611,6 +669,34 @@ def schedule_alpaca_daily_ingestion() -> int:
     engine = create_engine(settings.database_url)
     try:
         return schedule_alpaca_daily_jobs(engine, entitlement=entitlement, now=now)
+    finally:
+        engine.dispose()
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
+    name="stock_platform.workers.schedules.schedule_alpha_earnings_calendar"
+)
+def schedule_alpha_earnings_calendar() -> str | None:
+    settings = Settings()
+    if settings.alpha_vantage_api_key is None:
+        return None
+    engine = create_engine(settings.database_url)
+    try:
+        return str(schedule_alpha_earnings_job(engine, now=datetime.now(UTC)))
+    finally:
+        engine.dispose()
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
+    name="stock_platform.workers.schedules.schedule_sec_daily_ingestion"
+)
+def schedule_sec_daily_ingestion() -> int:
+    settings = Settings()
+    if not settings.sec_user_agent:
+        return 0
+    engine = create_engine(settings.database_url)
+    try:
+        return schedule_sec_daily_jobs(engine, now=datetime.now(UTC))
     finally:
         engine.dispose()
 
