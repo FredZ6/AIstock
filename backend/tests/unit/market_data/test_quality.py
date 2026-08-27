@@ -12,7 +12,9 @@ from stock_platform.application.market_data.quality import (
     QualityStatus,
     assess_reconciliation,
     derive_provider_health,
+    evaluate_conflict,
     evaluate_coverage,
+    evaluate_delay,
     evaluate_freshness,
     evaluate_heartbeat,
     provider_health_transition,
@@ -151,6 +153,7 @@ def test_provider_health_is_derived_without_a_persisted_snapshot() -> None:
             provider="ALPACA",
             job_states=("SUCCEEDED", "RETRY_SCHEDULED"),
             cursor_lag=timedelta(minutes=1),
+            cursor_status=QualityStatus.PASS,
             observations=(degraded,),
         )
     )
@@ -172,6 +175,7 @@ def test_coverage_gap_and_provider_health_transition_remain_raw_observations() -
             provider="ALPACA",
             job_states=("FAILED",),
             cursor_lag=None,
+            cursor_status=None,
             observations=(),
         ),
         observed_at=NOW,
@@ -214,3 +218,62 @@ def test_reconciliation_finding_becomes_a_versioned_conflict_observation() -> No
     assert assessment.status is QualityStatus.FAIL
     assert assessment.conflict is True
     assert assessment.details["kind"] == "OHLC_INVALID"
+
+
+def test_delay_and_conflict_are_first_class_quality_dimensions() -> None:
+    policy = QualityPolicy.load(CONFIG)
+    delayed = evaluate_delay(
+        provider="ALPACA",
+        dataset="price_bars",
+        observed_at=NOW,
+        delay=timedelta(minutes=6),
+        coverage=MarketDataCoverage.IEX,
+        policy=policy,
+    )
+    conflicted = evaluate_conflict(
+        provider="ALPACA",
+        dataset="price_bars",
+        observed_at=NOW,
+        conflict=True,
+        coverage=MarketDataCoverage.IEX,
+        policy_version=policy.version,
+    )
+
+    assert delayed.dimension is QualityDimension.DELAY
+    assert delayed.status is QualityStatus.DEGRADED
+    assert delayed.delay == timedelta(minutes=6)
+    assert conflicted.dimension is QualityDimension.CONFLICT
+    assert conflicted.status is QualityStatus.FAIL
+    assert conflicted.conflict is True
+
+
+def test_cursor_lag_cannot_silently_produce_healthy_provider_status() -> None:
+    policy = QualityPolicy.load(CONFIG)
+    cursor = evaluate_delay(
+        provider="ALPACA",
+        dataset="cursor_lag",
+        observed_at=NOW,
+        delay=timedelta(minutes=31),
+        coverage=None,
+        policy=policy,
+    )
+    signals = ProviderHealthSignals(
+        provider="ALPACA",
+        job_states=("SUCCEEDED",),
+        cursor_lag=cursor.delay,
+        cursor_status=cursor.status,
+        observations=(cursor,),
+    )
+
+    assert derive_provider_health(signals) is QualityStatus.UNAVAILABLE
+
+
+def test_cursor_lag_requires_an_explicit_versioned_assessment() -> None:
+    with pytest.raises(ValueError, match="cursor status"):
+        ProviderHealthSignals(
+            provider="ALPACA",
+            job_states=("SUCCEEDED",),
+            cursor_lag=timedelta(minutes=1),
+            cursor_status=None,
+            observations=(),
+        )

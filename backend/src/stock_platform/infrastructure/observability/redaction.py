@@ -25,11 +25,11 @@ _SENSITIVE_KEYS = (
     "full_text",
     "private_key",
 )
-_SENSITIVE_EXACT_KEYS = frozenset({"key"})
+_SENSITIVE_EXACT_KEYS = frozenset({"key", "apikey"})
 
 
 def _sensitive_key(key: object) -> bool:
-    normalized = str(key).lower()
+    normalized = str(key).lower().replace("-", "_")
     return normalized in _SENSITIVE_EXACT_KEYS or any(
         fragment in normalized for fragment in _SENSITIVE_KEYS
     )

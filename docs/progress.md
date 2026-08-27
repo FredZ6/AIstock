@@ -2228,3 +2228,125 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   a pre-existing invalid checkpoint and cannot start. It was not deleted or repaired. Acceptance used
   a disposable healthy database; provider/MinIO tests remained recorded-only. The existing Node
   `--localstorage-file` warning remains non-functional. No live provider result was fabricated.
+
+### M7.5 RDB-4 — FRE-27 professional-review closure (2026-08-27)
+
+- Closed all eight Important findings from the first professional review. Telemetry redaction now
+  normalizes real hyphenated Alpaca and generic API-key headers and covers Alpha Vantage `apikey`
+  query parameters. DELAY and CONFLICT are first-class quality assessments; cursor lag must carry a
+  status derived from versioned delay thresholds and can no longer produce a silent healthy state.
+- CorporateAction point-in-time selection is scoped by provider and revision availability rather
+  than effective-date order. Database constraints now require mutually exclusive action values and
+  strictly positive stock-dividend ratios. The 0033 legacy upgrade preserves the original currency
+  and binds only the exact generated legacy NormalizedRecord even when another v2 record exists.
+- Weekly CI replaced the obsolete FMP lane with credential-gated Alpha Vantage and reports explicit
+  SEC/Alpaca/Alpha SKIP steps. The ingestion release gate now covers raw/MinIO replay, outbox and
+  normalization, fact and quality persistence, lease recovery, pagination, cursor compare-and-swap,
+  and secret redaction. `docs/runbooks/ingestion-recovery.md` documents all seven commit boundaries.
+- RED evidence: focused quality imports failed before DELAY/CONFLICT existed; workflow/assets tests
+  failed 3 tests before Alpha/SKIP/gate/runbook changes. GREEN evidence: expanded
+  `verify-ingestion.sh` exited 0 with 52 passed and three explicit credential-gated skips; the focused
+  quality/CI/CorporateAction/migration suite exited 0 with 26 passed.
+- Fresh full `make verify` exited 0: 300 files format clean, Ruff clean, strict Mypy clean over 261
+  source files, no Alembic/MCP/OpenAPI drift, backend 638 passed / 4 credential-gated live tests
+  skipped, Web TypeScript/ESLint clean, Vitest 14 files / 94 tests passed, and all nine Next.js routes
+  built successfully. The existing Node `--localstorage-file` warning remains non-functional; no
+  provider credential, live response, or live-broker path was added.
+
+### M7.5 RDB-4 — FRE-27 second-review closure (2026-08-28)
+
+- The second professional review found three additional Important semantic gaps. CorporateAction
+  revisions now carry `supersedes_id`: if an earlier split, stock dividend, or ADR adjustment has
+  already changed an incremental Position, the revised row emits an explicit
+  `REVISED_CORPORATE_ACTION_REQUIRES_REPLAY` gap instead of multiplying again. A revised cash
+  dividend whose predecessor is already in CashLedger is rejected until an explicit append-only
+  reversal is supplied; it can no longer double-credit cash.
+- The 0033 migration now uses the USD server default only to backfill legacy rows from their existing
+  `currency`, then drops the default. New CorporateAction versions must provide source currency
+  explicitly, and a database regression proves omission is rejected.
+- `verify-ingestion.sh` now executes the real raw-dispatch fault suite, including object-store failure,
+  PostgreSQL failure after MinIO PUT/orphan reporting, durable outbox retry, and normalization
+  quarantine. A new quality-to-cursor boundary regression proves failed quality persistence leaves no
+  observation or cursor, while retry creates one observation and one CAS cursor generation.
+- Added the production `ingestion-leases` recovery probe backed by `IngestionJobStore.recover_expired`;
+  its integration test proves one expired lease is recovered once and a repeat is a zero-change no-op.
+  The focused CorporateAction/quality/recovery command exited 0 with 14 passed. The strengthened
+  ingestion gate exited 0 with 64 passed plus three explicit credential-gated provider skips. Ruff
+  format/lint and strict Mypy over 261 source files exited 0.
+- Fresh full `make verify` after these fixes exited 0: 300 files format clean, Ruff clean, strict
+  Mypy clean over 261 source files, no Alembic/MCP/OpenAPI drift, backend 642 passed / 4 live tests
+  skipped, Web TypeScript/ESLint clean, Vitest 14 files / 94 tests passed, and all nine Next.js routes
+  built successfully.
+
+### M7.5 RDB-4 — FRE-27 third-review closure (2026-08-28)
+
+- Closed the remaining multi-hop revision gap. A database insert trigger requires every subsequent
+  `(provider, provider_action_id)` version to directly supersede the latest version with increasing
+  availability. Point-in-time reads traverse the full stored ancestry, so an applied A is detected
+  even when the visible latest action is C in `A → B → C`. Missing-link and multi-hop regressions
+  pass; revised position/cash facts remain explicit replay/reversal gaps rather than silent mutation.
+- Wired versioned Alpaca freshness quality into the production page-ingestion path after normalized
+  facts and before cursor CAS. A simulated quality database failure now schedules the real durable
+  job for retry with zero quality rows and zero cursor generations; replay idempotently persists
+  quality, advances both page generations, and completes the job.
+- Added the service recovery probe integration suite to `verify-ingestion.sh`. The final strengthened
+  focused gate exited 0 with 72 passed plus explicit Alpaca/SEC/Alpha credential-gated skips. The
+  focused multi-hop, missing-link, source-currency, ledger, and production quality-retry command
+  exited 0 with 12 passed. Ruff format/lint and strict Mypy over 261 source files exited 0.
+- Fresh full `make verify` after the third-review fixes exited 0: 300 files format clean, Ruff clean,
+  strict Mypy clean over 261 source files, no Alembic/MCP/OpenAPI drift, backend 644 passed / 4 live
+  tests skipped, Web TypeScript/ESLint clean, Vitest 14 files / 94 tests passed, and all nine Next.js
+  routes built successfully.
+
+### M7.5 RDB-4 — FRE-27 fourth-review closure (2026-08-28)
+
+- Serialized CorporateAction revision insertion with a transaction-scoped PostgreSQL advisory lock
+  keyed by `(provider, provider_action_id)` before the latest-version check. A two-connection barrier
+  regression proves concurrent roots cannot both commit or fork the chain.
+- Production Alpaca quality now reads the persisted entitlement snapshot. SIP pages pass the frozen
+  `sip_delay_seconds` to deterministic freshness evaluation; IEX/non-SIP remains zero-delay. A live-
+  path recorded regression proves a 17-minute-old SIP page with a frozen 15-minute entitlement delay
+  remains PASS with both raw freshness and declared delay preserved.
+- Concurrent-revision, SIP-delay, and quality-retry regressions exited 0 with 3 passed. The final
+  ingestion release gate exited 0 with 73 passed plus explicit Alpaca/SEC/Alpha credential-gated
+  skips. Ruff format/lint and strict Mypy over 261 source files exited 0.
+- The concurrency fixture was then made repeat-safe with unique immutable raw identity and an
+  isolated AAPL symbol. The CorporateAction integration suite passed twice consecutively against the
+  same database (9 passed each run). Fresh full `make verify` exited 0: 300 files format clean, Ruff
+  clean, strict Mypy clean over 261 source files, no Alembic/MCP/OpenAPI drift, backend 646 passed / 4
+  live tests skipped, Web TypeScript/ESLint clean, Vitest 14 files / 94 tests passed, and all nine
+  Next.js routes built successfully.
+
+### M7.5 RDB-4 — FRE-27 fifth-review closure (2026-08-28)
+
+- Removed market-feed entitlement semantics from Alpaca company-news quality. A recorded production
+  worker regression proves that 12-minute-old news is DEGRADED under the versioned 10-minute news
+  threshold, with no IEX/SIP coverage and zero declared market-feed delay, even when the scheduling
+  entitlement snapshot contains SIP with a 15-minute delay.
+- Wired SEC filing and Alpha Vantage earnings-calendar freshness assessment into their production
+  persistence transactions. Every normalized filing/event now receives an immutable
+  DataQualityObservation before job completion; SEC quality persistence retains the active lease
+  transaction guard.
+- RED evidence: the three recorded worker regressions failed with Alpaca news PASS instead of
+  DEGRADED and zero SEC/Alpha quality rows. GREEN evidence: the same command exited 0 with 3 passed.
+  The strengthened ingestion release gate exited 0 with 74 passed plus explicit Alpaca/SEC/Alpha
+  credential-gated skips.
+- Fresh full `make verify` exited 0: 300 files format clean, Ruff clean, strict Mypy clean over 261
+  source files, no Alembic/MCP/OpenAPI drift, backend 647 passed / 4 live tests skipped, Web
+  TypeScript/ESLint clean, Vitest 14 files / 94 tests passed, and all nine Next.js routes built
+  successfully. No live provider response or credential was fabricated.
+
+### M7.5 RDB-4 — FRE-27 sixth-review closure (2026-08-28)
+
+- Closed the final professional-review blocker for successful SEC polls with unchanged filings.
+  Every fetched SEC page now creates snapshot-specific NormalizedRecord lineage even when its typed
+  SecFiling fact already exists. This lets the new raw snapshot carry immutable freshness evidence
+  without duplicating the append-only typed filing or downstream financial facts.
+- RED evidence: the existing next-day unchanged-filings integration flow retained only the original
+  three quality observations instead of the expected six. GREEN evidence: it now preserves three
+  SecFiling facts and four FinancialFacts while recording six page-snapshot quality observations.
+  The complete SEC/Alpha/Alpaca-news related suite exited 0 with 10 passed.
+- Final ingestion release gate exited 0 with 74 passed and three explicit credential-gated provider
+  skips. Fresh `make verify` exited 0: 300 files format clean, Ruff clean, strict Mypy clean over 261
+  source files, no Alembic/MCP/OpenAPI drift, backend 647 passed / 4 skipped, Web TypeScript/ESLint
+  clean, Vitest 14 files / 94 tests passed, and all nine Next.js routes built successfully.

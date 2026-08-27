@@ -26,6 +26,7 @@ from stock_platform.infrastructure.db.models.tables import (
     execution_policy_version,
     risk_policy_version,
 )
+from stock_platform.infrastructure.ingestion.job_store import IngestionJobStore
 
 PORTFOLIO_ID = UUID("10000000-0000-0000-0000-000000000001")
 ORDER_ID = UUID("70000000-0000-0000-0000-000000000017")
@@ -37,6 +38,15 @@ SOURCE_LINEAGE_ID = UUID("75000000-0000-0000-0000-000000000017")
 RISK_POLICY_ID = UUID("76000000-0000-0000-0000-000000000017")
 EXECUTION_POLICY_ID = UUID("77000000-0000-0000-0000-000000000017")
 DECISION_TIME = datetime(2026, 8, 16, 14, 30, tzinfo=UTC)
+
+
+def recover_ingestion_leases(database_url: str, *, at: datetime) -> int:
+    """Recover expired ingestion leases using the production durable job store."""
+    engine = create_engine(database_url)
+    try:
+        return IngestionJobStore(engine).recover_expired(now=at)
+    finally:
+        engine.dispose()
 
 
 def persist_paper_fill_probe(database_url: str) -> UUID:

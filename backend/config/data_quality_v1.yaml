@@ -9,5 +9,9 @@
   "heartbeat": {
     "ALPACA:IEX": {"degraded_after_seconds": 30, "unavailable_after_seconds": 120},
     "ALPACA:SIP": {"degraded_after_seconds": 30, "unavailable_after_seconds": 120}
+  },
+  "delay": {
+    "ALPACA:price_bars": {"degraded_after_seconds": 300, "unavailable_after_seconds": 1800},
+    "ALPACA:cursor_lag": {"degraded_after_seconds": 300, "unavailable_after_seconds": 1800}
   }
 }

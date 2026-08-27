@@ -10,7 +10,9 @@ from alembic.config import Config
 from sqlalchemy import create_engine, func, insert, inspect, select, update
 from sqlalchemy.exc import DBAPIError
 from stock_platform.application.ingestion.normalizers.alpha_vantage import EarningsEvent
+from stock_platform.domain.ingestion.models import FeedType
 from stock_platform.infrastructure.db.models.tables import (
+    data_quality_observation,
     earnings_event,
     ingestion_job,
     normalized_record,
@@ -208,6 +210,18 @@ def test_alpha_daily_job_persists_full_csv_then_filtered_typed_events(
             ).scalar_one()
             == "SUCCEEDED"
         )
+        quality_rows = (
+            connection.execute(
+                select(data_quality_observation).where(
+                    data_quality_observation.c.provider == "ALPHA_VANTAGE",
+                    data_quality_observation.c.dataset == FeedType.EARNINGS_CALENDAR.value,
+                )
+            )
+            .mappings()
+            .all()
+        )
+        assert len(quality_rows) == 2
+        assert {row["status"] for row in quality_rows} == {"PASS"}
 
     next_day = datetime(2026, 8, 27, 6, 30, tzinfo=UTC)
     next_job_id = schedule_alpha_earnings_job(engine, now=next_day)

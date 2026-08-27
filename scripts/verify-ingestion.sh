@@ -6,8 +6,12 @@ cd "${repo_root}"
 
 UV_CACHE_DIR="${repo_root}/.uv-cache" uv run pytest -q \
   backend/tests/integration/ingestion/test_raw_replay.py \
+  backend/tests/integration/ingestion/test_raw_dispatch.py \
   backend/tests/integration/ingestion/test_alpaca_recovery.py \
+  backend/tests/integration/ingestion/test_alpaca_job_e2e.py \
+  backend/tests/integration/ingestion/test_job_store.py \
   backend/tests/integration/ingestion/test_quality_history.py \
+  backend/tests/integration/recovery/test_service_restart.py \
   backend/tests/security/test_secret_redaction.py
 
 run_live() {

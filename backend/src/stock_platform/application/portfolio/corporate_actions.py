@@ -18,6 +18,10 @@ _ENTRY_NAMESPACE = UUID("66a1af77-3fe6-42bb-b62e-46f28135af31")
 ZERO = Decimal("0")
 
 
+def _revision_chain(direct: UUID | None, chain: frozenset[UUID]) -> frozenset[UUID]:
+    return chain | ({direct} if direct is not None else set())
+
+
 @dataclass(frozen=True, slots=True)
 class SplitAction:
     id: UUID
@@ -25,6 +29,8 @@ class SplitAction:
     effective_at: datetime
     available_at: datetime
     ratio: Decimal
+    supersedes_id: UUID | None = None
+    supersedes_chain: frozenset[UUID] = frozenset()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "symbol", Symbol(str(self.symbol)))
@@ -34,6 +40,9 @@ class SplitAction:
             raise TypeError("split ratio must use Decimal")
         if not self.ratio.is_finite() or self.ratio <= 0:
             raise ValueError("split ratio must be finite and positive")
+        object.__setattr__(
+            self, "supersedes_chain", _revision_chain(self.supersedes_id, self.supersedes_chain)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +53,8 @@ class CashDividend:
     available_at: datetime
     cash_per_share: Decimal
     currency: str
+    supersedes_id: UUID | None = None
+    supersedes_chain: frozenset[UUID] = frozenset()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "symbol", Symbol(str(self.symbol)))
@@ -54,6 +65,9 @@ class CashDividend:
         if not self.cash_per_share.is_finite() or self.cash_per_share < 0:
             raise ValueError("cash_per_share must be finite and non-negative")
         object.__setattr__(self, "currency", self.currency.upper())
+        object.__setattr__(
+            self, "supersedes_chain", _revision_chain(self.supersedes_id, self.supersedes_chain)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +77,8 @@ class StockDividend:
     effective_at: datetime
     available_at: datetime
     ratio: Decimal
+    supersedes_id: UUID | None = None
+    supersedes_chain: frozenset[UUID] = frozenset()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "symbol", Symbol(str(self.symbol)))
@@ -70,8 +86,11 @@ class StockDividend:
         object.__setattr__(self, "available_at", require_aware(self.available_at).astimezone(UTC))
         if not isinstance(self.ratio, Decimal):
             raise TypeError("stock dividend ratio must use Decimal")
-        if not self.ratio.is_finite() or self.ratio < 0:
-            raise ValueError("stock dividend ratio must be finite and non-negative")
+        if not self.ratio.is_finite() or self.ratio <= 0:
+            raise ValueError("stock dividend ratio must be finite and positive")
+        object.__setattr__(
+            self, "supersedes_chain", _revision_chain(self.supersedes_id, self.supersedes_chain)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +101,8 @@ class AdrRatioChange:
     available_at: datetime
     old_ratio: Decimal
     new_ratio: Decimal
+    supersedes_id: UUID | None = None
+    supersedes_chain: frozenset[UUID] = frozenset()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "symbol", Symbol(str(self.symbol)))
@@ -92,6 +113,9 @@ class AdrRatioChange:
                 raise TypeError(f"{name} must use Decimal")
             if not ratio.is_finite() or ratio <= 0:
                 raise ValueError(f"{name} must be finite and positive")
+        object.__setattr__(
+            self, "supersedes_chain", _revision_chain(self.supersedes_id, self.supersedes_chain)
+        )
 
 
 ReferenceActionType = Literal["SPIN_OFF", "SYMBOL_CHANGE", "MERGER_ACQUISITION"]
@@ -105,6 +129,8 @@ class ReferenceAction:
     available_at: datetime
     action_type: ReferenceActionType
     details: dict[str, Any]
+    supersedes_id: UUID | None = None
+    supersedes_chain: frozenset[UUID] = frozenset()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "symbol", Symbol(str(self.symbol)))
@@ -112,6 +138,9 @@ class ReferenceAction:
         object.__setattr__(self, "available_at", require_aware(self.available_at).astimezone(UTC))
         if self.action_type not in {"SPIN_OFF", "SYMBOL_CHANGE", "MERGER_ACQUISITION"}:
             raise ValueError("unsupported reference action type")
+        object.__setattr__(
+            self, "supersedes_chain", _revision_chain(self.supersedes_id, self.supersedes_chain)
+        )
 
 
 CorporateAction = SplitAction | CashDividend | StockDividend | AdrRatioChange | ReferenceAction
@@ -140,15 +169,27 @@ class PostgresCorporateActionStore:
                 select(corporate_action)
                 .where(
                     corporate_action.c.symbol == str(symbol),
-                    corporate_action.c.effective_at <= cutoff,
                     corporate_action.c.available_at <= cutoff,
                 )
-                .order_by(corporate_action.c.effective_at, corporate_action.c.available_at)
+                .order_by(corporate_action.c.available_at, corporate_action.c.created_at)
             ).mappings()
         )
-        latest: dict[str, Any] = {}
+        rows_by_id = {row["id"]: row for row in rows}
+
+        def supersedes_chain(row: Any) -> frozenset[UUID]:
+            result: set[UUID] = set()
+            current = row.get("supersedes_id")
+            while current is not None and current not in result:
+                result.add(current)
+                parent = rows_by_id.get(current)
+                current = parent.get("supersedes_id") if parent is not None else None
+            return frozenset(result)
+
+        latest: dict[tuple[str, str], Any] = {}
         for row in rows:
-            latest[row.get("provider_action_id") or str(row["id"])] = row
+            if row["effective_at"] > cutoff:
+                continue
+            latest[(row["provider"], row.get("provider_action_id") or str(row["id"]))] = row
         actions: list[CorporateAction] = []
         for row in latest.values():
             if row["action_type"] == "SPLIT":
@@ -159,6 +200,8 @@ class PostgresCorporateActionStore:
                         effective_at=row["effective_at"],
                         available_at=row["available_at"],
                         ratio=row["split_ratio"],
+                        supersedes_id=row["supersedes_id"],
+                        supersedes_chain=supersedes_chain(row),
                     )
                 )
             elif row["action_type"] == "CASH_DIVIDEND":
@@ -170,6 +213,8 @@ class PostgresCorporateActionStore:
                         available_at=row["available_at"],
                         cash_per_share=row["cash_per_share"],
                         currency=row["currency"],
+                        supersedes_id=row["supersedes_id"],
+                        supersedes_chain=supersedes_chain(row),
                     )
                 )
             elif row["action_type"] == "STOCK_DIVIDEND":
@@ -180,6 +225,8 @@ class PostgresCorporateActionStore:
                         row["effective_at"],
                         row["available_at"],
                         row["stock_ratio"],
+                        row["supersedes_id"],
+                        supersedes_chain(row),
                     )
                 )
             elif row["action_type"] == "ADR_RATIO_CHANGE":
@@ -191,6 +238,8 @@ class PostgresCorporateActionStore:
                         row["available_at"],
                         row["old_adr_ratio"],
                         row["new_adr_ratio"],
+                        row["supersedes_id"],
+                        supersedes_chain(row),
                     )
                 )
             else:
@@ -202,6 +251,8 @@ class PostgresCorporateActionStore:
                         row["available_at"],
                         row["action_type"],
                         dict(row["details"]),
+                        row["supersedes_id"],
+                        supersedes_chain(row),
                     )
                 )
         return tuple(actions)
@@ -219,6 +270,11 @@ class CorporateActionProcessor:
             key=lambda item: (item.effective_at, item.available_at, item.id),
         ):
             if action.symbol != position.symbol or action.id in applied_ids:
+                continue
+            if action.supersedes_chain & applied_ids:
+                gaps.append(
+                    CorporateActionGap(action.id, "REVISED_CORPORATE_ACTION_REQUIRES_REPLAY")
+                )
                 continue
             if isinstance(action, SplitAction):
                 quantity *= action.ratio
@@ -253,6 +309,8 @@ class CorporateActionProcessor:
                 continue
             if any(entry.source_id == action.id for entry in result):
                 continue
+            if action.supersedes_chain & {entry.source_id for entry in result}:
+                raise ValueError("revised cash dividend requires explicit ledger reversal")
             if cash_currency is not None and action.currency != cash_currency.upper():
                 raise ValueError("implicit FX conversion is forbidden for cash dividends")
             amount = position.quantity * action.cash_per_share

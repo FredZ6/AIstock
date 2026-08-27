@@ -905,7 +905,7 @@ corporate_action = Table(
     Column("old_adr_ratio", Numeric),
     Column("new_adr_ratio", Numeric),
     Column("currency", Text, nullable=False, server_default=text("'USD'")),
-    Column("source_currency", Text, nullable=False, server_default=text("'USD'")),
+    Column("source_currency", Text, nullable=False),
     Column("details", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     Column("supersedes_id", UUID(as_uuid=True), ForeignKey("corporate_action.id")),
     created_at(),
@@ -915,11 +915,17 @@ corporate_action = Table(
         name=conv("ck_corporate_action_type"),
     ),
     CheckConstraint(
-        "(action_type = 'SPLIT' AND split_ratio > 0) OR "
-        "(action_type = 'CASH_DIVIDEND' AND cash_per_share >= 0) OR "
-        "(action_type = 'STOCK_DIVIDEND' AND stock_ratio >= 0) OR "
-        "(action_type = 'ADR_RATIO_CHANGE' AND old_adr_ratio > 0 AND new_adr_ratio > 0) OR "
-        "action_type IN ('SPIN_OFF', 'SYMBOL_CHANGE', 'MERGER_ACQUISITION')",
+        "(action_type = 'SPLIT' AND split_ratio > 0 AND cash_per_share IS NULL "
+        " AND stock_ratio IS NULL AND old_adr_ratio IS NULL AND new_adr_ratio IS NULL) OR "
+        "(action_type = 'CASH_DIVIDEND' AND cash_per_share >= 0 AND split_ratio IS NULL "
+        " AND stock_ratio IS NULL AND old_adr_ratio IS NULL AND new_adr_ratio IS NULL) OR "
+        "(action_type = 'STOCK_DIVIDEND' AND stock_ratio > 0 AND split_ratio IS NULL "
+        " AND cash_per_share IS NULL AND old_adr_ratio IS NULL AND new_adr_ratio IS NULL) OR "
+        "(action_type = 'ADR_RATIO_CHANGE' AND old_adr_ratio > 0 AND new_adr_ratio > 0 "
+        " AND split_ratio IS NULL AND cash_per_share IS NULL AND stock_ratio IS NULL) OR "
+        "(action_type IN ('SPIN_OFF', 'SYMBOL_CHANGE', 'MERGER_ACQUISITION') "
+        " AND split_ratio IS NULL AND cash_per_share IS NULL AND stock_ratio IS NULL "
+        " AND old_adr_ratio IS NULL AND new_adr_ratio IS NULL)",
         name=conv("ck_corporate_action_value"),
     ),
     CheckConstraint(

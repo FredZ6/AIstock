@@ -108,6 +108,8 @@ def upgrade() -> None:
         "corporate_action",
         sa.Column("source_currency", sa.Text(), nullable=False, server_default=sa.text("'USD'")),
     )
+    op.execute("UPDATE corporate_action SET source_currency = currency")
+    op.alter_column("corporate_action", "source_currency", server_default=None)
     op.add_column(
         "corporate_action",
         sa.Column(
@@ -160,6 +162,7 @@ def upgrade() -> None:
         FROM normalized_record nr
         WHERE nr.raw_data_object_id = ca.raw_data_object_id
           AND nr.record_type = 'corporate_action'
+          AND nr.record_key = 'legacy:' || ca.raw_data_object_id::text
           AND nr.normalization_version = 'corporate-action-v2'
           AND ca.normalized_record_id IS NULL;
         ALTER TABLE corporate_action ALTER COLUMN normalized_record_id SET NOT NULL;
@@ -171,16 +174,51 @@ def upgrade() -> None:
                             'SYMBOL_CHANGE', 'MERGER_ACQUISITION', 'ADR_RATIO_CHANGE')
         );
         ALTER TABLE corporate_action ADD CONSTRAINT ck_corporate_action_value CHECK (
-            (action_type = 'SPLIT' AND split_ratio > 0)
-            OR (action_type = 'CASH_DIVIDEND' AND cash_per_share >= 0)
-            OR (action_type = 'STOCK_DIVIDEND' AND stock_ratio >= 0)
-            OR (action_type = 'ADR_RATIO_CHANGE' AND old_adr_ratio > 0 AND new_adr_ratio > 0)
-            OR action_type IN ('SPIN_OFF', 'SYMBOL_CHANGE', 'MERGER_ACQUISITION')
+            (action_type = 'SPLIT' AND split_ratio > 0 AND cash_per_share IS NULL
+             AND stock_ratio IS NULL AND old_adr_ratio IS NULL AND new_adr_ratio IS NULL)
+            OR (action_type = 'CASH_DIVIDEND' AND cash_per_share >= 0 AND split_ratio IS NULL
+                AND stock_ratio IS NULL AND old_adr_ratio IS NULL AND new_adr_ratio IS NULL)
+            OR (action_type = 'STOCK_DIVIDEND' AND stock_ratio > 0 AND split_ratio IS NULL
+                AND cash_per_share IS NULL AND old_adr_ratio IS NULL AND new_adr_ratio IS NULL)
+            OR (action_type = 'ADR_RATIO_CHANGE' AND old_adr_ratio > 0 AND new_adr_ratio > 0
+                AND split_ratio IS NULL AND cash_per_share IS NULL AND stock_ratio IS NULL)
+            OR (action_type IN ('SPIN_OFF', 'SYMBOL_CHANGE', 'MERGER_ACQUISITION')
+                AND split_ratio IS NULL AND cash_per_share IS NULL AND stock_ratio IS NULL
+                AND old_adr_ratio IS NULL AND new_adr_ratio IS NULL)
         );
         ALTER TABLE corporate_action ADD CONSTRAINT ck_corporate_action_supersedes_self
             CHECK (supersedes_id IS NULL OR supersedes_id <> id);
         ALTER TABLE corporate_action ADD CONSTRAINT uq_corporate_action_version
             UNIQUE (provider, provider_action_id, available_at);
+        CREATE FUNCTION validate_corporate_action_revision() RETURNS trigger AS $$
+        DECLARE
+            previous corporate_action%ROWTYPE;
+        BEGIN
+            PERFORM pg_advisory_xact_lock(
+                hashtextextended(NEW.provider || chr(31) || NEW.provider_action_id, 0)
+            );
+            SELECT * INTO previous
+            FROM corporate_action
+            WHERE provider = NEW.provider
+              AND provider_action_id = NEW.provider_action_id
+            ORDER BY available_at DESC, created_at DESC
+            LIMIT 1;
+            IF FOUND THEN
+                IF NEW.supersedes_id IS NULL OR NEW.supersedes_id <> previous.id THEN
+                    RAISE EXCEPTION 'corporate action revision must supersede latest version';
+                END IF;
+                IF NEW.available_at <= previous.available_at THEN
+                    RAISE EXCEPTION 'corporate action revision availability must increase';
+                END IF;
+            ELSIF NEW.supersedes_id IS NOT NULL THEN
+                RAISE EXCEPTION 'first corporate action version cannot supersede another identity';
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+        CREATE TRIGGER validate_revision_chain
+            BEFORE INSERT ON corporate_action
+            FOR EACH ROW EXECUTE FUNCTION validate_corporate_action_revision();
         CREATE TRIGGER enforce_append_only
             BEFORE UPDATE OR DELETE ON corporate_action
             FOR EACH ROW EXECUTE FUNCTION reject_append_only_mutation();
@@ -192,6 +230,8 @@ def downgrade() -> None:
     columns = {item["name"] for item in sa.inspect(op.get_bind()).get_columns("corporate_action")}
     if "normalized_record_id" in columns:
         op.execute("DROP TRIGGER IF EXISTS enforce_append_only ON corporate_action")
+        op.execute("DROP TRIGGER IF EXISTS validate_revision_chain ON corporate_action")
+        op.execute("DROP FUNCTION IF EXISTS validate_corporate_action_revision()")
         op.drop_constraint(op.f("uq_corporate_action_version"), "corporate_action", type_="unique")
         op.drop_constraint(
             op.f("ck_corporate_action_supersedes_self"), "corporate_action", type_="check"

@@ -81,12 +81,14 @@ class QualityPolicy:
         version: str,
         freshness: Mapping[str, _Threshold],
         heartbeat: Mapping[str, _Threshold],
+        delay: Mapping[str, _Threshold],
     ) -> None:
         if not version:
             raise ValueError("data quality policy version is required")
         self.version = version
         self._freshness = dict(freshness)
         self._heartbeat = dict(heartbeat)
+        self._delay = dict(delay)
 
     @classmethod
     def load(cls, path: Path) -> QualityPolicy:
@@ -100,6 +102,7 @@ class QualityPolicy:
             version=str(document["version"]),
             freshness=cls._thresholds(document.get("freshness"), section="freshness"),
             heartbeat=cls._thresholds(document.get("heartbeat"), section="heartbeat"),
+            delay=cls._thresholds(document.get("delay"), section="delay"),
         )
 
     @staticmethod
@@ -139,6 +142,13 @@ class QualityPolicy:
             threshold = self._heartbeat[f"{provider}:{coverage.value}"]
         except KeyError as error:
             raise ValueError("quality heartbeat threshold is not configured") from error
+        return threshold.degraded_after, threshold.unavailable_after
+
+    def delay_thresholds(self, provider: str, dataset: str) -> tuple[timedelta, timedelta]:
+        try:
+            threshold = self._delay[f"{provider}:{dataset}"]
+        except KeyError as error:
+            raise ValueError("quality delay threshold is not configured") from error
         return threshold.degraded_after, threshold.unavailable_after
 
 
@@ -243,6 +253,56 @@ def evaluate_coverage(
     )
 
 
+def evaluate_delay(
+    *,
+    provider: str,
+    dataset: str,
+    observed_at: datetime,
+    delay: timedelta,
+    coverage: MarketDataCoverage | None,
+    policy: QualityPolicy,
+) -> QualityAssessment:
+    if delay < timedelta(0):
+        raise ValueError("delay cannot be negative")
+    return QualityAssessment(
+        dimension=QualityDimension.DELAY,
+        status=_status(delay, policy.delay_thresholds(provider, dataset)),
+        provider=provider,
+        dataset=dataset,
+        observed_at=observed_at,
+        freshness=None,
+        coverage=coverage.value if coverage is not None else None,
+        delay=delay,
+        conflict=False,
+        policy_version=policy.version,
+        details={"delay_seconds": int(delay.total_seconds())},
+    )
+
+
+def evaluate_conflict(
+    *,
+    provider: str,
+    dataset: str,
+    observed_at: datetime,
+    conflict: bool,
+    coverage: MarketDataCoverage | None,
+    policy_version: str,
+) -> QualityAssessment:
+    return QualityAssessment(
+        dimension=QualityDimension.CONFLICT,
+        status=QualityStatus.FAIL if conflict else QualityStatus.PASS,
+        provider=provider,
+        dataset=dataset,
+        observed_at=observed_at,
+        freshness=None,
+        coverage=coverage.value if coverage is not None else None,
+        delay=None,
+        conflict=conflict,
+        policy_version=policy_version,
+        details={},
+    )
+
+
 def assess_reconciliation(
     finding: ReconciliationFinding,
     *,
@@ -282,6 +342,7 @@ class ProviderHealthSignals:
     provider: str
     job_states: tuple[str, ...]
     cursor_lag: timedelta | None
+    cursor_status: QualityStatus | None
     observations: tuple[QualityAssessment, ...]
 
     def __post_init__(self) -> None:
@@ -289,19 +350,27 @@ class ProviderHealthSignals:
             raise ValueError("provider is required")
         if self.cursor_lag is not None and self.cursor_lag < timedelta(0):
             raise ValueError("cursor lag cannot be negative")
+        if (self.cursor_lag is None) != (self.cursor_status is None):
+            raise ValueError("cursor lag and cursor status must be provided together")
         if any(observation.provider != self.provider for observation in self.observations):
             raise ValueError("provider health observations must match the provider")
 
 
 def derive_provider_health(signals: ProviderHealthSignals) -> QualityStatus:
-    if any(state in {"FAILED", "DEAD_LETTER"} for state in signals.job_states) or any(
-        observation.status in {QualityStatus.UNAVAILABLE, QualityStatus.FAIL}
-        for observation in signals.observations
+    if (
+        signals.cursor_status in {QualityStatus.UNAVAILABLE, QualityStatus.FAIL}
+        or any(state in {"FAILED", "DEAD_LETTER"} for state in signals.job_states)
+        or any(
+            observation.status in {QualityStatus.UNAVAILABLE, QualityStatus.FAIL}
+            for observation in signals.observations
+        )
     ):
         return QualityStatus.UNAVAILABLE
-    if any(
-        state in {"RETRY_SCHEDULED", "COMPLETED_WITH_GAPS"} for state in signals.job_states
-    ) or any(observation.status is QualityStatus.DEGRADED for observation in signals.observations):
+    if (
+        signals.cursor_status is QualityStatus.DEGRADED
+        or any(state in {"RETRY_SCHEDULED", "COMPLETED_WITH_GAPS"} for state in signals.job_states)
+        or any(observation.status is QualityStatus.DEGRADED for observation in signals.observations)
+    ):
         return QualityStatus.DEGRADED
     return QualityStatus.PASS
 

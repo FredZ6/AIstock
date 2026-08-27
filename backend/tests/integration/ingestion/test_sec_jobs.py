@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, func, select
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.ingestion.models import FeedType
 from stock_platform.infrastructure.db.models.tables import (
+    data_quality_observation,
     financial_fact,
     ingestion_job,
     raw_data_object,
@@ -179,6 +180,18 @@ def test_sec_jobs_are_idempotently_scheduled_and_persist_raw_filing_and_financia
             ).scalar_one()
             == 4
         )
+        quality_rows = (
+            connection.execute(
+                select(data_quality_observation).where(
+                    data_quality_observation.c.provider == "SEC",
+                    data_quality_observation.c.dataset == FeedType.FILINGS.value,
+                )
+            )
+            .mappings()
+            .all()
+        )
+        assert len(quality_rows) == 3
+        assert {row["status"] for row in quality_rows} == {"PASS"}
     assert len(isolated_minio_store.list_keys("live/SEC/")) == 4
 
     next_day = NOW.replace(day=27)
@@ -227,6 +240,18 @@ def test_sec_jobs_are_idempotently_scheduled_and_persist_raw_filing_and_financia
         assert (
             connection.execute(select(func.count()).select_from(financial_fact)).scalar_one() == 4
         )
+        repeated_quality = (
+            connection.execute(
+                select(data_quality_observation).where(
+                    data_quality_observation.c.provider == "SEC",
+                    data_quality_observation.c.dataset == FeedType.FILINGS.value,
+                )
+            )
+            .mappings()
+            .all()
+        )
+        assert len(repeated_quality) == 6
+        assert {row["status"] for row in repeated_quality} == {"PASS"}
 
 
 def test_sec_response_observed_after_claim_preserves_timestamp_order(

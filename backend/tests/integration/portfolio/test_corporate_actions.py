@@ -71,19 +71,19 @@ def test_corporate_actions_are_point_in_time_and_idempotent(engine: Engine) -> N
                     id, raw_data_object_id, normalized_record_id, provider_action_id,
                     symbol, action_type, effective_at, available_at,
                     ingested_at, provider, feed_type, content_hash, raw_object_key, split_ratio,
-                    cash_per_share, currency
+                    cash_per_share, currency, source_currency
                 ) VALUES
                 (
                     :split_id, :raw_id, :normalized_id, 'split-1', 'NVDA', 'SPLIT',
                     :effective_at, :split_available,
                     :ingested_at, 'FIXTURE', 'corporate_action', :split_hash, :split_key,
-                    2, NULL, 'USD'
+                    2, NULL, 'USD', 'USD'
                 ),
                 (
                     :dividend_id, :raw_id, :normalized_id, 'dividend-1', 'NVDA',
                     'CASH_DIVIDEND', :effective_at,
                     :dividend_available, :ingested_at, 'FIXTURE', 'corporate_action',
-                    :dividend_hash, :dividend_key, NULL, 0.5, 'USD'
+                    :dividend_hash, :dividend_key, NULL, 0.5, 'USD', 'USD'
                 )
                 """
             ),
@@ -132,4 +132,62 @@ def test_corporate_action_query_rejects_naive_cutoff(engine: Engine) -> None:
     with engine.connect() as connection, pytest.raises(ValueError, match="timezone-aware"):
         PostgresCorporateActionStore(connection).visible(
             Symbol("NVDA"), as_of=datetime(2026, 8, 21, 14, 30)
+        )
+
+
+def test_visible_revision_cannot_double_apply_position_or_cash_ledger() -> None:
+    portfolio_id = uuid4()
+    split_id = uuid4()
+    first_split = SplitAction(
+        split_id,
+        Symbol("NVDA"),
+        DECISION_TIME,
+        DECISION_TIME,
+        Decimal("2"),
+    )
+    revised_split = SplitAction(
+        uuid4(),
+        Symbol("NVDA"),
+        DECISION_TIME - timedelta(days=1),
+        DECISION_TIME + timedelta(minutes=1),
+        Decimal("4"),
+        supersedes_id=split_id,
+    )
+    processor = CorporateActionProcessor()
+    adjusted = processor.adjust_position(Position(Symbol("NVDA"), Decimal("10")), (first_split,))
+    revision = processor.adjust_position_with_gaps(adjusted, (revised_split,))
+
+    assert revision.position.quantity == Decimal("20")
+    assert revision.gaps[0].reason == "REVISED_CORPORATE_ACTION_REQUIRES_REPLAY"
+
+    dividend_id = uuid4()
+    first_dividend = CashDividend(
+        dividend_id,
+        Symbol("NVDA"),
+        DECISION_TIME,
+        DECISION_TIME,
+        Decimal("0.5"),
+        "USD",
+    )
+    entries = processor.apply_dividends(
+        initial_funding(portfolio_id, Decimal("1000"), "USD", DECISION_TIME),
+        portfolio_id,
+        adjusted,
+        (first_dividend,),
+    )
+    revised_dividend = CashDividend(
+        uuid4(),
+        Symbol("NVDA"),
+        DECISION_TIME,
+        DECISION_TIME + timedelta(minutes=1),
+        Decimal("0.75"),
+        "USD",
+        supersedes_id=dividend_id,
+    )
+    with pytest.raises(ValueError, match="explicit ledger reversal"):
+        processor.apply_dividends(
+            entries,
+            portfolio_id,
+            adjusted,
+            (revised_dividend,),
         )

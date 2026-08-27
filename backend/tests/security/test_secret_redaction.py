@@ -35,10 +35,29 @@ def test_redaction_handles_secret_values_nested_in_sequences() -> None:
     ]
 
 
+def test_redaction_normalizes_real_provider_header_names() -> None:
+    assert redact(
+        {
+            "APCA-API-KEY-ID": "alpaca-key",
+            "APCA-API-SECRET-KEY": "alpaca-secret",
+            "X-API-Key": "generic-key",
+            "Content-Type": "application/json",
+        }
+    ) == {
+        "APCA-API-KEY-ID": "[REDACTED]",
+        "APCA-API-SECRET-KEY": "[REDACTED]",
+        "X-API-Key": "[REDACTED]",
+        "Content-Type": "application/json",
+    }
+
+
 def test_redaction_removes_query_credentials_and_websocket_auth_payloads() -> None:
     assert redact("https://data.example/v2/bars?api_key=secret&symbol=NVDA") == (
         "https://data.example/v2/bars?api_key=%5BREDACTED%5D&symbol=NVDA"
     )
     assert redact('{"action":"auth","key":"fixture-key","secret":"fixture-secret"}') == (
         '{"action":"auth","key":"[REDACTED]","secret":"[REDACTED]"}'
+    )
+    assert redact("https://www.alphavantage.co/query?function=EARNINGS_CALENDAR&apikey=secret") == (
+        "https://www.alphavantage.co/query?function=EARNINGS_CALENDAR&apikey=%5BREDACTED%5D"
     )
