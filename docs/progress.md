@@ -2439,3 +2439,15 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   source files, no Alembic drift, backend 655 passed / 4 credential-gated tests skipped, Web
   TypeScript/ESLint clean, Vitest 15 files / 96 tests passed, and the nine-route Next.js production
   build succeeded.
+
+### M8 Interview-ready — third-review migration closure (2026-08-29)
+
+- The final pre-landing review found that downgrading revision `0034` removed the CorporateAction
+  revision-chain trigger/function and installed a weaker value constraint even though the current
+  `0033` migration defines the strict guards. A database stamped at `0033` therefore did not match
+  the schema produced by a clean current `0033` migration.
+- RED evidence: the expanded `0034 → 0033` regression observed zero
+  `validate_revision_chain` triggers and exited 1. The repair keeps the strict constraint and
+  serialized revision guard in place while retaining the no-default `source_currency` contract.
+- GREEN evidence: the focused downgrade regression exited 0 with 1 passed, and the complete
+  migration suite exited 0 with 9 passed.

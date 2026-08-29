@@ -67,17 +67,10 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(
         """
-        DROP TRIGGER IF EXISTS validate_revision_chain ON corporate_action;
-        DROP FUNCTION IF EXISTS validate_corporate_action_revision();
-
-        ALTER TABLE corporate_action DROP CONSTRAINT IF EXISTS ck_corporate_action_value;
-        ALTER TABLE corporate_action ADD CONSTRAINT ck_corporate_action_value CHECK (
-            (action_type = 'SPLIT' AND split_ratio > 0)
-            OR (action_type = 'CASH_DIVIDEND' AND cash_per_share >= 0)
-            OR (action_type = 'STOCK_DIVIDEND' AND stock_ratio >= 0)
-            OR (action_type = 'ADR_RATIO_CHANGE' AND old_adr_ratio > 0 AND new_adr_ratio > 0)
-            OR action_type IN ('SPIN_OFF', 'SYMBOL_CHANGE', 'MERGER_ACQUISITION')
-        );
+        -- Current 0033 already defines the strict value constraint and serialized
+        -- revision-chain trigger. 0034 repairs databases stamped before those
+        -- guards were backfilled, so downgrading the revision marker must retain
+        -- the schema that a clean current 0033 migration creates.
         ALTER TABLE corporate_action ALTER COLUMN source_currency DROP DEFAULT;
         """
     )
