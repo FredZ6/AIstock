@@ -2416,3 +2416,26 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   0. Verify reported 305 files format clean, Ruff clean, strict Mypy clean over 265 source files, no
   Alembic drift, backend 655 passed / 4 credential-gated tests skipped, Web 15
   files / 96 tests passed, and the nine-route Next.js production build succeeded.
+
+### M8 Interview-ready — Alpaca live-contract closure (2026-08-29)
+
+- Configured a local, gitignored Alpaca Market Data credential with operator-verified IEX coverage;
+  no credential value was printed or committed. A read-only production-window probe reached
+  `data.alpaca.markets` and returned seven NVDA daily bars for 2026-08-20 through 2026-08-28.
+- RED evidence: the previous live contract called legacy `fetch()` without a start bound, Alpaca
+  returned `bars: null`, and the test failed with `normalization_failed`. The repaired contract uses
+  the production `fetch_window()` path with a bounded ten-day window, explicit IEX/SIP coverage and
+  `1Day` timeframe, then validates the response through `AlpacaNormalizer`. Authentication and
+  entitlement errors remain failures; only genuine network/5xx/timeout conditions may skip.
+- The credentialed command
+  `LIVE_PROVIDER_TESTS=1 ... pytest ... -m live -k alpaca_live_contract -q -rs` exited 0 with
+  1 passed / 30 deselected. The focused provider/normalizer/PostgreSQL/Redis/MinIO regression exited
+  0 with 58 passed / 3 live tests deselected.
+- A real local `.env` exposed an existing unit-test isolation defect: the empty-entitlement test
+  inherited developer credentials. The test now runs from a temporary directory where `.env` is
+  unavailable, preserving production Settings behavior while proving the credential-free case.
+  Its focused regression exited 0 with 9 passed.
+- Fresh full `make verify` exited 0: 305 files format clean, Ruff clean, strict Mypy clean over 265
+  source files, no Alembic drift, backend 655 passed / 4 credential-gated tests skipped, Web
+  TypeScript/ESLint clean, Vitest 15 files / 96 tests passed, and the nine-route Next.js production
+  build succeeded.

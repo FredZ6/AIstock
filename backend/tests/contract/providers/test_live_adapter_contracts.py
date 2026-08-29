@@ -2,8 +2,10 @@ import json
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import pytest
+from stock_platform.application.ingestion.normalizers.alpaca import AlpacaBar, AlpacaNormalizer
 from stock_platform.application.market_data.fallback import FallbackPolicy
 from stock_platform.domain.ingestion.models import IngestionErrorClass
 from stock_platform.infrastructure.providers import base as provider_base
@@ -12,6 +14,7 @@ from stock_platform.infrastructure.providers.base import (
     FeedType,
     HttpRequest,
     HttpResponse,
+    ProviderBatch,
     ProviderRecord,
     ProviderResponse,
     ProviderStatus,
@@ -596,14 +599,52 @@ def test_sec_live_contract() -> None:
 @pytest.mark.live
 def test_alpaca_live_contract() -> None:
     require_live()
-    store = RecordingStore()
-    result = AlpacaProvider(
-        data_key=required_env("ALPACA_DATA_KEY"),
-        data_secret=required_env("ALPACA_DATA_SECRET"),
-        raw_store=store,
-        record_store=RecordingRecordStore(),
-    ).fetch(FeedType.PRICE_BARS, "NVDA", datetime.now(UTC))
-    assert_live_result(result, store)
+    coverage = required_env("ALPACA_ENTITLEMENT_COVERAGE").upper()
+    window_end = datetime.now(UTC)
+    try:
+        batch = AlpacaProvider(
+            data_key=required_env("ALPACA_DATA_KEY"),
+            data_secret=required_env("ALPACA_DATA_SECRET"),
+        ).fetch_window(
+            FeedType.PRICE_BARS,
+            "NVDA",
+            start=window_end - timedelta(days=10),
+            end=window_end,
+            timeframe="1Day",
+            coverage=coverage,
+        )
+    except ProviderTransportError as error:
+        if error.error_class in {
+            IngestionErrorClass.NETWORK,
+            IngestionErrorClass.PROVIDER_5XX,
+            IngestionErrorClass.TIMEOUT,
+        }:
+            pytest.skip("missing requirement: provider network access")
+        raise
+
+    verified_batch = ProviderBatch(
+        provider=batch.provider,
+        feed_type=batch.feed_type,
+        symbol=batch.symbol,
+        query_as_of=batch.query_as_of,
+        observed_at=batch.observed_at,
+        body=batch.body,
+        headers=batch.headers
+        | {
+            "X-AIStock-Verified-Coverage": coverage,
+            "X-AIStock-Timeframe": "1Day",
+        },
+        next_page_token=batch.next_page_token,
+        rate_limit=batch.rate_limit,
+    )
+    normalized = AlpacaNormalizer().normalize_batch(verified_batch)
+
+    assert normalized
+    assert all(isinstance(item, AlpacaBar) for item in normalized)
+    bars = cast(tuple[AlpacaBar, ...], normalized)
+    assert all(bar.symbol == "NVDA" for bar in bars)
+    assert all(bar.coverage == coverage for bar in bars)
+    assert all(bar.event_time <= window_end for bar in bars)
 
 
 @pytest.mark.live
