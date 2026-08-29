@@ -8,14 +8,18 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
-from stock_platform.api.dependencies import get_connection, get_human_actor
+from stock_platform.api.dependencies import get_connection, get_human_actor, get_settings
 from stock_platform.api.main import app
 from stock_platform.application.learning.promotion import HumanActor
+from stock_platform.settings import Settings
 
 LOCKED_OPERATIONS = {
     ("GET", "/api/v1/events"),
     ("GET", "/api/v1/health"),
     ("GET", "/api/v1/providers/health"),
+    ("GET", "/api/v1/market-data/quotes"),
+    ("GET", "/api/v1/market-data/bars/{symbol}"),
+    ("GET", "/api/v1/data-quality"),
     ("GET", "/api/v1/watchlist"),
     ("POST", "/api/v1/watchlist"),
     ("PATCH", "/api/v1/watchlist/{symbol}"),
@@ -63,6 +67,9 @@ def client(api_engine: Engine) -> Iterator[TestClient]:
     with api_engine.connect() as connection:
         transaction = connection.begin()
         app.dependency_overrides[get_connection] = lambda: connection
+        app.dependency_overrides[get_settings] = lambda: Settings(  # type: ignore[call-arg]
+            environment="test", _env_file=None
+        )
         try:
             yield TestClient(app)
         finally:

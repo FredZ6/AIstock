@@ -32,10 +32,31 @@ afterEach(() => {
 })
 
 describe('Watchlist route data boundaries', () => {
+  it('does not label persisted market quotes unavailable when they are present', () => {
+    render(<ApiWatchlistPage
+      asOf="2026-08-29T09:30:00Z"
+      items={[apiRow]}
+      quotes={[{
+        availableAt: '2026-08-29T09:20:00Z',
+        close: '217.545',
+        coverage: 'IEX',
+        eventTime: '2026-08-28T04:00:00Z',
+        provider: 'ALPACA',
+        symbol: 'NVDA',
+      }]}
+    />)
+
+    expect(screen.getByRole('status', { name: 'Research enrichment unavailable' })).toHaveTextContent(
+      'ALPACA market quotes remain visible',
+    )
+    expect(screen.queryByRole('status', { name: 'Market and research data unavailable' })).not.toBeInTheDocument()
+    expect(screen.getByText('USD 217.55')).toBeInTheDocument()
+  })
+
   it('uses the server-provided request time for an empty API watchlist', () => {
     const asOf = '2026-08-23T08:30:00.000Z'
 
-    const { container } = render(<ApiWatchlistPage asOf={asOf} items={[]} />)
+    const { container } = render(<ApiWatchlistPage asOf={asOf} items={[]} quotes={[]} />)
 
     expect(Array.from(container.querySelectorAll('time'))).not.toHaveLength(0)
     expect(Array.from(container.querySelectorAll('time')).every(

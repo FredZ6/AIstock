@@ -380,6 +380,80 @@
         "summary": "Acknowledge Alert"
       }
     },
+    "/api/v1/data-quality": {
+      "get": {
+        "operationId": "list_data_quality_api_v1_data_quality_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dataset",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Dataset",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Data Quality Api V1 Data Quality Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Data Quality"
+      }
+    },
     "/api/v1/evals/runs": {
       "get": {
         "operationId": "list_eval_runs_api_v1_evals_runs_get",
@@ -519,6 +593,141 @@
         "tags": [
           "system"
         ]
+      }
+    },
+    "/api/v1/market-data/bars/{symbol}": {
+      "get": {
+        "operationId": "historical_bars_api_v1_market_data_bars__symbol__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Start",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "End",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Historical Bars Api V1 Market Data Bars  Symbol  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Historical Bars"
+      }
+    },
+    "/api/v1/market-data/quotes": {
+      "get": {
+        "operationId": "latest_quotes_api_v1_market_data_quotes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "symbols",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Symbols",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Latest Quotes Api V1 Market Data Quotes Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Latest Quotes"
       }
     },
     "/api/v1/policies/{policy_id}/activate": {

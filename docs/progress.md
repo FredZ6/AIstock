@@ -2451,3 +2451,40 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   serialized revision guard in place while retaining the no-default `source_currency` contract.
 - GREEN evidence: the focused downgrade regression exited 0 with 1 passed, and the complete
   migration suite exited 0 with 9 passed.
+
+### M8 Interview-ready — real-data API and frontend cutover (2026-08-29)
+
+- Completed the previously blocked PR #16 migration closure and based the new
+  `codex/live-data-frontend` branch on merged `main@092a2ba`. Local runtime is explicitly
+  `ENVIRONMENT=paper`; the root `.env` remains mode `0600` and gitignored. Added a separate,
+  gitignored `web/.env.local` with server-only API mode. No credential value is logged or committed.
+- Proved the real Alpaca IEX persistence path end to end. A bounded NVDA daily-bars request produced
+  one `SUCCEEDED` ingestion job, seven visible MarketBars spanning 2026-08-20 through 2026-08-28,
+  one PASS DataQualityObservation, and one RawDataObject. MinIO contained exactly the same referenced
+  Alpaca raw key and zero unreferenced Alpaca objects. The official WebSocket returned
+  `authenticated` and confirmed the NVDA bars subscription. Because validation ran on Saturday, no
+  live trade/bar event was claimed. A macOS SOCKS-proxy runtime failure was fixed by adding the
+  `python-socks[asyncio]` dependency; its RED/GREEN packaging regression exited 1 then 0.
+- Added PIT-safe read contracts for latest quotes, historical bars, raw quality dimensions, and
+  provider health. Every historical request rejects naive time and filters both event time and
+  `available_at` against the caller's decision time. Provider health now reports paper/read-only IEX
+  evidence from the latest persisted job and quality observation instead of hard-coded Fixture mode.
+  The OpenAPI artifact was regenerated and its deterministic `--check` exited 0.
+- Switched Today, Watchlist, Stock Research, and Portfolio to explicit server-side API mode. Today
+  and Watchlist render the persisted NVDA IEX close (`USD 217.55` after display rounding) with
+  provider/coverage provenance. Research keeps current-market reference separate from missing
+  persisted research evidence. Portfolio shows Failure when no NAV exists. Network, HTTP, and
+  contract failures never import or substitute fixture snapshots; partial Watchlist quote failure
+  preserves persisted configuration and renders Degraded.
+- TDD evidence: market read tests first failed with 404 and then exited 0 with 3 passed; live-data
+  client tests first failed on the missing module and then exited 0 with 4 passed; API-mode page tests
+  first failed on missing components and then exited 0 with 3 passed. The focused REST/API suite
+  exited 0 with 14 passed. A final Watchlist state regression first failed because available ALPACA
+  quotes were still labelled unavailable, then passed after the Degraded boundary was made
+  evidence-aware. Frontend lint, TypeScript, and all 17 Vitest files exited 0 with 104/104.
+- Fresh `make verify` exited 0 after two environment-isolation regressions were fixed. Final evidence:
+  306 files format clean, Ruff clean, strict Mypy clean over 266 source files, no Alembic/OpenAPI
+  drift, backend 660 passed / 4 credential-gated live tests skipped, Web 104 passed, and the Next.js
+  production build succeeded. Runtime SSR probes for `/`, `/watchlist`, `/research/NVDA`, and
+  `/portfolio` all exited 0 and contained `API Mode`; the first three contained ALPACA/IEX facts,
+  while Portfolio explicitly stated that no Fixture portfolio was substituted.

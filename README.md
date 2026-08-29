@@ -63,6 +63,19 @@ FastAPI and PostgreSQL, then start Next.js with:
 WEB_DATA_MODE=api API_BASE_URL=http://127.0.0.1:8000 pnpm --dir web dev
 ```
 
+The API-mode Today, Watchlist, Stock Research, and Portfolio routes read only persisted FastAPI
+facts. Market reads require an aware `decision_time` and enforce `available_at <= decision_time`.
+The read surface includes `/api/v1/market-data/quotes`, `/api/v1/market-data/bars/{symbol}`,
+`/api/v1/data-quality`, and evidence-backed `/api/v1/providers/health`. If a provider, contract, or
+database read fails, the affected route renders an explicit Failure or Degraded state; it never
+loads the fixture snapshot as a recovery path.
+
+For continuous local ingestion, run one Celery worker for the default scheduler queue, one for the
+`ingestion-low` persistence queue, Celery Beat, and the read-only Alpaca stream supervisor in
+separate terminals. All processes must source the gitignored root `.env`; the frontend uses the
+separate gitignored `web/.env.local`. The Alpaca process connects only to Market Data and has no
+brokerage or live-order path.
+
 Fixture manifests identify their synthetic provenance and license; they are not real quotations,
 filings, analyst research, or news. API Mode uses read-only Alpaca Market Data/News, SEC EDGAR, and
 Alpha Vantage earnings adapters when separately configured. Missing credentials remain explicit

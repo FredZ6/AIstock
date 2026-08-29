@@ -1,9 +1,24 @@
+from collections.abc import Iterator
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
+from stock_platform.api.dependencies import get_settings
 from stock_platform.api.main import app
+from stock_platform.settings import Settings
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def fixture_settings() -> Iterator[None]:
+    app.dependency_overrides[get_settings] = lambda: Settings(  # type: ignore[call-arg]
+        environment="fixture", _env_file=None
+    )
+    try:
+        yield
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_health_reports_fixture_mode_and_paper_only_boundary() -> None:

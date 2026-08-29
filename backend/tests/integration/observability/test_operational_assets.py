@@ -13,6 +13,19 @@ def test_testclient_uses_starlette_supported_http_transport() -> None:
     assert "httpx2>=2,<3" in project["dependency-groups"]["dev"]
 
 
+def test_alpaca_stream_supports_runtime_socks_proxies() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())
+
+    assert "python-socks[asyncio]>=2.7,<3" in project["project"]["dependencies"]
+
+
+def test_local_runtime_configuration_and_beat_state_are_gitignored() -> None:
+    ignored = (ROOT / ".gitignore").read_text().splitlines()
+
+    assert ".env.local" in ignored
+    assert "celerybeat-schedule*" in ignored
+
+
 def test_compose_wires_otel_prometheus_and_grafana_with_pinned_configs() -> None:
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
     assert compose["name"] == "aistock"

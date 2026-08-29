@@ -20,6 +20,7 @@ dependencies = [
   "pydantic-settings>=2.10,<3",
   "psycopg[binary]>=3.2,<4",
   "prometheus-client>=0.22,<1",
+  "python-socks[asyncio]>=2.7,<3",
   "redis>=6,<7",
   "sqlalchemy>=2.0,<3",
   "websockets>=15,<16",

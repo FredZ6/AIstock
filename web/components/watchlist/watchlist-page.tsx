@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { FormEvent, useState } from 'react'
 
 import type { ApiWatchlistItem, WatchlistSnapshot } from '../../lib/product-types'
+import type { MarketQuote } from '../../lib/server/live-data-api'
 import { formatMoney, formatPercent } from '../../lib/format'
 import { parseAwareInstant } from '../../lib/time'
 import { formatDualTime } from '../../lib/time'
@@ -13,19 +14,31 @@ import { StateBoundary } from '../states/state-boundary'
 import { FixtureNotice, PageHeading, QualityFacts, Signal } from '../ui/product-ui'
 import { WatchlistApiControls } from './watchlist-api-controls'
 
-const apiSummary = 'Persisted watchlist configuration from FastAPI. Market and research enrichment remains unavailable.'
-
-export function ApiWatchlistPage({ asOf, items }: { asOf: string; items: ApiWatchlistItem[] }) {
+export function ApiWatchlistPage({ asOf, items, quotes }: { asOf: string; items: ApiWatchlistItem[]; quotes: MarketQuote[] }) {
+  const hasMarketQuotes = quotes.length > 0
+  const missing = [
+    ...(hasMarketQuotes ? [] : ['Market data']),
+    'Research',
+    'Earnings',
+    'Decision history',
+  ]
   return (
     <AppShell currentPath="/watchlist">
-      <PageHeading asOf={asOf} eyebrow="Discover · API Mode" title="Watchlist" summary={apiSummary} />
+      <PageHeading
+        asOf={asOf}
+        eyebrow="Discover · API Mode"
+        title="Watchlist"
+        summary="Persisted configuration and point-in-time market quotes from FastAPI; missing enrichment remains explicit."
+      />
       <StateBoundary state={{
         kind: 'degraded',
-        title: 'Market and research data unavailable',
-        message: 'Persisted schedules and thresholds remain usable. Missing facts are never replaced with Fixture data.',
-        providers: ['Market', 'Research', 'Earnings', 'Data quality'],
+        title: hasMarketQuotes ? 'Research enrichment unavailable' : 'Market and research data unavailable',
+        message: hasMarketQuotes
+          ? 'ALPACA market quotes remain visible. Missing research facts are never replaced with Fixture data.'
+          : 'Persisted schedules and thresholds remain usable. Missing facts are never replaced with Fixture data.',
+        providers: missing,
       }}>
-        <WatchlistApiControls items={items} />
+        <WatchlistApiControls items={items} quotes={quotes} />
       </StateBoundary>
     </AppShell>
   )
