@@ -2350,3 +2350,69 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   skips. Fresh `make verify` exited 0: 300 files format clean, Ruff clean, strict Mypy clean over 261
   source files, no Alembic/MCP/OpenAPI drift, backend 647 passed / 4 skipped, Web TypeScript/ESLint
   clean, Vitest 14 files / 94 tests passed, and all nine Next.js routes built successfully.
+
+### M8 Interview-ready — FRE-22 Task 18 implementation and non-destructive acceptance (2026-08-28)
+
+- Added the deterministic, credential-free fixture demo spanning NVDA research with an evidence
+  conflict, a deterministic alert, one paper fill, a separate risk rejection, NAV and four benchmark
+  categories, Weekly Review attribution, rejected unapproved policy activation, and a recorded human
+  lesson approval. `scripts/smoke.sh` now writes the manifest, frozen offline-evaluation artifacts,
+  JUnit/HTML reports, and four Playwright screenshots under `evals/reports/latest`.
+- Added the interview dossier and operational documentation: product requirements, architecture,
+  testing strategy, ten-minute demo script, interview guide, and resume-metric provenance. README now
+  states the paper-only boundary, architecture, provider/licensing modes, security model, evaluation
+  procedure, and limitations. The Eval page reads only `evals/reports/latest/summary.json`; a missing
+  or malformed artifact renders an explicit unavailable state and never substitutes a metric.
+- Repaired the inherited migration drift with forward-only revision `0034_corp_action_guards` rather
+  than editing an already-applied migration. The focused migration, CorporateAction, demo, and seed
+  target suite exited 0 with 29 passed. A separate dry-run regression proves `make seed` orders
+  PostgreSQL/MinIO startup before Alembic upgrade and fixture loading.
+- Fresh `make verify` exited 0: 303 files format clean, Ruff clean, strict Mypy clean over 263 source
+  files, no Alembic/MCP/OpenAPI drift, backend 651 passed / 4 credential-gated live tests skipped,
+  Web TypeScript/ESLint clean, Vitest 14 files / 94 tests passed, and the nine-route Next.js production
+  build succeeded. `SMOKE_SKIP_SEED=1 make smoke` exited 0 with the frozen 200-case evaluation release
+  gate passing and Playwright desktop/mobile demo 2 passed; no live-provider result was fabricated.
+- After explicit user authorization, removed only the port-conflicting
+  `aistock-fre24-postgres-final3` container, its volume, and this Compose project's four fixed data
+  volumes; the separate test database on port 55433 and every unrelated Docker project were retained.
+  The exact clean-room sequence then completed with every command exiting 0:
+  `make clean-fixtures`, `make bootstrap`, `make seed`, `make up`, `make smoke`, and `make verify`.
+  Empty-database Alembic upgraded from `0001` through `0034`; first seed created 11 Watchlist
+  securities and 31 normalized records, while the smoke rerun created 0 securities and 0 normalized
+  records. Final smoke passed its frozen 200-case evaluation plus Desktop/Mobile Playwright 2/2, and
+  final verify repeated backend 651 passed / 4 skipped, Web 94/94, and a successful production build.
+
+### M8 Interview-ready — FRE-22 Task 18 professional-review closure (2026-08-29)
+
+- Closed both Important findings from the first standards review. Revision `0034` now restores the
+  exact `0033` `source_currency` contract on downgrade by dropping its default, and a dedicated
+  `head → 0033` database regression proves the default remains absent. The Eval page now treats both
+  malformed JSON and schema-invalid artifacts as explicitly unavailable instead of crashing or
+  inventing replacement metrics; real filesystem-backed Vitest regressions cover both cases.
+- Closed the demo-spec findings. The deterministic portfolio manifest and browser flow now prove the
+  same NAV `USD 100,425.18` and drawdown `-1.80%`. The scenario persists a real Candidate Lesson
+  through the production PostgreSQL weekly-review store and exercises its append-only human `APPROVE`
+  decision through the shared human-only application service. The manifest labels this honestly as a
+  `ROLLBACK_PROBE`; the fixture transaction rolls back for repeatability and does not claim a durable
+  post-smoke audit row. Policy promotion remains a separate candidate whose unapproved activation is
+  rejected.
+- Fixed the mobile acceptance harness after a RED click-interception regression exposed mismatched
+  layout and visual viewports in Chrome. The mobile project now uses a concrete `393 × 852` viewport
+  with touch support and no incompatible `isMobile` emulation. Desktop writes the four canonical
+  screenshots while mobile writes to its project subdirectory, eliminating concurrent overwrite;
+  desktop/mobile demo E2E passed 2/2.
+- The second standards review found that the extracted Lesson approval service trusted a caller's
+  actor ID. It now accepts the shared `HumanActor` value and enforces authenticated, non-agent human
+  identity before any database access. Three RED/GREEN security cases cover unauthenticated,
+  non-human, and agent-suffixed actors while the existing policy-promotion denial behavior remains
+  intact. Focused final regression results: backend security/API/demo/migration suite 36 passed, Web
+  lint/typecheck clean, Vitest 15 files / 96 tests passed, and demo E2E 2 passed. No provider
+  credential or live result was fabricated.
+- Repeated the exact authorized clean-room sequence after all review fixes. Every command exited 0:
+  `make clean-fixtures`, `make bootstrap`, `make seed`, `make up`, `make smoke`, and `make verify`.
+  Empty PostgreSQL upgraded from `0001` through `0034`; first seed created 11 securities and 31
+  normalized records, repeat smoke seed created 0/0, offline evaluation passed, and Playwright passed
+  desktop/mobile 2/2. After the second-review fixes, final `make smoke` and `make verify` both exited
+  0. Verify reported 305 files format clean, Ruff clean, strict Mypy clean over 265 source files, no
+  Alembic drift, backend 655 passed / 4 credential-gated tests skipped, Web 15
+  files / 96 tests passed, and the nine-route Next.js production build succeeded.

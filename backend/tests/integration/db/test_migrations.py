@@ -92,7 +92,33 @@ def test_head_can_downgrade_to_0024_and_upgrade_again(
     engine = create_engine(migration_database_url)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-            "0033_ingestion_quality"
+            "0034_corp_action_guards"
+        )
+    engine.dispose()
+
+
+def test_0034_downgrade_restores_0033_without_a_source_currency_default(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "head")
+    command.downgrade(config, "0033_ingestion_quality")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text(
+                    """
+                SELECT column_default
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'corporate_action'
+                  AND column_name = 'source_currency'
+                """
+                )
+            ).scalar_one()
+            is None
         )
     engine.dispose()
 

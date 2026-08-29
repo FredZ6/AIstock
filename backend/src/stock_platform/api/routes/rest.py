@@ -19,6 +19,7 @@ from stock_platform.api.schemas.rest import (
     WatchlistPatch,
     WatchlistRequest,
 )
+from stock_platform.application.learning.approval import LessonNotFound, record_lesson_decision
 from stock_platform.application.learning.promotion import (
     HumanActor,
     PolicyPromotionForbidden,
@@ -42,11 +43,7 @@ from stock_platform.domain.ingestion.models import DataPurpose
 from stock_platform.infrastructure.db.models.tables import (
     agent_run,
     alert_event,
-    candidate_lesson,
-    decision_outcome,
-    error_attribution,
     investment_thesis,
-    lesson_approval,
     paper_fill,
     paper_order,
     portfolio_nav,
@@ -471,30 +468,17 @@ def _lesson_action(
     actor: HumanActor,
     disposition: Literal["APPROVE", "REJECT"],
 ) -> dict[str, Any]:
-    exists = connection.execute(
-        select(candidate_lesson.c.id)
-        .join(error_attribution, candidate_lesson.c.attribution_id == error_attribution.c.id)
-        .join(decision_outcome, error_attribution.c.outcome_id == decision_outcome.c.id)
-        .where(
-            candidate_lesson.c.id == lesson_id, decision_outcome.c.weekly_review_run_id == review_id
+    try:
+        row = record_lesson_decision(
+            connection,
+            review_id=review_id,
+            lesson_id=lesson_id,
+            actor=actor,
+            action=disposition,
+            rationale=action.rationale,
         )
-    ).scalar_one_or_none()
-    if exists is None:
-        raise ApiError(404, "NOT_FOUND", "Lesson not found in weekly review")
-    row = (
-        connection.execute(
-            insert(lesson_approval)
-            .values(
-                lesson_id=lesson_id,
-                actor_id=actor.id,
-                action=disposition,
-                rationale=action.rationale,
-            )
-            .returning(lesson_approval)
-        )
-        .mappings()
-        .one()
-    )
+    except LessonNotFound as exception:
+        raise ApiError(404, "NOT_FOUND", "Lesson not found in weekly review") from exception
     return _row(row)
 
 
