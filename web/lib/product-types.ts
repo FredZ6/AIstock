@@ -163,5 +163,14 @@ export type WeeklyReviewSnapshot = {
 
 export type EvalAdminSnapshot = {
   asOf: string
+  evaluation: null | {
+    artifactPath: string
+    caseCount: number
+    datasetVersion: string
+    metrics: Array<{ label: string; value: string }>
+    mode: string
+    passed: boolean
+    policyVersion: string
+  }
   policyVersions: Array<{ active: boolean; kind: string; version: string }>
 }

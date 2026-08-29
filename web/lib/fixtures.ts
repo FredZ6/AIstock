@@ -222,7 +222,7 @@ export const fixtureWeeklyReviewSnapshot: WeeklyReviewSnapshot = {
   lesson: {
     id: 'lesson-risk-regime-001',
     proposal: 'Require a second regime confirmation before increasing exposure after a large gap.',
-    status: 'PENDING',
+    status: 'APPROVED',
   },
   replay: {
     availableAtCutoff: '2026-08-15T20:00:00Z',
@@ -233,6 +233,7 @@ export const fixtureWeeklyReviewSnapshot: WeeklyReviewSnapshot = {
 
 export const fixtureEvalAdminSnapshot: EvalAdminSnapshot = {
   asOf: '2026-08-21T20:00:00Z',
+  evaluation: null,
   policyVersions: [
     { kind: 'Research scoring', version: 'research-scoring-v1', active: true },
     { kind: 'Risk', version: 'risk-v1', active: true },

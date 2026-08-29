@@ -92,8 +92,74 @@ def test_head_can_downgrade_to_0024_and_upgrade_again(
     engine = create_engine(migration_database_url)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-            "0033_ingestion_quality"
+            "0034_corp_action_guards"
         )
+    engine.dispose()
+
+
+def test_0034_downgrade_restores_the_complete_0033_corporate_action_schema(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "head")
+    command.downgrade(config, "0033_ingestion_quality")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text(
+                    """
+                SELECT column_default
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'corporate_action'
+                  AND column_name = 'source_currency'
+                """
+                )
+            ).scalar_one()
+            is None
+        )
+        assert (
+            connection.execute(
+                text(
+                    """
+                    SELECT count(*)
+                    FROM pg_trigger
+                    WHERE tgrelid = 'corporate_action'::regclass
+                      AND tgname = 'validate_revision_chain'
+                      AND NOT tgisinternal
+                    """
+                )
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            connection.execute(
+                text(
+                    """
+                    SELECT count(*)
+                    FROM pg_proc
+                    WHERE proname = 'validate_corporate_action_revision'
+                    """
+                )
+            ).scalar_one()
+            == 1
+        )
+        constraint = connection.execute(
+            text(
+                """
+                SELECT pg_get_constraintdef(oid)
+                FROM pg_constraint
+                WHERE conrelid = 'corporate_action'::regclass
+                  AND conname = 'ck_corporate_action_value'
+                """
+            )
+        ).scalar_one()
+        assert "stock_ratio > (0)::numeric" in constraint
+        assert "cash_per_share IS NULL" in constraint
+        assert "old_adr_ratio IS NULL" in constraint
+        assert "new_adr_ratio IS NULL" in constraint
     engine.dispose()
 
 

@@ -1,5 +1,6 @@
 from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
+from pathlib import Path
 
 import pytest
 from stock_platform.application.ingestion.normalizers.alpaca import market_session_for
@@ -138,7 +139,12 @@ def test_entitlement_metadata_requires_aware_observation_and_declared_sip_delay(
         replace(_entitlement(MarketDataCoverage.SIP), sip_delay=None)
 
 
-def test_runtime_entitlement_requires_explicit_credentials_coverage_and_version() -> None:
+def test_runtime_entitlement_requires_explicit_credentials_coverage_and_version(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
     assert alpaca_entitlement_from_settings(Settings(environment="test"), observed_at=NOW) is None
     with pytest.raises(ValueError, match="configured together"):
         Settings(environment="test", alpaca_data_key="key-only")

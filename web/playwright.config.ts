@@ -14,7 +14,12 @@ export default defineConfig({
     },
     {
       name: 'mobile-chrome',
-      use: { channel: 'chrome', hasTouch: true, isMobile: true, viewport: { height: 852, width: 393 } },
+      use: {
+        channel: 'chrome',
+        deviceScaleFactor: 1,
+        hasTouch: true,
+        viewport: { height: 852, width: 393 },
+      },
     },
   ],
   use: { baseURL: `http://127.0.0.1:${webPort}` },

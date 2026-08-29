@@ -1,9 +1,16 @@
 # AI Agent 美股科技研究与模拟投资平台
 
 Evidence-grounded US technology research and paper-trading simulation. The repository is implemented
-through **M7 Quality Task 17** with correlated observability, security hardening, and tested recovery
-runbooks.
-It runs in **Fixture Mode** without provider credentials and cannot connect to a live broker.
+through **M8 Interview-ready Task 18** with a reproducible credential-free demo, measured evaluation
+evidence, and interview documentation.
+
+## Product boundary
+
+This system supports research and **Paper Trading only**. It is not investment advice and contains
+no live-broker endpoint, credential, feature flag, or real-money execution path. An LLM cannot place
+orders, send notifications, change risk rules, approve lessons, or activate policies. Historical
+decisions only use facts satisfying `event_time <= decision_time` and
+`available_at <= decision_time`.
 
 ## Requirements
 
@@ -15,6 +22,19 @@ It runs in **Fixture Mode** without provider credentials and cannot connect to a
 
 ## Quick start
 
+Clean-room M8 acceptance requires no provider credential:
+
+```bash
+make clean-fixtures
+make bootstrap
+make seed
+make up
+make smoke
+make verify
+```
+
+For routine development with running services:
+
 ```bash
 make bootstrap
 make up
@@ -24,9 +44,10 @@ make verify
 
 Copy `.env.example` to `.env` only when overriding local defaults. Provider credentials are not
 required for fixture-mode M1. `make seed` idempotently writes frozen raw objects to MinIO and
-normalized point-in-time records to PostgreSQL.
+normalized point-in-time records to PostgreSQL. `make smoke` writes the demo manifest, evaluation
+report, and fallback screenshots under `evals/reports/latest/`.
 
-### Frontend data modes
+## Provider modes and data licensing
 
 The Next.js frontend requires an explicit server-side `WEB_DATA_MODE`:
 
@@ -41,6 +62,26 @@ FastAPI and PostgreSQL, then start Next.js with:
 ```bash
 WEB_DATA_MODE=api API_BASE_URL=http://127.0.0.1:8000 pnpm --dir web dev
 ```
+
+Fixture manifests identify their synthetic provenance and license; they are not real quotations,
+filings, analyst research, or news. API Mode uses read-only Alpaca Market Data/News, SEC EDGAR, and
+Alpha Vantage earnings adapters when separately configured. Missing credentials remain explicit
+Unavailable/Degraded states. Alpaca IEX is partial-market context and is never represented as
+consolidated SIP. Third-party data remains subject to its provider's terms and redistribution rules.
+
+## Architecture
+
+Deterministic code owns time eligibility, alerts, risk, accounting, policy authorization, and release
+gates. Bounded graphs structure research, portfolio proposals, and weekly reviews; PostgreSQL owns
+authoritative facts, MinIO preserves raw objects, and Redis transports recoverable work/SSE events.
+The append-only lineage is:
+
+```text
+RawDataObject → NormalizedRecord → DerivedMetric → Evidence → Claim
+              → InvestmentThesis → DecisionSnapshot → Paper decision / review
+```
+
+See [docs/architecture.md](docs/architecture.md) for component ownership and trust boundaries.
 
 ## M1 data plane
 
@@ -93,7 +134,27 @@ WEB_DATA_MODE=api API_BASE_URL=http://127.0.0.1:8000 pnpm --dir web dev
   files for the single Prometheus API scrape target. Clear that directory only while every runtime
   process is stopped.
 
-## Safety boundary
+## Security
 
-This repository is for research and paper trading only. It contains no live-broker URL,
-credential, switch, endpoint, or order execution path.
+The tool allowlist is deny-by-default, provider text is isolated from instructions, secrets are
+redacted, and policy changes require an authenticated human plus compare-and-swap revision. Local
+infrastructure binds to localhost. See [docs/security.md](docs/security.md) and `docs/runbooks/`.
+
+## Evaluation
+
+`make evaluate` runs the frozen 200-case, eight-layer offline suite and writes raw case, summary,
+JUnit, and HTML evidence to `evals/reports/latest/`. `make smoke` additionally runs the deterministic
+interview scenario and creates fallback screenshots. Every displayed or resume-facing number must
+link to the generated raw artifact; Fixture results are software evidence, not production alpha.
+
+See [docs/testing.md](docs/testing.md), [docs/demo-script.md](docs/demo-script.md),
+[docs/interview-guide.md](docs/interview-guide.md), and
+[docs/resume-metrics.md](docs/resume-metrics.md).
+
+## Limitations
+
+- Fixture Mode is synthetic and frozen; it does not prove current market correctness or returns.
+- Credential/entitlement-gated live-provider tests skip explicitly and are never reported as passed.
+- Analyst targets and options may remain typed Unavailable; SIP requires proven entitlement.
+- Paper fills model next-eligible-bar execution rather than every real venue/liquidity effect.
+- Generated reports and screenshots are ignored by Git and must be regenerated with `make smoke`.

@@ -10,6 +10,8 @@ down:
 	docker compose down
 
 seed:
+	docker compose up -d --wait postgres minio
+	PYTHONPATH="$(CURDIR)/backend/src" UV_CACHE_DIR="$(CURDIR)/.uv-cache" uv run alembic -c backend/alembic.ini upgrade head
 	PYTHONPATH="$(CURDIR)/backend/src" UV_CACHE_DIR="$(CURDIR)/.uv-cache" uv run python scripts/seed_demo.py
 
 clean-fixtures:
@@ -19,7 +21,7 @@ verify:
 	./scripts/verify.sh
 
 evaluate:
-	PYTHONPATH="$(CURDIR)/backend/src" UV_CACHE_DIR="$(CURDIR)/.uv-cache" uv run python scripts/run_offline_eval.py --dataset evals/datasets --baseline evals/baselines/eval-v0.2.0.json --output reports/evaluation/latest
+	PYTHONPATH="$(CURDIR)/backend/src" UV_CACHE_DIR="$(CURDIR)/.uv-cache" uv run python scripts/run_offline_eval.py --dataset evals/datasets --baseline evals/baselines/eval-v0.2.0.json --output evals/reports/latest
 
 smoke:
 	./scripts/smoke.sh

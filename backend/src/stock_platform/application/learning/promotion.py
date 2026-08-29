@@ -47,6 +47,11 @@ class VersionConflict(RuntimeError):
     pass
 
 
+def require_authenticated_human(actor: HumanActor) -> None:
+    if not actor.authenticated or not actor.is_human or actor.id.casefold().endswith("agent"):
+        raise PolicyPromotionForbidden("authenticated human approval required")
+
+
 class PolicyRepository(Protocol):
     def active_version(self, policy_kind: str) -> str: ...
 
@@ -408,9 +413,11 @@ class PolicyPromotionService:
     def _authorize(
         self, candidate: PolicyCandidate, *, actor: HumanActor, action: str, expected_revision: int
     ) -> None:
-        if not actor.authenticated or not actor.is_human or actor.id.casefold().endswith("agent"):
+        try:
+            require_authenticated_human(actor)
+        except PolicyPromotionForbidden:
             self._repository.deny(candidate, actor, action, expected_revision)
-            raise PolicyPromotionForbidden("authenticated human approval required")
+            raise
 
     def approve(
         self, candidate: PolicyCandidate, *, actor: HumanActor, expected_revision: int

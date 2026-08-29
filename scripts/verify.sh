@@ -7,8 +7,8 @@ export NEXT_TELEMETRY_DISABLED=1
 export WEB_DATA_MODE=fixture
 
 cd "${repo_root}"
-uv run ruff format --check backend scripts/export_mcp_contracts.py scripts/export_openapi.py scripts/generate_eval_datasets.py scripts/recovery_probe.py scripts/run_offline_eval.py
-uv run ruff check backend scripts/export_mcp_contracts.py scripts/export_openapi.py scripts/generate_eval_datasets.py scripts/recovery_probe.py scripts/run_offline_eval.py
+uv run ruff format --check backend scripts/demo_scenario.py scripts/export_mcp_contracts.py scripts/export_openapi.py scripts/generate_eval_datasets.py scripts/recovery_probe.py scripts/run_offline_eval.py
+uv run ruff check backend scripts/demo_scenario.py scripts/export_mcp_contracts.py scripts/export_openapi.py scripts/generate_eval_datasets.py scripts/recovery_probe.py scripts/run_offline_eval.py
 uv run mypy
 uv run alembic -c backend/alembic.ini check
 PYTHONPATH="${repo_root}/backend/src" uv run python scripts/export_mcp_contracts.py --check
