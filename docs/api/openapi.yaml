@@ -1,6 +1,162 @@
 {
   "components": {
     "schemas": {
+      "DataQualityItem": {
+        "additionalProperties": false,
+        "properties": {
+          "conflict": {
+            "title": "Conflict",
+            "type": "boolean"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "IEX",
+                  "SIP"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dataset": {
+            "title": "Dataset",
+            "type": "string"
+          },
+          "delay": {
+            "anyOf": [
+              {
+                "format": "duration",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "dimension": {
+            "title": "Dimension",
+            "type": "string"
+          },
+          "freshness": {
+            "anyOf": [
+              {
+                "format": "duration",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "normalized_record_id": {
+            "format": "uuid",
+            "title": "Normalized Record Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "raw_data_object_id": {
+            "format": "uuid",
+            "title": "Raw Data Object Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PASS",
+              "DEGRADED",
+              "UNAVAILABLE",
+              "FAIL"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "raw_data_object_id",
+          "normalized_record_id",
+          "provider",
+          "dataset",
+          "dimension",
+          "status",
+          "observed_at",
+          "freshness",
+          "coverage",
+          "delay",
+          "conflict",
+          "policy_version",
+          "details",
+          "created_at"
+        ],
+        "title": "DataQualityItem",
+        "type": "object"
+      },
+      "DataQualityResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DataQualityItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "SUCCESS",
+              "DEGRADED",
+              "FAILURE"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "decision_time",
+          "items"
+        ],
+        "title": "DataQualityResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -65,6 +221,162 @@
         "title": "HumanAction",
         "type": "object"
       },
+      "MarketDataItem": {
+        "additionalProperties": false,
+        "properties": {
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "close": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Close",
+            "type": "string"
+          },
+          "conflict": {
+            "title": "Conflict",
+            "type": "boolean"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "coverage": {
+            "enum": [
+              "IEX",
+              "SIP"
+            ],
+            "title": "Coverage",
+            "type": "string"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
+            "type": "string"
+          },
+          "feed_type": {
+            "title": "Feed Type",
+            "type": "string"
+          },
+          "high": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "High",
+            "type": "string"
+          },
+          "ingested_at": {
+            "format": "date-time",
+            "title": "Ingested At",
+            "type": "string"
+          },
+          "low": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Low",
+            "type": "string"
+          },
+          "open": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Open",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "raw_object_key": {
+            "title": "Raw Object Key",
+            "type": "string"
+          },
+          "session": {
+            "enum": [
+              "PRE_MARKET",
+              "REGULAR",
+              "AFTER_HOURS",
+              "OVERNIGHT"
+            ],
+            "title": "Session",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "timeframe": {
+            "enum": [
+              "1Min",
+              "1Day"
+            ],
+            "title": "Timeframe",
+            "type": "string"
+          },
+          "volume": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Volume",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "provider",
+          "feed_type",
+          "timeframe",
+          "event_time",
+          "available_at",
+          "ingested_at",
+          "content_hash",
+          "raw_object_key",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume",
+          "coverage",
+          "session",
+          "conflict"
+        ],
+        "title": "MarketDataItem",
+        "type": "object"
+      },
+      "MarketDataResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MarketDataItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "missing_symbols": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Symbols",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "SUCCESS",
+              "DEGRADED",
+              "FAILURE"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "decision_time",
+          "items"
+        ],
+        "title": "MarketDataResponse",
+        "type": "object"
+      },
       "PortfolioRunRequest": {
         "additionalProperties": false,
         "properties": {
@@ -84,6 +396,123 @@
           "data_cutoff"
         ],
         "title": "PortfolioRunRequest",
+        "type": "object"
+      },
+      "ProviderHealthResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "fixture",
+              "paper",
+              "test"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "providers": {
+            "$ref": "#/components/schemas/ProviderStates"
+          }
+        },
+        "required": [
+          "mode",
+          "providers"
+        ],
+        "title": "ProviderHealthResponse",
+        "type": "object"
+      },
+      "ProviderState": {
+        "additionalProperties": false,
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage"
+          },
+          "latest_job_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Job State"
+          },
+          "latest_quality_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Quality Status"
+          },
+          "mode": {
+            "enum": [
+              "read_only",
+              "unavailable"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "SUCCESS",
+                  "DEGRADED",
+                  "FAILURE",
+                  "UNAVAILABLE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "configured",
+          "mode"
+        ],
+        "title": "ProviderState",
+        "type": "object"
+      },
+      "ProviderStates": {
+        "additionalProperties": false,
+        "properties": {
+          "alpaca": {
+            "$ref": "#/components/schemas/ProviderState"
+          },
+          "fmp": {
+            "$ref": "#/components/schemas/ProviderState"
+          },
+          "sec": {
+            "$ref": "#/components/schemas/ProviderState"
+          }
+        },
+        "required": [
+          "sec",
+          "alpaca",
+          "fmp"
+        ],
+        "title": "ProviderStates",
         "type": "object"
       },
       "ResearchRunRequest": {
@@ -432,9 +861,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Data Quality Api V1 Data Quality Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DataQualityResponse"
                 }
               }
             },
@@ -640,6 +1067,19 @@
           },
           {
             "in": "query",
+            "name": "timeframe",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1Min",
+                "1Day"
+              ],
+              "title": "Timeframe",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -656,9 +1096,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Historical Bars Api V1 Market Data Bars  Symbol  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MarketDataResponse"
                 }
               }
             },
@@ -701,6 +1139,20 @@
               "title": "Decision Time",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "timeframe",
+            "required": false,
+            "schema": {
+              "default": "1Day",
+              "enum": [
+                "1Min",
+                "1Day"
+              ],
+              "title": "Timeframe",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -708,9 +1160,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Latest Quotes Api V1 Market Data Quotes Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MarketDataResponse"
                 }
               }
             },
@@ -869,6 +1319,18 @@
     "/api/v1/portfolio": {
       "get": {
         "operationId": "get_portfolio_api_v1_portfolio_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -881,6 +1343,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Portfolio"
@@ -991,9 +1463,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Provider Health Api V1 Providers Health Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProviderHealthResponse"
                 }
               }
             },
@@ -1186,6 +1656,16 @@
             "required": true,
             "schema": {
               "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
               "type": "string"
             }
           }

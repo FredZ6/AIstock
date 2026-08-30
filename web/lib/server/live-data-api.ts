@@ -137,7 +137,12 @@ function contract<T>(parse: () => T): T {
 export async function getMarketQuotes(
   options: LiveDataClientOptions,
   symbols: string[],
-): Promise<{ decisionTime: string; items: MarketQuote[]; status: LiveDataStatus }> {
+): Promise<{
+  decisionTime: string
+  items: MarketQuote[]
+  missingSymbols: string[]
+  status: LiveDataStatus
+}> {
   if (!symbols.length || symbols.some((symbol) => !symbolPattern.test(symbol))) {
     throw new LiveDataApiError('contract', 'Quote symbols are invalid')
   }
@@ -149,9 +154,15 @@ export async function getMarketQuotes(
   return contract(() => {
     const source = record(value, 'quotes')
     if (!Array.isArray(source.items)) throw new TypeError('quotes.items must be an array')
+    if (!Array.isArray(source.missing_symbols)) throw new TypeError('quotes.missing_symbols must be an array')
     return {
       status: enumeration(source.status, ['SUCCESS', 'DEGRADED', 'FAILURE'] as const, 'quotes.status'),
       decisionTime: instant(source.decision_time, 'quotes.decision_time'),
+      missingSymbols: source.missing_symbols.map((value, index) => {
+        const symbol = text(value, `quotes.missing_symbols[${index}]`)
+        if (!symbolPattern.test(symbol)) throw new TypeError('missing quote symbol is invalid')
+        return symbol
+      }),
       items: source.items.map((item, index) => {
         const row = record(item, `quotes.items[${index}]`)
         const symbol = text(row.symbol, 'quote.symbol')
@@ -194,7 +205,8 @@ export async function getProviderHealth(options: LiveDataClientOptions): Promise
 }
 
 export async function getPortfolioSummary(options: LiveDataClientOptions): Promise<PortfolioSummary> {
-  const value = await requestJson(options, '/api/v1/portfolio')
+  const query = new URLSearchParams({ decision_time: options.decisionTime })
+  const value = await requestJson(options, `/api/v1/portfolio?${query}`)
   return contract(() => {
     const source = record(value, 'portfolio')
     const latest = source.latest_nav === null ? null : record(source.latest_nav, 'portfolio.latest_nav')
@@ -214,7 +226,8 @@ export async function getStockResearch(
   symbol: string,
 ): Promise<ResearchRecord[]> {
   if (!symbolPattern.test(symbol)) throw new LiveDataApiError('contract', 'Research symbol is invalid')
-  const value = await requestJson(options, `/api/v1/stocks/${encodeURIComponent(symbol)}/research`)
+  const query = new URLSearchParams({ decision_time: options.decisionTime })
+  const value = await requestJson(options, `/api/v1/stocks/${encodeURIComponent(symbol)}/research?${query}`)
   return contract(() => {
     if (!Array.isArray(value)) throw new TypeError('research must be an array')
     return value.map((item, index) => {

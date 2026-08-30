@@ -18,17 +18,19 @@ export function ApiTodayPage({
   health,
   portfolio,
   quotes,
+  unavailableDomains = [],
 }: {
   asOf: string
-  health: ProviderHealth
-  portfolio: PortfolioSummary
+  health: ProviderHealth | null
+  portfolio: PortfolioSummary | null
   quotes: MarketQuote[]
+  unavailableDomains?: string[]
 }) {
-  const unavailable = Object.entries(health.providers)
+  const unavailable = health ? Object.entries(health.providers)
     .filter(([, provider]) => !provider.configured || provider.status === 'FAILURE' || provider.status === 'UNAVAILABLE')
-    .map(([name]) => name.toUpperCase())
-  const missing = [...unavailable, 'Market regime', 'Research decisions', 'Alerts']
-  if (!portfolio.latestNav) missing.push('Portfolio NAV')
+    .map(([name]) => name.toUpperCase()) : ['Provider health']
+  const missing = [...unavailableDomains, ...unavailable, 'Market regime', 'Research decisions', 'Alerts']
+  if (!portfolio?.latestNav) missing.push('Portfolio NAV')
   return (
     <AppShell currentPath="/">
       <PageHeading asOf={asOf} eyebrow="Decision workspace · API Mode" title="Today" summary="Current persisted facts, with unavailable domains left explicit." />
@@ -53,7 +55,7 @@ export function ApiTodayPage({
         </section>
         <section className="terminal-section" aria-labelledby="paper-portfolio-title">
           <p className="section-kicker">Paper only</p><h2 id="paper-portfolio-title">Paper portfolio</h2>
-          {portfolio.latestNav
+          {portfolio?.latestNav
             ? <p><strong>{formatMoney(portfolio.latestNav.nav, 'USD')}</strong> at <time dateTime={portfolio.latestNav.eventTime}>{formatDualTime(portfolio.latestNav.eventTime).newYork}</time></p>
             : <p className="unavailable-value">No persisted NAV is available.</p>}
         </section>
@@ -67,25 +69,34 @@ export function ApiResearchPage({
   quote,
   records,
   symbol,
+  unavailableDomains = [],
 }: {
   asOf: string
   quote: MarketQuote | null
   records: ResearchRecord[]
   symbol: string
+  unavailableDomains?: string[]
 }) {
+  const missing = [
+    ...unavailableDomains,
+    ...(!quote ? ['Current market reference'] : []),
+    ...(!records.length ? ['Research', 'Fundamentals', 'Earnings', 'News', 'Options', 'Analyst targets'] : []),
+  ]
+  const state = missing.length ? {
+    kind: 'degraded' as const,
+    title: records.length && !quote ? 'Current market reference unavailable' : 'Research evidence unavailable',
+    message: 'Available persisted facts remain visible. No Fixture data was substituted.',
+    providers: missing,
+  } : { kind: 'success' as const }
   return (
     <AppShell currentPath={`/research/${symbol}`}>
       <PageHeading asOf={asOf} eyebrow="Research · API Mode" title={`${symbol} research`} summary="Persisted research only; current market reference remains separate from historical decision evidence." />
-      <StateBoundary state={records.length ? { kind: 'success' } : {
-        kind: 'degraded',
-        title: 'Research evidence unavailable',
-        message: 'No persisted research record exists for this symbol. No Fixture data was substituted.',
-        providers: ['Research', 'Fundamentals', 'Earnings', 'News', 'Options', 'Analyst targets'],
-      }}>
+      <StateBoundary state={state}>
         {quote ? <section className="decision-hero" aria-label="Latest persisted market quote">
           <div><p className="section-kicker">Current market reference</p><h2>{quote.symbol}</h2><p className="thesis-copy">{formatMoney(quote.close, 'USD')}</p></div>
           <dl className="decision-facts"><div><dt>Provider</dt><dd>{quote.provider}</dd></div><div><dt>Coverage</dt><dd>{quote.coverage}</dd></div><div><dt>Available</dt><dd>{formatDualTime(quote.availableAt).newYork}</dd></div></dl>
         </section> : <p className="unavailable-value">Current quote unavailable.</p>}
+        <p className="muted-copy">TradingView is a current-market reference only; it is not point-in-time decision evidence.</p>
         <TradingViewWidget kind="symbol-overview" symbol={symbol} />
         {records.map((record) => <article className="terminal-section" key={record.id}>
           <p className="section-kicker">Persisted thesis</p><h2>{record.direction}</h2><p>{record.summary}</p>

@@ -18,11 +18,23 @@ export default async function ResearchRoute({ params }: { params: Promise<{ symb
     }
     const asOf = new Date().toISOString()
     const options = { baseUrl: config.baseUrl, decisionTime: asOf }
-    const [quotes, records] = await Promise.all([
+    const [quotesResult, recordsResult] = await Promise.allSettled([
       getMarketQuotes(options, [normalized]),
       getStockResearch(options, normalized),
     ])
-    return <ApiResearchPage asOf={asOf} quote={quotes.items[0] ?? null} records={records} symbol={normalized} />
+    if (quotesResult.status === 'rejected' && recordsResult.status === 'rejected') {
+      return <ApiFailurePage currentPath={`/research/${normalized}`} title={`${normalized} research`} />
+    }
+    return <ApiResearchPage
+      asOf={asOf}
+      quote={quotesResult.status === 'fulfilled' ? quotesResult.value.items[0] ?? null : null}
+      records={recordsResult.status === 'fulfilled' ? recordsResult.value : []}
+      symbol={normalized}
+      unavailableDomains={[
+        ...(quotesResult.status === 'rejected' ? ['Market quotes API'] : []),
+        ...(recordsResult.status === 'rejected' ? ['Research API'] : []),
+      ]}
+    />
   } catch {
     return <ApiFailurePage currentPath={`/research/${normalized}`} title={`${normalized} research`} />
   }

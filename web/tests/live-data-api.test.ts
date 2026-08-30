@@ -22,6 +22,7 @@ describe('live data API client', () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       status: 'SUCCESS',
       decision_time: options.decisionTime,
+      missing_symbols: [],
       items: [{
         symbol: 'NVDA', provider: 'ALPACA', coverage: 'IEX', feed_type: 'price_bars',
         event_time: '2026-08-28T04:00:00Z', available_at: '2026-08-29T09:20:00Z',
@@ -54,7 +55,7 @@ describe('live data API client', () => {
       if (url.endsWith('/providers/health')) return jsonResponse({
         mode: 'paper', providers: { alpaca: { configured: true, mode: 'read_only', status: 'SUCCESS', coverage: 'IEX' } },
       })
-      if (url.endsWith('/portfolio')) return jsonResponse({ latest_nav: null, trading: 'paper_only' })
+      if (url.includes('/portfolio?')) return jsonResponse({ latest_nav: null, trading: 'paper_only' })
       return jsonResponse([])
     })
 

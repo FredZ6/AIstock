@@ -105,6 +105,23 @@ def test_openapi_contains_the_locked_surface_and_no_live_broker() -> None:
     assert all("broker" not in path.casefold() for _, path in actual)
 
 
+def test_live_read_endpoints_publish_closed_response_schemas() -> None:
+    document = app.openapi()
+
+    for path in (
+        "/api/v1/providers/health",
+        "/api/v1/market-data/quotes",
+        "/api/v1/market-data/bars/{symbol}",
+        "/api/v1/data-quality",
+    ):
+        schema = document["paths"][path]["get"]["responses"]["200"]["content"]["application/json"][
+            "schema"
+        ]
+        assert "$ref" in schema, path
+        component = document["components"]["schemas"][schema["$ref"].rsplit("/", 1)[-1]]
+        assert component.get("additionalProperties") is False, path
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -199,13 +216,14 @@ def test_admission_limit_is_durable_and_cancellation_releases_capacity(
 
 
 def test_locked_read_views_are_callable(client: TestClient) -> None:
+    decision_time = datetime(2026, 8, 21, 21, tzinfo=UTC).isoformat().replace("+00:00", "Z")
     paths = (
         "/api/v1/health",
         "/api/v1/providers/health",
         "/api/v1/watchlist",
-        "/api/v1/stocks/NVDA/research",
+        f"/api/v1/stocks/NVDA/research?decision_time={decision_time}",
         "/api/v1/alerts",
-        "/api/v1/portfolio",
+        f"/api/v1/portfolio?decision_time={decision_time}",
         "/api/v1/portfolio/orders",
         "/api/v1/portfolio/fills",
         "/api/v1/weekly-reviews",

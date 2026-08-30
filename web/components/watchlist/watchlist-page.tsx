@@ -14,10 +14,10 @@ import { StateBoundary } from '../states/state-boundary'
 import { FixtureNotice, PageHeading, QualityFacts, Signal } from '../ui/product-ui'
 import { WatchlistApiControls } from './watchlist-api-controls'
 
-export function ApiWatchlistPage({ asOf, items, quotes }: { asOf: string; items: ApiWatchlistItem[]; quotes: MarketQuote[] }) {
-  const hasMarketQuotes = quotes.length > 0
+export function ApiWatchlistPage({ asOf, items, missingSymbols = [], quotes }: { asOf: string; items: ApiWatchlistItem[]; missingSymbols?: string[]; quotes: MarketQuote[] }) {
+  const hasCompleteMarketQuotes = items.length > 0 && missingSymbols.length === 0 && quotes.length === items.length
   const missing = [
-    ...(hasMarketQuotes ? [] : ['Market data']),
+    ...(hasCompleteMarketQuotes ? [] : missingSymbols.length ? missingSymbols.map((symbol) => `${symbol} market quote`) : ['Market data']),
     'Research',
     'Earnings',
     'Decision history',
@@ -32,8 +32,8 @@ export function ApiWatchlistPage({ asOf, items, quotes }: { asOf: string; items:
       />
       <StateBoundary state={{
         kind: 'degraded',
-        title: hasMarketQuotes ? 'Research enrichment unavailable' : 'Market and research data unavailable',
-        message: hasMarketQuotes
+        title: hasCompleteMarketQuotes ? 'Research enrichment unavailable' : 'Market and research data unavailable',
+        message: hasCompleteMarketQuotes
           ? 'ALPACA market quotes remain visible. Missing research facts are never replaced with Fixture data.'
           : 'Persisted schedules and thresholds remain usable. Missing facts are never replaced with Fixture data.',
         providers: missing,

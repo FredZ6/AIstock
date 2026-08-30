@@ -23,13 +23,13 @@ export default async function WatchlistRoute() {
       ? await getMarketQuotes(
         { baseUrl: config.baseUrl, decisionTime },
         items.map((item) => item.symbol),
-      ).catch(() => ({ items: [] }))
-      : { items: [] }
+      ).catch(() => ({ items: [], missingSymbols: items.map((item) => item.symbol) }))
+      : { items: [], missingSymbols: [] }
     const asOf = items.reduce(
       (latest, item) => item.updatedAt > latest ? item.updatedAt : latest,
       items[0]?.updatedAt ?? new Date().toISOString(),
     )
-    return <ApiWatchlistPage asOf={asOf} items={items} quotes={quotes.items} />
+    return <ApiWatchlistPage asOf={asOf} items={items} missingSymbols={quotes.missingSymbols} quotes={quotes.items} />
   } catch {
     return <WatchlistFailurePage asOf={new Date().toISOString()} />
   }

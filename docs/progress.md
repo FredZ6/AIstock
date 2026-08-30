@@ -2488,3 +2488,63 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   production build succeeded. Runtime SSR probes for `/`, `/watchlist`, `/research/NVDA`, and
   `/portfolio` all exited 0 and contained `API Mode`; the first three contained ALPACA/IEX facts,
   while Portfolio explicitly stated that no Fixture portfolio was substituted.
+
+### PR #17 — pre-landing blockers (2026-08-30)
+
+- PR #17 (`ecc4004`, based on `main@092a2ba`) passed GitHub `Verify` and `evaluation`,
+  but the professional pre-landing review did not authorize merge. Two independent review axes
+  agreed that green CI did not cover the following correctness and scale boundaries.
+- P1/PIT: MarketBar reads did not constrain persisted provider, feed type, or timeframe, so records
+  from a Fixture source or a different bar granularity could enter API Mode. Research and Portfolio
+  accepted a frontend decision time but did not transmit or enforce it, allowing future thesis/NAV
+  rows to appear before their decision cutoff.
+- P1/query safety: multi-symbol quotes used one unbounded historical query per symbol, historical
+  bars applied range and limit in Python, and the public symbol list had no cardinality bound.
+- P1/degradation: a partial multi-symbol result returned `SUCCESS`; the conflict path was
+  unreachable; Watchlist ignored the response status. Today and Research used `Promise.all`, so one
+  failed enrichment hid other facts that had loaded successfully.
+- P1/health: provider health combined unrelated latest job and quality rows without a freshness
+  model, while the quality window allowed an older failure to mask a later recovery and did not
+  validate the raw fact's point-in-time lineage.
+- P1/contract: the four new OpenAPI success responses remained arbitrary objects rather than locked
+  Pydantic schemas. Missing regression coverage included mixed provider/timeframe, partial symbols,
+  conflict, recovered quality, stale health, future Research/Portfolio facts, and partial frontend
+  failures.
+- Review decision: fix all data-integrity, PIT, degradation, query-bound, health, typed-contract, and
+  regression gaps before merge. Keep the user-requested TradingView Symbol Overview only as a
+  separately labelled current-market reference; it must never be represented as decision-time
+  evidence or replace persisted facts.
+
+### PR #17 — blocker repair and second-review gate (2026-08-30)
+
+- Market reads now accept only persisted `ALPACA` `price_bars` for the requested IEX/SIP coverage,
+  regular session, and explicit `1Min`/`1Day` timeframe. Quotes use one bounded SQL window query for
+  at most 50 symbols; history applies range, canonical-revision selection, ordering, and limit in
+  PostgreSQL. Responses preserve conflict state and name missing symbols, making partial reads
+  `DEGRADED` and empty reads `FAILURE`.
+- Research and Portfolio now require an aware decision time. Research filters both thesis `as_of`
+  and creation time; Portfolio filters NAV event time and the new authoritative `available_at`.
+  Migration `0035` backfills legacy NAV availability from event time, adds the database check, and
+  round-trips cleanly. The local NAV table had zero rows when its initially misnamed constraint was
+  repaired; no data was changed or invented.
+- Data-quality reads join their raw object and enforce raw `available_at <= decision_time`; envelope
+  status derives from the latest visible observation per dimension so an old failure does not mask
+  a proven recovery. Provider health no longer reports success while the latest ingestion job is
+  pending. Alembic now ignores only the four explicitly named LangGraph-owned checkpoint tables,
+  while continuing to detect every platform-owned schema drift.
+- Today and Stock Research use independent settled requests: successful persisted facts remain
+  visible when an enrichment fails, and the failed domains are named as Degraded. Watchlist consumes
+  missing-symbol evidence. TradingView is labelled as current-market reference only and explicitly
+  excluded from point-in-time decision evidence. No path falls back to Fixture data in API mode.
+- RED evidence included mixed provider/timeframe, partial-symbol and conflict reads; future thesis
+  and NAV; recovered quality with a future raw fact; pending provider health; partial frontend
+  failures; arbitrary OpenAPI responses; and an external checkpoint table misclassified as schema
+  drift. Each failed for the intended missing behavior before the minimal implementation passed.
+- Focused GREEN evidence: market/PIT/quality/health integration 9 passed; REST contract 12 passed;
+  migration focus 2 passed; frontend partial-failure/type/client suites 10 passed; complete frontend
+  Vitest 18 files / 106 tests passed. The locked OpenAPI artifact was regenerated with closed
+  Pydantic success schemas.
+- Final `make verify` exited 0: 307 files format clean, Ruff clean, strict Mypy clean over 266 source
+  files, no Alembic/OpenAPI drift, backend 669 passed / 4 credential-gated tests skipped, frontend
+  TypeScript and ESLint clean, Vitest 106/106 passed, and the ten-route Next.js production build
+  succeeded.

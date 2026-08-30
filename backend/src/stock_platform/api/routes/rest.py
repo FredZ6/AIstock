@@ -12,8 +12,11 @@ from sqlalchemy.exc import NoResultFound
 from stock_platform.api.dependencies import get_connection, get_human_actor, get_settings
 from stock_platform.api.schemas.errors import ApiError
 from stock_platform.api.schemas.rest import (
+    DataQualityResponse,
     HumanAction,
+    MarketDataResponse,
     PortfolioRunRequest,
+    ProviderHealthResponse,
     ResearchRunRequest,
     RunResponse,
     WatchlistPatch,
@@ -43,7 +46,6 @@ from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.ingestion.models import (
     DataPurpose,
-    FeedType,
     MarketDataCoverage,
     MarketSession,
 )
@@ -56,6 +58,7 @@ from stock_platform.infrastructure.db.models.tables import (
     paper_fill,
     paper_order,
     portfolio_nav,
+    raw_data_object,
     research_opinion,
     security,
     security_identifier_version,
@@ -232,7 +235,7 @@ def _create_run(
     )
 
 
-@router.get("/providers/health")
+@router.get("/providers/health", response_model=ProviderHealthResponse)
 def provider_health(
     settings: SettingsDependency, connection: ConnectionDependency
 ) -> dict[str, Any]:
@@ -255,7 +258,7 @@ def provider_health(
         alpaca_status = "FAILURE"
     elif latest_quality == "DEGRADED" or latest_job in {"RETRY_SCHEDULED", "COMPLETED_WITH_GAPS"}:
         alpaca_status = "DEGRADED"
-    elif latest_quality == "PASS" or latest_job == "SUCCEEDED":
+    elif latest_quality == "PASS" and latest_job in {None, "SUCCEEDED"}:
         alpaca_status = "SUCCESS"
     else:
         alpaca_status = "DEGRADED"
@@ -282,12 +285,13 @@ def provider_health(
     }
 
 
-@router.get("/market-data/quotes")
+@router.get("/market-data/quotes", response_model=MarketDataResponse)
 def latest_quotes(
     connection: ConnectionDependency,
     settings: SettingsDependency,
     symbols: Annotated[str, Query(min_length=1)],
     decision_time: datetime,
+    timeframe: Literal["1Min", "1Day"] = "1Day",
 ) -> dict[str, Any]:
     cutoff = _aware_query_time(decision_time, "decision_time")
     requested = tuple(
@@ -295,22 +299,34 @@ def latest_quotes(
     )
     if not requested:
         raise ApiError(422, "INVALID_REQUEST", "symbols must contain at least one symbol")
-    repository = PostgresMarketDataRepository(connection)
-    items: list[dict[str, Any]] = []
-    for symbol in requested:
-        response = repository.as_of(
-            symbol=symbol,
-            feed_type=FeedType.PRICE_BARS,
-            decision_time=cutoff,
-            coverage=_coverage(settings),
-            session=MarketSession.REGULAR,
-        )
-        if response.records:
-            items.append(_market_record(response.records[-1]))
-    return {"status": _read_status(items), "decision_time": cutoff, "items": items}
+    if len(requested) > 50:
+        raise ApiError(422, "INVALID_REQUEST", "symbols cannot contain more than 50 entries")
+    records = PostgresMarketDataRepository(connection).latest_bars_as_of(
+        symbols=requested,
+        decision_time=cutoff,
+        coverage=_coverage(settings),
+        session=MarketSession.REGULAR,
+        timeframe=timeframe,
+    )
+    record_by_symbol = {str(record.symbol): record for record in records}
+    items = [
+        _market_record(record_by_symbol[symbol])
+        for symbol in requested
+        if symbol in record_by_symbol
+    ]
+    missing_symbols = [symbol for symbol in requested if symbol not in record_by_symbol]
+    status = _read_status(items)
+    if items and missing_symbols:
+        status = "DEGRADED"
+    return {
+        "status": status,
+        "decision_time": cutoff,
+        "missing_symbols": missing_symbols,
+        "items": items,
+    }
 
 
-@router.get("/market-data/bars/{symbol}")
+@router.get("/market-data/bars/{symbol}", response_model=MarketDataResponse)
 def historical_bars(
     symbol: str,
     connection: ConnectionDependency,
@@ -318,6 +334,7 @@ def historical_bars(
     start: datetime,
     end: datetime,
     decision_time: datetime,
+    timeframe: Literal["1Min", "1Day"],
     limit: Annotated[int, Query(ge=1, le=5000)] = 500,
 ) -> dict[str, Any]:
     normalized_symbol = _symbol(symbol)
@@ -328,22 +345,21 @@ def historical_bars(
         raise ApiError(422, "INVALID_REQUEST", "start cannot be after end")
     if end_at > cutoff:
         raise ApiError(422, "INVALID_REQUEST", "end cannot be after decision_time")
-    response = PostgresMarketDataRepository(connection).as_of(
+    records = PostgresMarketDataRepository(connection).historical_bars_as_of(
         symbol=normalized_symbol,
-        feed_type=FeedType.PRICE_BARS,
+        start=start_at,
+        end=end_at,
         decision_time=cutoff,
         coverage=_coverage(settings),
         session=MarketSession.REGULAR,
+        timeframe=timeframe,
+        limit=limit,
     )
-    items = [
-        _market_record(record)
-        for record in response.records
-        if start_at <= record.event_time <= end_at
-    ][-limit:]
+    items = [_market_record(record) for record in records]
     return {"status": _read_status(items), "decision_time": cutoff, "items": items}
 
 
-@router.get("/data-quality")
+@router.get("/data-quality", response_model=DataQualityResponse)
 def list_data_quality(
     connection: ConnectionDependency,
     provider: Annotated[str, Query(min_length=1)],
@@ -354,19 +370,28 @@ def list_data_quality(
     cutoff = _aware_query_time(decision_time, "decision_time")
     rows = connection.execute(
         select(data_quality_observation)
+        .join(
+            raw_data_object,
+            raw_data_object.c.id == data_quality_observation.c.raw_data_object_id,
+        )
         .where(
             data_quality_observation.c.provider == provider.strip().upper(),
             data_quality_observation.c.dataset == dataset.strip(),
             data_quality_observation.c.observed_at <= cutoff,
+            raw_data_object.c.available_at <= cutoff,
         )
         .order_by(data_quality_observation.c.observed_at.desc())
         .limit(limit)
     ).mappings()
     items = [_row(row) for row in rows]
     status: Literal["SUCCESS", "DEGRADED", "FAILURE"]
-    if not items or any(item["status"] in {"FAIL", "UNAVAILABLE"} for item in items):
+    latest_by_dimension: dict[str, dict[str, Any]] = {}
+    for item in items:
+        latest_by_dimension.setdefault(str(item["dimension"]), item)
+    current = tuple(latest_by_dimension.values())
+    if not current or any(item["status"] in {"FAIL", "UNAVAILABLE"} for item in current):
         status = "FAILURE"
-    elif any(item["status"] == "DEGRADED" for item in items):
+    elif any(item["status"] == "DEGRADED" for item in current):
         status = "DEGRADED"
     else:
         status = "SUCCESS"
@@ -520,12 +545,19 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
 
 
 @router.get("/stocks/{symbol}/research")
-def get_stock_research(symbol: str, connection: ConnectionDependency) -> list[dict[str, Any]]:
+def get_stock_research(
+    symbol: str, connection: ConnectionDependency, decision_time: datetime
+) -> list[dict[str, Any]]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
     rows = (
         connection.execute(
             select(investment_thesis, research_opinion.c.value.label("opinion"))
             .outerjoin(research_opinion, research_opinion.c.thesis_id == investment_thesis.c.id)
-            .where(investment_thesis.c.symbol == _symbol(symbol))
+            .where(
+                investment_thesis.c.symbol == _symbol(symbol),
+                investment_thesis.c.as_of <= cutoff,
+                investment_thesis.c.created_at <= cutoff,
+            )
             .order_by(investment_thesis.c.as_of.desc())
         )
         .mappings()
@@ -567,10 +599,17 @@ def acknowledge_alert(
 
 
 @router.get("/portfolio")
-def get_portfolio(connection: ConnectionDependency) -> dict[str, Any]:
+def get_portfolio(connection: ConnectionDependency, decision_time: datetime) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
     latest_nav = (
         connection.execute(
-            select(portfolio_nav).order_by(portfolio_nav.c.event_time.desc()).limit(1)
+            select(portfolio_nav)
+            .where(
+                portfolio_nav.c.event_time <= cutoff,
+                portfolio_nav.c.available_at <= cutoff,
+            )
+            .order_by(portfolio_nav.c.event_time.desc(), portfolio_nav.c.available_at.desc())
+            .limit(1)
         )
         .mappings()
         .one_or_none()
