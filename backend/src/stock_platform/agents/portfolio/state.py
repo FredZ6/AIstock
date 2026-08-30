@@ -24,7 +24,7 @@ from stock_platform.domain.research.claims import ResearchOpinionValue
 
 
 def append_only[T](left: tuple[T, ...], right: tuple[T, ...]) -> tuple[T, ...]:
-    return left + right
+    return tuple(left) + tuple(right)
 
 
 @dataclass(frozen=True, slots=True)

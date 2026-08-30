@@ -73,9 +73,9 @@ class DailyResearchGraph:
         )
         builder.add_edge("planner", "parallel_collection")
 
-        def dispatch_collection(state: ResearchState) -> list[Send]:
+        def dispatch_collection(state: ResearchState) -> list[Send] | str:
             task = state["specification"]
-            return [
+            sends = [
                 Send(
                     "collect_feed",
                     {
@@ -86,6 +86,7 @@ class DailyResearchGraph:
                 )
                 for feed in state["collection_targets"]
             ]
+            return sends or "normalize_freshness_lineage"
 
         builder.add_conditional_edges("parallel_collection", dispatch_collection)
         builder.add_edge("collect_feed", "normalize_freshness_lineage")
@@ -102,7 +103,8 @@ class DailyResearchGraph:
             "evidence_judge",
             lambda state: (
                 "reflect"
-                if (state["gaps"] or state["conflicts"]) and state["reflections"] < 1
+                if (state["gaps"] or state["conflicts"])
+                and state["reflections"] < state["specification"].budgets.reflections
                 else "score"
             ),
             {"reflect": "reflect", "score": "deterministic_score_confidence"},

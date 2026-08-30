@@ -7,6 +7,7 @@ from time import sleep
 from stock_platform.agents.harness.budget import BudgetLimits
 from stock_platform.agents.harness.task_spec import PolicyVersions, TaskSpecification
 from stock_platform.agents.research.graph import DailyResearchGraph
+from stock_platform.agents.research.nodes import core as research_nodes
 from stock_platform.application.research.persistence import InMemoryResearchStore
 from stock_platform.infrastructure.providers.base import FeedType, ProviderResponse
 from stock_platform.infrastructure.providers.fixture.loader import FixtureCatalog
@@ -73,3 +74,34 @@ def test_collection_fans_out_and_merges_in_deterministic_feed_order() -> None:
     assert tuple(item.id for item in result.evidence) == tuple(item.id for item in replay.evidence)
     assert len({item.id for item in result.evidence}) == len(result.evidence)
     assert len({item.id for item in result.claims}) == len(result.claims)
+
+
+def test_analysts_process_evidence_in_parallel(monkeypatch: object) -> None:
+    lock = Lock()
+    active = 0
+    max_active = 0
+    original = research_nodes._claim_for
+
+    def tracked_claim(item: object) -> object:
+        nonlocal active, max_active
+        with lock:
+            active += 1
+            max_active = max(max_active, active)
+        sleep(0.03)
+        try:
+            return original(item)  # type: ignore[arg-type]
+        finally:
+            with lock:
+                active -= 1
+
+    monkeypatch.setattr(research_nodes, "_claim_for", tracked_claim)  # type: ignore[attr-defined]
+    result = DailyResearchGraph(
+        provider=FixtureCatalog.load_default().provider(),
+        store=InMemoryResearchStore(),
+    ).run(
+        run_id="992530e7-0a3a-46fe-a1ee-a98b878c21a3",
+        specification=specification(),
+    )
+
+    assert max_active > 1
+    assert {claim.evidence_id for claim in result.claims} == {item.id for item in result.evidence}

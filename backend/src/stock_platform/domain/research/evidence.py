@@ -28,6 +28,7 @@ class FrozenDict(dict[str, object]):
     popitem = _immutable  # type: ignore[assignment]
     setdefault = _immutable
     update = _immutable
+    __ior__ = _immutable  # type: ignore[assignment]
 
 
 class EvidenceGapKind(StrEnum):

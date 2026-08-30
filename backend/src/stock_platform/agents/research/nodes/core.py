@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Protocol, TypedDict
 from uuid import UUID
 
-from stock_platform.agents.research.state import ResearchState, ResearchStatus
+from stock_platform.agents.research.state import ReplaceById, ResearchState, ResearchStatus
 from stock_platform.application.research.citation_verifier import CitationVerifier
 from stock_platform.application.research.numeric_verifier import NumericUnit, NumericVerifier
 from stock_platform.application.research.persistence import ResearchStore
@@ -180,7 +180,8 @@ class ResearchNodes:
                 )
         return {
             **_route("normalize_freshness_lineage"),
-            "evidence": tuple(evidence),
+            "evidence": ReplaceById(tuple(evidence)),
+            "claims": ReplaceById(()),
             "gaps": tuple(gaps),
         }
 
@@ -198,7 +199,13 @@ class ResearchNodes:
             value = str(item.payload.get("median_target"))
             target_values.setdefault(value, []).append(item)
         if len(target_values) <= 1:
-            return _route("evidence_judge")
+            return {
+                **_route("evidence_judge"),
+                "conflicts": (),
+                "gaps": tuple(
+                    gap for gap in state["gaps"] if gap.kind is not EvidenceGapKind.CONFLICTED
+                ),
+            }
         evidence_ids = tuple(item.id for item in targets)
         conflict = EvidenceConflict(
             field="median_target",
@@ -218,7 +225,10 @@ class ResearchNodes:
         return {
             **_route("evidence_judge"),
             "conflicts": (conflict,),
-            "gaps": (gap,),
+            "gaps": tuple(
+                item for item in state["gaps"] if item.kind is not EvidenceGapKind.CONFLICTED
+            )
+            + (gap,),
         }
 
     def reflect(self, state: ResearchState) -> dict[str, object]:

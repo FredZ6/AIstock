@@ -245,24 +245,39 @@ def provider_health(
     settings: SettingsDependency, connection: ConnectionDependency
 ) -> dict[str, Any]:
     coverage = _coverage(settings)
+    ranked_quality = (
+        select(
+            data_quality_observation.c.status,
+            data_quality_observation.c.observed_at,
+            func.dense_rank()
+            .over(
+                partition_by=data_quality_observation.c.dimension,
+                order_by=data_quality_observation.c.observed_at.desc(),
+            )
+            .label("rank"),
+        )
+        .where(
+            data_quality_observation.c.provider == "ALPACA",
+            data_quality_observation.c.dataset == "price_bars",
+            data_quality_observation.c.coverage == coverage.value,
+        )
+        .subquery()
+    )
     latest_quality = (
         connection.execute(
-            select(
-                data_quality_observation.c.status,
-                data_quality_observation.c.observed_at,
+            select(ranked_quality.c.status, ranked_quality.c.observed_at).where(
+                ranked_quality.c.rank == 1
             )
-            .where(
-                data_quality_observation.c.provider == "ALPACA",
-                data_quality_observation.c.dataset == "price_bars",
-                data_quality_observation.c.coverage == coverage.value,
-            )
-            .order_by(data_quality_observation.c.observed_at.desc())
-            .limit(1)
         )
         .mappings()
-        .one_or_none()
+        .all()
     )
-    latest_quality_status = latest_quality["status"] if latest_quality else None
+    quality_priority = {"PASS": 0, "DEGRADED": 1, "UNAVAILABLE": 2, "FAIL": 3}
+    latest_quality_status = (
+        max((row["status"] for row in latest_quality), key=quality_priority.__getitem__)
+        if latest_quality
+        else None
+    )
     latest_job = connection.execute(
         select(ingestion_job.c.state)
         .where(
@@ -275,7 +290,9 @@ def provider_health(
     ).scalar_one_or_none()
     alpaca_configured = bool(settings.alpaca_data_key and settings.alpaca_data_secret)
     quality_age = (
-        datetime.now(UTC) - latest_quality["observed_at"] if latest_quality is not None else None
+        datetime.now(UTC) - min(row["observed_at"] for row in latest_quality)
+        if latest_quality
+        else None
     )
     degraded_after, unavailable_after = _DATA_QUALITY_POLICY.thresholds("ALPACA", "price_bars")
     if not alpaca_configured:

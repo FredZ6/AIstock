@@ -38,8 +38,18 @@ class HasId(Protocol):
     id: UUID
 
 
-def merge_by_id[T: HasId](left: tuple[T, ...], right: tuple[T, ...]) -> tuple[T, ...]:
-    merged = {str(item.id): item for item in tuple(left) + tuple(right)}
+@dataclass(frozen=True, slots=True)
+class ReplaceById[T]:
+    """Mark a single-node recomputation that replaces prior fan-in state."""
+
+    values: tuple[T, ...]
+
+
+def merge_by_id[T: HasId](
+    left: tuple[T, ...], right: tuple[T, ...] | ReplaceById[T]
+) -> tuple[T, ...]:
+    values = right.values if isinstance(right, ReplaceById) else tuple(left) + tuple(right)
+    merged = {str(item.id): item for item in values}
     return tuple(merged[key] for key in sorted(merged))
 
 
@@ -74,8 +84,8 @@ class ResearchState(TypedDict):
     responses: Annotated[tuple[ProviderResponse, ...], merge_responses]
     evidence: Annotated[tuple[EvidenceItem, ...], merge_by_id]
     claims: Annotated[tuple[Claim, ...], merge_by_id]
-    gaps: Annotated[tuple[EvidenceGap, ...], merge_by_id]
-    conflicts: Annotated[tuple[EvidenceConflict, ...], merge_conflicts]
+    gaps: tuple[EvidenceGap, ...]
+    conflicts: tuple[EvidenceConflict, ...]
     warnings: Annotated[tuple[str, ...], merge_strings]
     reflections: int
     score: ResearchScore | None

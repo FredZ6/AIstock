@@ -1,7 +1,10 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from stock_platform.agents.checkpointing import checkpoint_serializer
 from stock_platform.agents.harness.budget import BudgetLimits
 from stock_platform.agents.harness.task_spec import PolicyVersions, TaskSpecification
 from stock_platform.agents.research.graph import DailyResearchGraph
@@ -53,3 +56,25 @@ def test_postgres_checkpoint_factory_rejects_non_postgres_urls() -> None:
     with pytest.raises(ValueError, match="PostgreSQL"):
         with postgres_checkpointer("sqlite:///tmp/checkpoints.db"):
             pass
+
+
+def test_checkpoint_serializer_uses_an_explicit_constructor_allowlist() -> None:
+    serializer = checkpoint_serializer()
+
+    assert serializer._allowed_msgpack_modules is not True
+
+
+@dataclass
+class UntrustedCheckpointValue:
+    value: str
+
+
+def test_checkpoint_serializer_does_not_construct_unlisted_types() -> None:
+    encoded = JsonPlusSerializer(allowed_msgpack_modules=True).dumps_typed(
+        UntrustedCheckpointValue("unsafe")
+    )
+
+    decoded = checkpoint_serializer().loads_typed(encoded)
+
+    assert decoded == {"value": "unsafe"}
+    assert not isinstance(decoded, UntrustedCheckpointValue)

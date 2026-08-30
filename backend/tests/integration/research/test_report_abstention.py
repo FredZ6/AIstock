@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
@@ -6,6 +7,7 @@ from uuid import uuid4
 from stock_platform.agents.harness.budget import BudgetLimits
 from stock_platform.agents.harness.task_spec import PolicyVersions, TaskSpecification
 from stock_platform.agents.research.graph import DailyResearchGraph
+from stock_platform.agents.research.nodes import core as research_nodes
 from stock_platform.agents.research.state import ResearchStatus
 from stock_platform.application.research.citation_verifier import CitationVerifier
 from stock_platform.application.research.numeric_verifier import NumericVerifier
@@ -18,7 +20,7 @@ from stock_platform.domain.research.claims import (
     ResearchOpinion,
     ResearchOpinionValue,
 )
-from stock_platform.infrastructure.providers.base import FeedType
+from stock_platform.infrastructure.providers.base import FeedType, ProviderResponse
 from stock_platform.infrastructure.providers.fixture.loader import FixtureCatalog
 
 AS_OF = datetime(2026, 8, 16, tzinfo=UTC)
@@ -108,3 +110,46 @@ def test_unsupported_fluent_bullish_report_is_forced_to_abstain() -> None:
 
     assert rendered.opinion.value is ResearchOpinionValue.ABSTAIN
     assert json.loads(rendered.content)["research_opinion"] == "ABSTAIN"
+
+
+class ConflictFreeFixtureProvider:
+    def __init__(self) -> None:
+        self._delegate = FixtureCatalog.load_default().provider()
+
+    def fetch(self, feed_type: FeedType, symbol: str, as_of: datetime) -> ProviderResponse:
+        response = self._delegate.fetch(feed_type, symbol, as_of)
+        if feed_type is not FeedType.TARGET_CONSENSUS:
+            return response
+        return replace(
+            response,
+            records=tuple(
+                replace(record, payload={**record.payload, "median_target": "160"})
+                for record in response.records
+            ),
+        )
+
+
+def test_numeric_mismatch_alone_downgrades_an_otherwise_cited_decision(
+    monkeypatch: object,
+) -> None:
+    original = research_nodes._claim_for
+
+    def mismatched_claim(item: object) -> Claim:
+        claim = original(item)  # type: ignore[arg-type]
+        if claim.numeric_value is None:
+            return claim
+        return replace(claim, numeric_value=claim.numeric_value + Decimal("1"))
+
+    monkeypatch.setattr(research_nodes, "_claim_for", mismatched_claim)  # type: ignore[attr-defined]
+    result = DailyResearchGraph(
+        provider=ConflictFreeFixtureProvider(),
+        store=InMemoryResearchStore(),
+    ).run(
+        run_id="13aa2003-c231-4b0f-8fbb-ff064a0ca919",
+        specification=task(),
+    )
+
+    assert result.opinion is not None
+    assert result.opinion.value is ResearchOpinionValue.ABSTAIN
+    assert "numeric:VALUE_MISMATCH" in result.warnings
+    assert not any(warning.startswith("citation:") for warning in result.warnings)

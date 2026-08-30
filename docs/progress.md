@@ -2585,3 +2585,28 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   Alembic/OpenAPI drift, backend 683 passed / 4 credential-gated live tests skipped, frontend
   TypeScript and ESLint clean, Vitest 18 files / 109 tests passed, and the ten-route Next.js
   production build succeeded.
+
+### PR #18 second-review remediation (2026-08-31)
+
+- The two-axis professional review blocked merge on checkpoint constructor safety, empty collection
+  fan-out, reflection-budget enforcement, resolved-remediation state, evidence immutability,
+  production database connection sharing, and missing recovery/parallelism/validation proof. A
+  late Provider Health review also found that one newer PASS dimension could hide another current
+  FAIL dimension.
+- RED regressions reproduced each behavior. Checkpoint deserialization now uses an explicit
+  application-type allowlist and leaves unlisted types as inert mappings; empty tool admission
+  proceeds deterministically to an ABSTAIN decision; reflection uses the pinned task budget;
+  recomputed conflict state can clear resolved gaps; and evidence payload in-place union is rejected.
+- Paper-mode research fetches now acquire one short-lived SQLAlchemy connection per concurrent feed
+  from the Engine instead of sharing the worker transaction connection. Portfolio checkpoint replay
+  was verified after recreating the PostgreSQL saver, including a reducer normalization required
+  because checkpointed tuples deserialize as lists. Analyst fan-out overlap and a numeric-only
+  decision downgrade now have isolated regressions.
+- Provider Health now selects every observation tied at the latest timestamp independently for each
+  quality dimension and reports the most severe current state, so neither cross-dimension nor
+  same-dimension PASS records can mask FAIL or UNAVAILABLE evidence.
+- Focused verification: Provider Health 6/6 passed; Agent/Research/Portfolio/worker regression suite
+  70/70 passed; Ruff format/check and strict Mypy passed. Final `make verify` exited 0: 315 files
+  format clean, Ruff clean, strict Mypy clean over 274 source files, no Alembic/OpenAPI drift,
+  backend 695 passed / 4 credential-gated live tests skipped, frontend TypeScript and ESLint clean,
+  Vitest 18 files / 109 tests passed, and the ten-route Next.js production build succeeded.
