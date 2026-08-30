@@ -1,9 +1,12 @@
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 import pytest
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy import select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError
@@ -73,6 +76,7 @@ def graph(
     slippage_bps: str = "0",
     fee_per_share: str = "0",
     minimum_fee: str = "0",
+    checkpointer: BaseCheckpointSaver[Any] | None = None,
 ) -> PortfolioDecisionGraph:
     return PortfolioDecisionGraph(
         risk_policy=RiskPolicy(
@@ -95,6 +99,7 @@ def graph(
             minimum_fee=Decimal(minimum_fee),
             volume_participation=Decimal("1"),
         ),
+        checkpointer=checkpointer,
     )
 
 
@@ -180,6 +185,24 @@ def test_overweight_model_proposal_is_clipped_before_next_bar_fill() -> None:
     assert result.fills[0].filled_at > DECISION_TIME
     assert result.nav.total == Decimal("1000.0")
     assert result.benchmarks.cash == ()
+
+
+def test_portfolio_graph_persists_native_checkpoint_by_run_id() -> None:
+    saver = InMemorySaver()
+    run_id = "portfolio-checkpoint-run"
+
+    result = graph(checkpointer=saver).run(
+        run_id=run_id,
+        portfolio_id=PORTFOLIO_ID,
+        specification=specification(),
+        market_context=market_context(),
+        research=(research(),),
+        bars=(decision_bar(),),
+        ledger=initial_funding(PORTFOLIO_ID, Decimal("1000"), "USD", DECISION_TIME),
+    )
+
+    assert result.nav.total == Decimal("1000")
+    assert saver.get({"configurable": {"thread_id": run_id}}) is not None
 
 
 def test_future_or_stale_research_cannot_create_order_or_fill() -> None:

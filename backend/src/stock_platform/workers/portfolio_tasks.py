@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import Connection, func, insert, select
 from sqlalchemy.engine import RowMapping
 
+from stock_platform.agents.checkpointing import postgres_checkpointer
 from stock_platform.agents.harness.budget import BudgetLimits
 from stock_platform.agents.harness.task_spec import PolicyVersions, TaskSpecification
 from stock_platform.agents.portfolio.graph import PortfolioDecisionGraph
@@ -352,6 +353,7 @@ def execute_portfolio_run(
                 volume_participation=Decimal(first["execution_policy"]["volume_participation"]),
             ),
             on_node_completed=control.node_completed,
+            checkpointer=checkpointer,
         )
         result = graph.run(
             run_id=run_id,
@@ -385,4 +387,5 @@ def execute_portfolio_run(
                 )
             )
 
-    return execute_run(database_url, run_uuid, "PORTFOLIO", work)
+    with postgres_checkpointer(database_url) as checkpointer:
+        return execute_run(database_url, run_uuid, "PORTFOLIO", work)

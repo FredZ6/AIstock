@@ -452,10 +452,10 @@ def test_research_worker_runs_real_graph_once_with_ordered_events(
             connection.execute(
                 select(func.count()).select_from(tool_call).where(tool_call.c.run_id == run_id)
             ).scalar_one()
-            == 5
+            == 6
         )
         replay = load_events(connection, run_id)
-        assert sum(event["type"] == "mcp.tool.completed" for event in replay) == 5
+        assert sum(event["type"] == "mcp.tool.completed" for event in replay) == 6
         assert {event["correlation_id"] for event in replay} == {correlation_id}
     engine.dispose()
 

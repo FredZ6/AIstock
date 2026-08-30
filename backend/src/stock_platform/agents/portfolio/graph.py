@@ -7,6 +7,8 @@ from itertools import pairwise
 from typing import Any, cast
 from uuid import UUID
 
+from langchain_core.runnables.config import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 
 from stock_platform.agents.harness.task_spec import TaskSpecification
@@ -45,9 +47,11 @@ class PortfolioDecisionGraph:
         risk_policy: RiskPolicy,
         execution_policy: ExecutionPolicy,
         on_node_completed: Callable[[str], None] | None = None,
+        checkpointer: BaseCheckpointSaver[Any] | None = None,
     ) -> None:
         self._risk_policy = risk_policy
         self._execution_policy = execution_policy
+        self._checkpointer = checkpointer
         nodes = PortfolioNodes(risk_policy=risk_policy, execution_policy=execution_policy)
         builder = StateGraph(PortfolioState)
         for name in self.node_names:
@@ -64,7 +68,7 @@ class PortfolioDecisionGraph:
         for current, following in pairwise(self.node_names):
             builder.add_edge(current, following)
         builder.add_edge(self.node_names[-1], END)
-        self._compiled = builder.compile()
+        self._compiled = builder.compile(checkpointer=checkpointer)
 
     def run(
         self,
@@ -182,5 +186,12 @@ class PortfolioDecisionGraph:
             "nav": None,
             "external_tool_calls": 0,
         }
-        final = cast(PortfolioState, self._compiled.invoke(initial))
+        config: RunnableConfig = {"configurable": {"thread_id": run_id}}
+        graph_input: PortfolioState | None = initial
+        if self._checkpointer is not None and self._checkpointer.get(config) is not None:
+            graph_input = None
+        final = cast(
+            PortfolioState,
+            self._compiled.invoke(graph_input, config),
+        )
         return PortfolioResult.from_state(final)

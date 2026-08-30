@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy import Connection, func, select
 from sqlalchemy.engine import RowMapping
 
+from stock_platform.agents.checkpointing import postgres_checkpointer
 from stock_platform.agents.harness.budget import BudgetLimits
 from stock_platform.agents.harness.task_spec import PolicyVersions, TaskSpecification
 from stock_platform.agents.research.graph import DailyResearchGraph
@@ -157,11 +158,13 @@ def execute_research_run(
                     connection, available_at=completion_time, record_events=False
                 ),
                 on_node_completed=control.node_completed,
+                checkpointer=checkpointer,
             ).run(run_id=run_id, specification=specification)
         finally:
             audit_sink.close()
 
-    return execute_run(database_url, UUID(run_id), "RESEARCH", work)
+    with postgres_checkpointer(database_url) as checkpointer:
+        return execute_run(database_url, UUID(run_id), "RESEARCH", work)
 
 
 @celery_app.task(name="stock_platform.workers.research_tasks.monitor_market")  # type: ignore[untyped-decorator]

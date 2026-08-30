@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Annotated, TypedDict
+from typing import Annotated, Protocol, TypedDict
 from uuid import UUID
 
 from stock_platform.agents.harness.task_spec import TaskSpecification
@@ -17,11 +17,44 @@ from stock_platform.domain.research.evidence import (
     ThesisEvidenceLink,
 )
 from stock_platform.domain.research.scores import ConfidenceScore, ResearchScore
-from stock_platform.infrastructure.providers.base import ProviderResponse
+from stock_platform.infrastructure.providers.base import FeedType, ProviderResponse
 
 
 def append_only[T](left: tuple[T, ...], right: tuple[T, ...]) -> tuple[T, ...]:
-    return left + right
+    return tuple(left) + tuple(right)
+
+
+def merge_responses(
+    left: tuple[ProviderResponse, ...], right: tuple[ProviderResponse, ...]
+) -> tuple[ProviderResponse, ...]:
+    merged = {
+        (item.feed_type.value, item.provider, str(item.symbol), item.query_as_of): item
+        for item in tuple(left) + tuple(right)
+    }
+    return tuple(merged[key] for key in sorted(merged))
+
+
+class HasId(Protocol):
+    id: UUID
+
+
+def merge_by_id[T: HasId](left: tuple[T, ...], right: tuple[T, ...]) -> tuple[T, ...]:
+    merged = {str(item.id): item for item in tuple(left) + tuple(right)}
+    return tuple(merged[key] for key in sorted(merged))
+
+
+def merge_strings(left: tuple[str, ...], right: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(sorted(set(tuple(left) + tuple(right))))
+
+
+def merge_conflicts(
+    left: tuple[EvidenceConflict, ...], right: tuple[EvidenceConflict, ...]
+) -> tuple[EvidenceConflict, ...]:
+    merged = {
+        (item.field, tuple(str(value) for value in item.evidence_ids), item.reason): item
+        for item in tuple(left) + tuple(right)
+    }
+    return tuple(merged[key] for key in sorted(merged))
 
 
 class ResearchStatus(StrEnum):
@@ -36,13 +69,14 @@ class ResearchState(TypedDict):
     specification: TaskSpecification
     status: ResearchStatus
     cancelled: bool
+    collection_targets: tuple[FeedType, ...]
     route: Annotated[tuple[str, ...], append_only]
-    responses: Annotated[tuple[ProviderResponse, ...], append_only]
-    evidence: Annotated[tuple[EvidenceItem, ...], append_only]
-    claims: Annotated[tuple[Claim, ...], append_only]
-    gaps: Annotated[tuple[EvidenceGap, ...], append_only]
-    conflicts: Annotated[tuple[EvidenceConflict, ...], append_only]
-    warnings: Annotated[tuple[str, ...], append_only]
+    responses: Annotated[tuple[ProviderResponse, ...], merge_responses]
+    evidence: Annotated[tuple[EvidenceItem, ...], merge_by_id]
+    claims: Annotated[tuple[Claim, ...], merge_by_id]
+    gaps: Annotated[tuple[EvidenceGap, ...], merge_by_id]
+    conflicts: Annotated[tuple[EvidenceConflict, ...], merge_conflicts]
+    warnings: Annotated[tuple[str, ...], merge_strings]
     reflections: int
     score: ResearchScore | None
     confidence: ConfidenceScore | None
@@ -82,18 +116,18 @@ class ResearchResult:
         return cls(
             run_id=state["run_id"],
             status=state["status"],
-            route=state["route"],
-            evidence=state["evidence"],
-            claims=state["claims"],
-            gaps=state["gaps"],
-            conflicts=state["conflicts"],
-            warnings=state["warnings"],
+            route=tuple(state["route"]),
+            evidence=tuple(state["evidence"]),
+            claims=tuple(state["claims"]),
+            gaps=tuple(state["gaps"]),
+            conflicts=tuple(state["conflicts"]),
+            warnings=tuple(state["warnings"]),
             reflections=state["reflections"],
             score=state["score"],
             confidence=state["confidence"],
             thesis=state["thesis"],
             opinion=state["opinion"],
-            evidence_links=state["evidence_links"],
+            evidence_links=tuple(state["evidence_links"]),
             report=state["report"],
             citations_verified=state["citations_verified"],
             decision_diff=state["decision_diff"],

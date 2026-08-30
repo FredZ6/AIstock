@@ -7,13 +7,27 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
-from types import MappingProxyType
 from uuid import UUID, uuid5
 
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
 
 _EVIDENCE_NAMESPACE = UUID("12fc0dd8-f175-468b-ad71-79d3698aa9be")
+
+
+class FrozenDict(dict[str, object]):
+    """Checkpoint-serializable immutable mapping for evidence payloads."""
+
+    def _immutable(self, *_args: object, **_kwargs: object) -> None:
+        raise TypeError("evidence payload is immutable")
+
+    __delitem__ = _immutable
+    __setitem__ = _immutable
+    clear = _immutable
+    pop = _immutable
+    popitem = _immutable  # type: ignore[assignment]
+    setdefault = _immutable
+    update = _immutable
 
 
 class EvidenceGapKind(StrEnum):
@@ -39,6 +53,9 @@ class EvidenceItem:
     content_hash: str
     raw_object_key: str
     payload: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "payload", FrozenDict(self.payload))
 
     @classmethod
     def from_source(
@@ -67,7 +84,7 @@ class EvidenceItem:
             available_at=require_aware(available_at),
             content_hash=content_hash,
             raw_object_key=raw_object_key,
-            payload=MappingProxyType(dict(payload)),
+            payload=FrozenDict(payload),
         )
 
 

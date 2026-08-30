@@ -1,3 +1,4 @@
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -54,6 +55,7 @@ def test_graph_contains_the_v02_canonical_route() -> None:
         "research_opinion",
         "writer",
         "citation_verifier",
+        "degrade_unverified_decision",
         "decision_diff",
         "persist_decision",
     )
@@ -78,6 +80,9 @@ def test_conflict_fixture_reflects_once_and_persists_typed_decision() -> None:
     assert result.decision_diff is not None
     assert result.evidence_links
     assert any(gap.kind.value == "CONFLICTED" for gap in result.gaps)
+    assert len(result.conflicts) == len(
+        {(item.field, item.evidence_ids, item.reason) for item in result.conflicts}
+    )
     assert all(item.available_at <= AS_OF for item in result.evidence)
     assert store.latest(result.run_id) == result
 
@@ -171,3 +176,33 @@ def test_admission_warning_becomes_typed_unavailable_gap_without_fixture_provena
     assert len(sip_gaps) == 1
     assert sip_gaps[0].kind.value == "UNAVAILABLE"
     assert sip_gaps[0].provider == "ALPACA"
+
+
+class CountingFixtureProvider:
+    def __init__(self) -> None:
+        self.delegate = FixtureCatalog.load_default().provider()
+        self.calls: Counter[FeedType] = Counter()
+
+    def fetch(self, feed_type: FeedType, symbol: str, as_of: datetime) -> ProviderResponse:
+        self.calls[feed_type] += 1
+        return self.delegate.fetch(feed_type, symbol, as_of)
+
+
+def test_reflection_refetches_only_the_conflicted_feed_once() -> None:
+    provider = CountingFixtureProvider()
+
+    result = DailyResearchGraph(
+        provider=provider,
+        store=InMemoryResearchStore(),
+    ).run(
+        run_id="086fd82a-72e8-4f89-a1c2-2ef7bad9ddcf",
+        specification=specification(),
+    )
+
+    assert result.reflections == 1
+    assert provider.calls[FeedType.TARGET_CONSENSUS] == 2
+    assert all(
+        count == 1
+        for feed, count in provider.calls.items()
+        if feed is not FeedType.TARGET_CONSENSUS
+    )

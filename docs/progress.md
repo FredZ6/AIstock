@@ -2561,3 +2561,27 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   source files, no Alembic/OpenAPI drift, backend 672 passed / 4 credential-gated tests skipped,
   frontend TypeScript and ESLint clean, Vitest 18 files / 109 tests passed, and the Next.js
   production build succeeded.
+
+### LangGraph reliability upgrade — interrupted-run recovery (2026-08-30)
+
+- Recovery inspection found the reliability work on obsolete `main@1ab9ec1` while the shared
+  database and live-data work had advanced through migration `0035_portfolio_nav_availability`.
+  The first authorized `make verify` therefore exited 2 at Alembic with `Can't locate revision`.
+  A recovery branch and stash were retained, and the development branch was safely realigned to
+  `codex/live-data-frontend@7c6b343`; both Provider/PIT changes and the new graph work survived the
+  two-file conflict resolution.
+- The first post-realignment full gate reached 116 passed / 4 skipped and then blocked in
+  `PostgresSaver.setup()` inside the Research worker. Its interrupt stack proved that checkpoint
+  DDL was being opened after `execute_run` had already started the business transaction. A new
+  lifecycle regression failed 2/2 because both Research and Portfolio entered business execution
+  before preparing the saver.
+- The minimal correction prepares and owns the PostgreSQL checkpointer outside `execute_run`, while
+  keeping it alive through the complete worker transaction. The lifecycle regression passed 2/2;
+  the full worker integration suite passed 18/18. The Research audit expectation is now six durable
+  ToolCalls/events: five initial feeds plus the one specification-required targeted consensus
+  re-fetch, with no duplicate re-fetch of other feeds.
+- Focused graph/checkpoint/portfolio tests passed 27/27 against PostgreSQL. Final `make verify`
+  exited 0: 314 files format clean, Ruff clean, strict Mypy clean over 273 source files, no
+  Alembic/OpenAPI drift, backend 683 passed / 4 credential-gated live tests skipped, frontend
+  TypeScript and ESLint clean, Vitest 18 files / 109 tests passed, and the ten-route Next.js
+  production build succeeded.
