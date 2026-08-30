@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -16,6 +16,7 @@ from stock_platform.infrastructure.db.models.tables import (
     market_bar,
     normalized_record,
     raw_data_object,
+    research_opinion,
 )
 from stock_platform.settings import Settings
 
@@ -135,18 +136,20 @@ def _quality_observation(
     available_at: datetime,
     status: str,
     suffix: str,
+    dataset: str = "price_bars",
+    dimension: str = "COVERAGE",
 ) -> None:
     content_hash = (suffix * 64)[:64]
     raw_id = connection.execute(
         raw_data_object.insert()
         .values(
             provider="ALPACA",
-            feed_type="price_bars",
+            feed_type=dataset,
             event_time=observed_at,
             available_at=available_at,
             ingested_at=available_at,
             content_hash=content_hash,
-            raw_object_key=f"live/ALPACA/price_bars/{content_hash}.json",
+            raw_object_key=f"live/ALPACA/{dataset}/{content_hash}.json",
         )
         .returning(raw_data_object.c.id)
     ).scalar_one()
@@ -154,7 +157,7 @@ def _quality_observation(
         normalized_record.insert()
         .values(
             raw_data_object_id=raw_id,
-            record_type="price_bars",
+            record_type=dataset,
             record_key=f"quality:{observed_at.isoformat()}:{suffix}",
             normalization_version="test-v1",
             payload={},
@@ -166,8 +169,8 @@ def _quality_observation(
             raw_data_object_id=raw_id,
             normalized_record_id=normalized_id,
             provider="ALPACA",
-            dataset="price_bars",
-            dimension="COVERAGE",
+            dataset=dataset,
+            dimension=dimension,
             status=status,
             observed_at=observed_at,
             coverage="IEX",
@@ -178,14 +181,21 @@ def _quality_observation(
     )
 
 
-def _ingestion_job(connection: Connection, *, state: str, created_at: datetime) -> None:
+def _ingestion_job(
+    connection: Connection,
+    *,
+    state: str,
+    created_at: datetime,
+    dataset: str = "price_bars",
+    coverage: str = "IEX",
+) -> None:
     terminal = state in {"SUCCEEDED", "COMPLETED_WITH_GAPS", "FAILED", "DEAD_LETTER", "CANCELLED"}
     connection.execute(
         ingestion_job.insert().values(
             request_hash=f"health-{state}-{created_at.isoformat()}",
-            request_payload={},
+            request_payload={"request": {"coverage": coverage}},
             provider="ALPACA",
-            dataset="price_bars",
+            dataset=dataset,
             window_start=created_at,
             window_end=created_at,
             purpose="RESEARCH",
@@ -380,6 +390,14 @@ def test_quality_and_provider_health_report_real_runtime_evidence(
             "decision_time": datetime(2026, 8, 21, tzinfo=UTC).isoformat(),
         },
     )
+    fresh_health_at = datetime.now(UTC)
+    _quality_observation(
+        connection,
+        observed_at=fresh_health_at,
+        available_at=fresh_health_at,
+        status="PASS",
+        suffix="h",
+    )
     health = client.get("/api/v1/providers/health")
 
     assert quality.status_code == health.status_code == 200
@@ -422,6 +440,13 @@ def test_research_read_enforces_decision_time(
             },
         ],
     )
+    connection.execute(
+        research_opinion.insert().values(
+            thesis_id=past_id,
+            value="BULLISH",
+            created_at=datetime(2026, 8, 22, 20, tzinfo=UTC),
+        )
+    )
 
     response = client.get(
         "/api/v1/stocks/NVDA/research",
@@ -430,6 +455,7 @@ def test_research_read_enforces_decision_time(
 
     assert response.status_code == 200
     assert [item["id"] for item in response.json()] == [str(past_id)]
+    assert response.json()[0]["opinion"] is None
 
 
 def test_portfolio_nav_has_availability_and_enforces_decision_time(
@@ -514,7 +540,7 @@ def test_provider_health_does_not_report_success_while_latest_job_is_pending(
     market_client: tuple[TestClient, Connection],
 ) -> None:
     client, connection = market_client
-    observed_at = datetime(2026, 8, 21, 18, tzinfo=UTC)
+    observed_at = datetime.now(UTC)
     _quality_observation(
         connection,
         observed_at=observed_at,
@@ -525,10 +551,94 @@ def test_provider_health_does_not_report_success_while_latest_job_is_pending(
     _ingestion_job(
         connection,
         state="QUEUED",
-        created_at=datetime(2026, 8, 21, 19, tzinfo=UTC),
+        created_at=observed_at,
     )
 
     response = client.get("/api/v1/providers/health")
 
     assert response.status_code == 200
     assert response.json()["providers"]["alpaca"]["status"] == "DEGRADED"
+
+
+def test_data_quality_status_is_independent_of_history_page_limit(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    cutoff = datetime(2026, 8, 21, 20, tzinfo=UTC)
+    _quality_observation(
+        connection,
+        observed_at=datetime(2026, 8, 21, 17, tzinfo=UTC),
+        available_at=datetime(2026, 8, 21, 17, tzinfo=UTC),
+        status="FAIL",
+        suffix="u",
+        dimension="CONFLICT",
+    )
+    for offset, suffix in enumerate(("v", "w", "x")):
+        observed_at = datetime(2026, 8, 21, 18 + offset, tzinfo=UTC)
+        _quality_observation(
+            connection,
+            observed_at=observed_at,
+            available_at=observed_at,
+            status="PASS",
+            suffix=suffix,
+        )
+
+    response = client.get(
+        "/api/v1/data-quality",
+        params={
+            "provider": "ALPACA",
+            "dataset": "price_bars",
+            "decision_time": cutoff.isoformat(),
+            "limit": 2,
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["items"]) == 2
+    assert response.json()["status"] == "FAILURE"
+
+
+def test_provider_health_uses_fresh_signals_from_the_same_dataset(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    now = datetime.now(UTC)
+    _quality_observation(
+        connection,
+        observed_at=now,
+        available_at=now,
+        status="PASS",
+        suffix="y",
+    )
+    _ingestion_job(connection, state="QUEUED", created_at=now, dataset="price_bars")
+    _ingestion_job(
+        connection,
+        state="SUCCEEDED",
+        created_at=now + timedelta(seconds=1),
+        dataset="company_news",
+    )
+
+    response = client.get("/api/v1/providers/health")
+
+    assert response.status_code == 200
+    assert response.json()["providers"]["alpaca"]["latest_job_state"] == "QUEUED"
+    assert response.json()["providers"]["alpaca"]["status"] == "DEGRADED"
+
+
+def test_provider_health_rejects_a_stale_pass_without_a_current_job(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    stale = datetime.now(UTC) - timedelta(hours=1)
+    _quality_observation(
+        connection,
+        observed_at=stale,
+        available_at=stale,
+        status="PASS",
+        suffix="z",
+    )
+
+    response = client.get("/api/v1/providers/health")
+
+    assert response.status_code == 200
+    assert response.json()["providers"]["alpaca"]["status"] == "FAILURE"

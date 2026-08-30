@@ -53,4 +53,36 @@ describe('home page', () => {
     expect(screen.getByRole('status', { name: 'Some decision facts are unavailable' })).toHaveTextContent('Portfolio API')
     expect(screen.queryByRole('alert', { name: 'Today unavailable' })).not.toBeInTheDocument()
   })
+
+  it('surfaces degraded quote quality while keeping Today market facts visible', async () => {
+    vi.stubEnv('WEB_DATA_MODE', 'api')
+    vi.stubEnv('API_BASE_URL', 'http://api.test')
+    vi.doMock('../lib/server/watchlist-api', () => ({
+      listWatchlist: vi.fn(async () => [{ symbol: 'NVDA' }]),
+    }))
+    vi.doMock('../lib/server/live-data-api', () => ({
+      getMarketQuotes: vi.fn(async () => ({
+        decisionTime: '2026-08-29T09:30:00Z',
+        items: [{
+          availableAt: '2026-08-29T09:20:00Z', close: '217.545', coverage: 'IEX',
+          eventTime: '2026-08-28T04:00:00Z', provider: 'ALPACA', symbol: 'NVDA',
+        }],
+        missingSymbols: [],
+        status: 'DEGRADED',
+      })),
+      getPortfolioSummary: vi.fn(async () => ({ latestNav: null, trading: 'paper_only' })),
+      getProviderHealth: vi.fn(async () => ({
+        mode: 'paper',
+        providers: { alpaca: { configured: true, coverage: 'IEX', mode: 'read_only', status: 'SUCCESS' } },
+      })),
+    }))
+    const { default: Home } = await import('../app/page')
+
+    render(await Home())
+
+    expect(screen.getByText('USD 217.55')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Some decision facts are unavailable' })).toHaveTextContent(
+      'Market quote quality',
+    )
+  })
 })

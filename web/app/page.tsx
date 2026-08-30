@@ -35,6 +35,7 @@ export default async function Home() {
       ...(healthResult.status === 'rejected' ? ['Provider health API'] : []),
       ...(portfolioResult.status === 'rejected' ? ['Portfolio API'] : []),
       ...(quotesResult.status === 'rejected' ? ['Market quotes API'] : []),
+      ...(quotesResult.status === 'fulfilled' && quotesResult.value.status !== 'SUCCESS' ? ['Market quote quality'] : []),
       ...(quotesResult.status === 'fulfilled' ? quotesResult.value.missingSymbols.map((symbol) => `${symbol} market quote`) : []),
     ]
     return <ApiTodayPage

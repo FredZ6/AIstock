@@ -1,11 +1,12 @@
 from dataclasses import asdict
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Response
-from sqlalchemy import Connection, insert, select, text, update
+from sqlalchemy import Connection, and_, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import NoResultFound
 
@@ -35,6 +36,7 @@ from stock_platform.application.market_data.policy import (
     admission_payload,
     paper_market_data_admission,
 )
+from stock_platform.application.market_data.quality import QualityPolicy
 from stock_platform.application.market_data.repositories import PostgresMarketDataRepository
 from stock_platform.application.runs import (
     IdempotencyConflict,
@@ -69,6 +71,9 @@ from stock_platform.infrastructure.observability.context import current_correlat
 from stock_platform.settings import Settings
 
 router = APIRouter(prefix="/api/v1")
+_DATA_QUALITY_POLICY = QualityPolicy.load(
+    Path(__file__).parents[4] / "config" / "data_quality_v1.yaml"
+)
 ConnectionDependency = Annotated[Connection, Depends(get_connection)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 ActorDependency = Annotated[HumanActor, Depends(get_human_actor)]
@@ -239,26 +244,56 @@ def _create_run(
 def provider_health(
     settings: SettingsDependency, connection: ConnectionDependency
 ) -> dict[str, Any]:
-    latest_quality = connection.execute(
-        select(data_quality_observation.c.status)
-        .where(data_quality_observation.c.provider == "ALPACA")
-        .order_by(data_quality_observation.c.observed_at.desc())
-        .limit(1)
-    ).scalar_one_or_none()
+    coverage = _coverage(settings)
+    latest_quality = (
+        connection.execute(
+            select(
+                data_quality_observation.c.status,
+                data_quality_observation.c.observed_at,
+            )
+            .where(
+                data_quality_observation.c.provider == "ALPACA",
+                data_quality_observation.c.dataset == "price_bars",
+                data_quality_observation.c.coverage == coverage.value,
+            )
+            .order_by(data_quality_observation.c.observed_at.desc())
+            .limit(1)
+        )
+        .mappings()
+        .one_or_none()
+    )
+    latest_quality_status = latest_quality["status"] if latest_quality else None
     latest_job = connection.execute(
         select(ingestion_job.c.state)
-        .where(ingestion_job.c.provider == "ALPACA")
+        .where(
+            ingestion_job.c.provider == "ALPACA",
+            ingestion_job.c.dataset == "price_bars",
+            ingestion_job.c.request_payload["request"]["coverage"].astext == coverage.value,
+        )
         .order_by(ingestion_job.c.created_at.desc())
         .limit(1)
     ).scalar_one_or_none()
     alpaca_configured = bool(settings.alpaca_data_key and settings.alpaca_data_secret)
+    quality_age = (
+        datetime.now(UTC) - latest_quality["observed_at"] if latest_quality is not None else None
+    )
+    degraded_after, unavailable_after = _DATA_QUALITY_POLICY.thresholds("ALPACA", "price_bars")
     if not alpaca_configured:
         alpaca_status = "UNAVAILABLE"
-    elif latest_quality in {"FAIL", "UNAVAILABLE"} or latest_job in {"FAILED", "DEAD_LETTER"}:
+    elif latest_quality_status in {"FAIL", "UNAVAILABLE"} or latest_job in {
+        "FAILED",
+        "DEAD_LETTER",
+    }:
         alpaca_status = "FAILURE"
-    elif latest_quality == "DEGRADED" or latest_job in {"RETRY_SCHEDULED", "COMPLETED_WITH_GAPS"}:
+    elif quality_age is None or quality_age >= unavailable_after:
+        alpaca_status = "FAILURE"
+    elif (
+        quality_age >= degraded_after
+        or latest_quality_status == "DEGRADED"
+        or latest_job in {"QUEUED", "RUNNING", "RETRY_SCHEDULED", "COMPLETED_WITH_GAPS"}
+    ):
         alpaca_status = "DEGRADED"
-    elif latest_quality == "PASS" and latest_job in {None, "SUCCEEDED"}:
+    elif latest_quality_status == "PASS" and latest_job in {None, "SUCCEEDED"}:
         alpaca_status = "SUCCESS"
     else:
         alpaca_status = "DEGRADED"
@@ -275,7 +310,7 @@ def provider_health(
                 "status": alpaca_status,
                 "coverage": settings.alpaca_entitlement_coverage,
                 "latest_job_state": latest_job,
-                "latest_quality_status": latest_quality,
+                "latest_quality_status": latest_quality_status,
             },
             "fmp": {
                 "configured": bool(settings.fmp_api_key),
@@ -368,7 +403,7 @@ def list_data_quality(
     limit: Annotated[int, Query(ge=1, le=1000)] = 100,
 ) -> dict[str, Any]:
     cutoff = _aware_query_time(decision_time, "decision_time")
-    rows = connection.execute(
+    visible = (
         select(data_quality_observation)
         .join(
             raw_data_object,
@@ -380,15 +415,22 @@ def list_data_quality(
             data_quality_observation.c.observed_at <= cutoff,
             raw_data_object.c.available_at <= cutoff,
         )
-        .order_by(data_quality_observation.c.observed_at.desc())
-        .limit(limit)
+    ).subquery()
+    rows = connection.execute(
+        select(visible).order_by(visible.c.observed_at.desc()).limit(limit)
     ).mappings()
     items = [_row(row) for row in rows]
     status: Literal["SUCCESS", "DEGRADED", "FAILURE"]
-    latest_by_dimension: dict[str, dict[str, Any]] = {}
-    for item in items:
-        latest_by_dimension.setdefault(str(item["dimension"]), item)
-    current = tuple(latest_by_dimension.values())
+    current_rank = (
+        func.row_number()
+        .over(
+            partition_by=visible.c.dimension,
+            order_by=(visible.c.observed_at.desc(), visible.c.created_at.desc()),
+        )
+        .label("current_rank")
+    )
+    ranked = select(visible, current_rank).subquery()
+    current = tuple(connection.execute(select(ranked).where(ranked.c.current_rank == 1)).mappings())
     if not current or any(item["status"] in {"FAIL", "UNAVAILABLE"} for item in current):
         status = "FAILURE"
     elif any(item["status"] == "DEGRADED" for item in current):
@@ -552,7 +594,13 @@ def get_stock_research(
     rows = (
         connection.execute(
             select(investment_thesis, research_opinion.c.value.label("opinion"))
-            .outerjoin(research_opinion, research_opinion.c.thesis_id == investment_thesis.c.id)
+            .outerjoin(
+                research_opinion,
+                and_(
+                    research_opinion.c.thesis_id == investment_thesis.c.id,
+                    research_opinion.c.created_at <= cutoff,
+                ),
+            )
             .where(
                 investment_thesis.c.symbol == _symbol(symbol),
                 investment_thesis.c.as_of <= cutoff,

@@ -115,16 +115,16 @@ def test_0035_backfills_portfolio_nav_availability_and_round_trips(
             {"event_time": event_time, "portfolio_id": portfolio_id},
         )
     engine.dispose()
+    migration_started_at = datetime.now(UTC)
     command.upgrade(config, "head")
+    migration_finished_at = datetime.now(UTC)
     engine = create_engine(migration_database_url)
     with engine.connect() as connection:
-        assert (
-            connection.execute(
-                text("SELECT available_at FROM portfolio_nav WHERE portfolio_id = :portfolio_id"),
-                {"portfolio_id": portfolio_id},
-            ).scalar_one()
-            == event_time
-        )
+        available_at = connection.execute(
+            text("SELECT available_at FROM portfolio_nav WHERE portfolio_id = :portfolio_id"),
+            {"portfolio_id": portfolio_id},
+        ).scalar_one()
+        assert migration_started_at <= available_at <= migration_finished_at
     engine.dispose()
     command.downgrade(config, "0034_corp_action_guards")
     engine = create_engine(migration_database_url)

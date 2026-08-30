@@ -16,7 +16,9 @@ def upgrade() -> None:
         "portfolio_nav",
         sa.Column("available_at", sa.DateTime(timezone=True), nullable=True),
     )
-    op.execute("UPDATE portfolio_nav SET available_at = event_time WHERE available_at IS NULL")
+    op.execute(
+        "UPDATE portfolio_nav SET available_at = CURRENT_TIMESTAMP WHERE available_at IS NULL"
+    )
     op.alter_column("portfolio_nav", "available_at", nullable=False)
     op.create_check_constraint(
         op.f("ck_portfolio_nav_availability"),

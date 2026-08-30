@@ -32,6 +32,7 @@ export default async function ResearchRoute({ params }: { params: Promise<{ symb
       symbol={normalized}
       unavailableDomains={[
         ...(quotesResult.status === 'rejected' ? ['Market quotes API'] : []),
+        ...(quotesResult.status === 'fulfilled' && quotesResult.value.status !== 'SUCCESS' ? ['Market quote quality'] : []),
         ...(recordsResult.status === 'rejected' ? ['Research API'] : []),
       ]}
     />

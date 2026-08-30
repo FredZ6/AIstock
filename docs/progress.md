@@ -2524,9 +2524,10 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   `DEGRADED` and empty reads `FAILURE`.
 - Research and Portfolio now require an aware decision time. Research filters both thesis `as_of`
   and creation time; Portfolio filters NAV event time and the new authoritative `available_at`.
-  Migration `0035` backfills legacy NAV availability from event time, adds the database check, and
-  round-trips cleanly. The local NAV table had zero rows when its initially misnamed constraint was
-  repaired; no data was changed or invented.
+  Migration `0035` conservatively backfills legacy NAV availability with the migration transaction
+  time (the earliest newly provable visibility), adds the database check, and round-trips cleanly.
+  The local NAV table had zero rows when its initially misnamed constraint was repaired; no data was
+  changed or invented.
 - Data-quality reads join their raw object and enforce raw `available_at <= decision_time`; envelope
   status derives from the latest visible observation per dimension so an old failure does not mask
   a proven recovery. Provider health no longer reports success while the latest ingestion job is
@@ -2548,3 +2549,15 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   files, no Alembic/OpenAPI drift, backend 669 passed / 4 credential-gated tests skipped, frontend
   TypeScript and ESLint clean, Vitest 106/106 passed, and the ten-route Next.js production build
   succeeded.
+- The first two-axis second review then found four remaining evidence-boundary gaps: quote response
+  status was discarded by three frontend routes; provider health still combined cross-dataset and
+  stale signals; data-quality status depended on history page size; and a future ResearchOpinion
+  could join a visible thesis. Standards review also rejected the optimistic legacy NAV backfill.
+  New RED regressions reproduced all five behaviors. The fixes now propagate quote quality into
+  Today/Watchlist/Research, scope health to fresh `price_bars` evidence for the configured coverage
+  using the versioned quality thresholds, rank current quality in SQL independently of history
+  pagination, PIT-filter the opinion join, and use migration time for unknown legacy availability.
+- Post-review `make verify` exited 0: 307 files format clean, Ruff clean, strict Mypy clean over 266
+  source files, no Alembic/OpenAPI drift, backend 672 passed / 4 credential-gated tests skipped,
+  frontend TypeScript and ESLint clean, Vitest 18 files / 109 tests passed, and the Next.js
+  production build succeeded.
