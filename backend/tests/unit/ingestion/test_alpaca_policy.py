@@ -144,6 +144,14 @@ def test_runtime_entitlement_requires_explicit_credentials_coverage_and_version(
     tmp_path: Path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    for name in (
+        "ALPACA_DATA_KEY",
+        "ALPACA_DATA_SECRET",
+        "ALPACA_ENTITLEMENT_COVERAGE",
+        "ALPACA_ENTITLEMENT_VERSION",
+        "ALPACA_SIP_DELAY_SECONDS",
+    ):
+        monkeypatch.delenv(name, raising=False)
 
     assert alpaca_entitlement_from_settings(Settings(environment="test"), observed_at=NOW) is None
     with pytest.raises(ValueError, match="configured together"):

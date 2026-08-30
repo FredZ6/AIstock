@@ -1,19 +1,23 @@
 from dataclasses import asdict
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Response
-from sqlalchemy import Connection, insert, select, text, update
+from fastapi import APIRouter, Depends, Header, Query, Response
+from sqlalchemy import Connection, and_, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import NoResultFound
 
 from stock_platform.api.dependencies import get_connection, get_human_actor, get_settings
 from stock_platform.api.schemas.errors import ApiError
 from stock_platform.api.schemas.rest import (
+    DataQualityResponse,
     HumanAction,
+    MarketDataResponse,
     PortfolioRunRequest,
+    ProviderHealthResponse,
     ResearchRunRequest,
     RunResponse,
     WatchlistPatch,
@@ -32,6 +36,8 @@ from stock_platform.application.market_data.policy import (
     admission_payload,
     paper_market_data_admission,
 )
+from stock_platform.application.market_data.quality import QualityPolicy
+from stock_platform.application.market_data.repositories import PostgresMarketDataRepository
 from stock_platform.application.runs import (
     IdempotencyConflict,
     RunAdmissionLimit,
@@ -39,14 +45,22 @@ from stock_platform.application.runs import (
     append_run_event,
 )
 from stock_platform.domain.common.ids import Symbol
-from stock_platform.domain.ingestion.models import DataPurpose
+from stock_platform.domain.common.time import require_aware
+from stock_platform.domain.ingestion.models import (
+    DataPurpose,
+    MarketDataCoverage,
+    MarketSession,
+)
 from stock_platform.infrastructure.db.models.tables import (
     agent_run,
     alert_event,
+    data_quality_observation,
+    ingestion_job,
     investment_thesis,
     paper_fill,
     paper_order,
     portfolio_nav,
+    raw_data_object,
     research_opinion,
     security,
     security_identifier_version,
@@ -57,6 +71,9 @@ from stock_platform.infrastructure.observability.context import current_correlat
 from stock_platform.settings import Settings
 
 router = APIRouter(prefix="/api/v1")
+_DATA_QUALITY_POLICY = QualityPolicy.load(
+    Path(__file__).parents[4] / "config" / "data_quality_v1.yaml"
+)
 ConnectionDependency = Annotated[Connection, Depends(get_connection)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 ActorDependency = Annotated[HumanActor, Depends(get_human_actor)]
@@ -84,6 +101,47 @@ def _symbol(value: str) -> str:
         return str(Symbol(value))
     except ValueError as exception:
         raise ApiError(422, "INVALID_REQUEST", str(exception)) from exception
+
+
+def _aware_query_time(value: datetime, field: str) -> datetime:
+    try:
+        return require_aware(value).astimezone(UTC)
+    except ValueError as exception:
+        raise ApiError(422, "INVALID_REQUEST", f"{field} must include a timezone") from exception
+
+
+def _coverage(settings: Settings) -> MarketDataCoverage:
+    configured = settings.alpaca_entitlement_coverage or ""
+    return (
+        MarketDataCoverage.SIP if "SIP" in configured.upper().split(",") else MarketDataCoverage.IEX
+    )
+
+
+def _market_record(record: Any) -> dict[str, Any]:
+    return cast(
+        dict[str, Any],
+        _value(
+            {
+                "symbol": str(record.symbol),
+                "provider": record.provider,
+                "feed_type": record.feed_type.value,
+                "event_time": record.event_time,
+                "available_at": record.available_at,
+                "ingested_at": record.ingested_at,
+                "content_hash": record.content_hash,
+                "raw_object_key": record.raw_object_key,
+                **record.payload,
+            }
+        ),
+    )
+
+
+def _read_status(items: list[dict[str, Any]]) -> Literal["SUCCESS", "DEGRADED", "FAILURE"]:
+    if not items:
+        return "FAILURE"
+    if any(bool(item.get("conflict")) for item in items):
+        return "DEGRADED"
+    return "SUCCESS"
 
 
 _WATCHLIST_PUBLIC_COLUMNS = (
@@ -182,16 +240,204 @@ def _create_run(
     )
 
 
-@router.get("/providers/health")
-def provider_health(settings: SettingsDependency) -> dict[str, Any]:
+@router.get("/providers/health", response_model=ProviderHealthResponse)
+def provider_health(
+    settings: SettingsDependency, connection: ConnectionDependency
+) -> dict[str, Any]:
+    coverage = _coverage(settings)
+    latest_quality = (
+        connection.execute(
+            select(
+                data_quality_observation.c.status,
+                data_quality_observation.c.observed_at,
+            )
+            .where(
+                data_quality_observation.c.provider == "ALPACA",
+                data_quality_observation.c.dataset == "price_bars",
+                data_quality_observation.c.coverage == coverage.value,
+            )
+            .order_by(data_quality_observation.c.observed_at.desc())
+            .limit(1)
+        )
+        .mappings()
+        .one_or_none()
+    )
+    latest_quality_status = latest_quality["status"] if latest_quality else None
+    latest_job = connection.execute(
+        select(ingestion_job.c.state)
+        .where(
+            ingestion_job.c.provider == "ALPACA",
+            ingestion_job.c.dataset == "price_bars",
+            ingestion_job.c.request_payload["request"]["coverage"].astext == coverage.value,
+        )
+        .order_by(ingestion_job.c.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    alpaca_configured = bool(settings.alpaca_data_key and settings.alpaca_data_secret)
+    quality_age = (
+        datetime.now(UTC) - latest_quality["observed_at"] if latest_quality is not None else None
+    )
+    degraded_after, unavailable_after = _DATA_QUALITY_POLICY.thresholds("ALPACA", "price_bars")
+    if not alpaca_configured:
+        alpaca_status = "UNAVAILABLE"
+    elif latest_quality_status in {"FAIL", "UNAVAILABLE"} or latest_job in {
+        "FAILED",
+        "DEAD_LETTER",
+    }:
+        alpaca_status = "FAILURE"
+    elif quality_age is None or quality_age >= unavailable_after:
+        alpaca_status = "FAILURE"
+    elif (
+        quality_age >= degraded_after
+        or latest_quality_status == "DEGRADED"
+        or latest_job in {"QUEUED", "RUNNING", "RETRY_SCHEDULED", "COMPLETED_WITH_GAPS"}
+    ):
+        alpaca_status = "DEGRADED"
+    elif latest_quality_status == "PASS" and latest_job in {None, "SUCCEEDED"}:
+        alpaca_status = "SUCCESS"
+    else:
+        alpaca_status = "DEGRADED"
     return {
         "mode": settings.environment,
         "providers": {
-            "sec": {"configured": bool(settings.sec_user_agent), "mode": "fixture"},
-            "alpaca": {"configured": bool(settings.alpaca_data_key), "mode": "fixture"},
-            "fmp": {"configured": bool(settings.fmp_api_key), "mode": "fixture"},
+            "sec": {
+                "configured": bool(settings.sec_user_agent),
+                "mode": "read_only" if settings.sec_user_agent else "unavailable",
+            },
+            "alpaca": {
+                "configured": alpaca_configured,
+                "mode": "read_only" if alpaca_configured else "unavailable",
+                "status": alpaca_status,
+                "coverage": settings.alpaca_entitlement_coverage,
+                "latest_job_state": latest_job,
+                "latest_quality_status": latest_quality_status,
+            },
+            "fmp": {
+                "configured": bool(settings.fmp_api_key),
+                "mode": "read_only" if settings.fmp_api_key else "unavailable",
+            },
         },
     }
+
+
+@router.get("/market-data/quotes", response_model=MarketDataResponse)
+def latest_quotes(
+    connection: ConnectionDependency,
+    settings: SettingsDependency,
+    symbols: Annotated[str, Query(min_length=1)],
+    decision_time: datetime,
+    timeframe: Literal["1Min", "1Day"] = "1Day",
+) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
+    requested = tuple(
+        dict.fromkeys(_symbol(item.strip()) for item in symbols.split(",") if item.strip())
+    )
+    if not requested:
+        raise ApiError(422, "INVALID_REQUEST", "symbols must contain at least one symbol")
+    if len(requested) > 50:
+        raise ApiError(422, "INVALID_REQUEST", "symbols cannot contain more than 50 entries")
+    records = PostgresMarketDataRepository(connection).latest_bars_as_of(
+        symbols=requested,
+        decision_time=cutoff,
+        coverage=_coverage(settings),
+        session=MarketSession.REGULAR,
+        timeframe=timeframe,
+    )
+    record_by_symbol = {str(record.symbol): record for record in records}
+    items = [
+        _market_record(record_by_symbol[symbol])
+        for symbol in requested
+        if symbol in record_by_symbol
+    ]
+    missing_symbols = [symbol for symbol in requested if symbol not in record_by_symbol]
+    status = _read_status(items)
+    if items and missing_symbols:
+        status = "DEGRADED"
+    return {
+        "status": status,
+        "decision_time": cutoff,
+        "missing_symbols": missing_symbols,
+        "items": items,
+    }
+
+
+@router.get("/market-data/bars/{symbol}", response_model=MarketDataResponse)
+def historical_bars(
+    symbol: str,
+    connection: ConnectionDependency,
+    settings: SettingsDependency,
+    start: datetime,
+    end: datetime,
+    decision_time: datetime,
+    timeframe: Literal["1Min", "1Day"],
+    limit: Annotated[int, Query(ge=1, le=5000)] = 500,
+) -> dict[str, Any]:
+    normalized_symbol = _symbol(symbol)
+    start_at = _aware_query_time(start, "start")
+    end_at = _aware_query_time(end, "end")
+    cutoff = _aware_query_time(decision_time, "decision_time")
+    if start_at > end_at:
+        raise ApiError(422, "INVALID_REQUEST", "start cannot be after end")
+    if end_at > cutoff:
+        raise ApiError(422, "INVALID_REQUEST", "end cannot be after decision_time")
+    records = PostgresMarketDataRepository(connection).historical_bars_as_of(
+        symbol=normalized_symbol,
+        start=start_at,
+        end=end_at,
+        decision_time=cutoff,
+        coverage=_coverage(settings),
+        session=MarketSession.REGULAR,
+        timeframe=timeframe,
+        limit=limit,
+    )
+    items = [_market_record(record) for record in records]
+    return {"status": _read_status(items), "decision_time": cutoff, "items": items}
+
+
+@router.get("/data-quality", response_model=DataQualityResponse)
+def list_data_quality(
+    connection: ConnectionDependency,
+    provider: Annotated[str, Query(min_length=1)],
+    dataset: Annotated[str, Query(min_length=1)],
+    decision_time: datetime,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
+    visible = (
+        select(data_quality_observation)
+        .join(
+            raw_data_object,
+            raw_data_object.c.id == data_quality_observation.c.raw_data_object_id,
+        )
+        .where(
+            data_quality_observation.c.provider == provider.strip().upper(),
+            data_quality_observation.c.dataset == dataset.strip(),
+            data_quality_observation.c.observed_at <= cutoff,
+            raw_data_object.c.available_at <= cutoff,
+        )
+    ).subquery()
+    rows = connection.execute(
+        select(visible).order_by(visible.c.observed_at.desc()).limit(limit)
+    ).mappings()
+    items = [_row(row) for row in rows]
+    status: Literal["SUCCESS", "DEGRADED", "FAILURE"]
+    current_rank = (
+        func.row_number()
+        .over(
+            partition_by=visible.c.dimension,
+            order_by=(visible.c.observed_at.desc(), visible.c.created_at.desc()),
+        )
+        .label("current_rank")
+    )
+    ranked = select(visible, current_rank).subquery()
+    current = tuple(connection.execute(select(ranked).where(ranked.c.current_rank == 1)).mappings())
+    if not current or any(item["status"] in {"FAIL", "UNAVAILABLE"} for item in current):
+        status = "FAILURE"
+    elif any(item["status"] == "DEGRADED" for item in current):
+        status = "DEGRADED"
+    else:
+        status = "SUCCESS"
+    return {"status": status, "decision_time": cutoff, "items": items}
 
 
 @router.get("/watchlist")
@@ -341,12 +587,25 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
 
 
 @router.get("/stocks/{symbol}/research")
-def get_stock_research(symbol: str, connection: ConnectionDependency) -> list[dict[str, Any]]:
+def get_stock_research(
+    symbol: str, connection: ConnectionDependency, decision_time: datetime
+) -> list[dict[str, Any]]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
     rows = (
         connection.execute(
             select(investment_thesis, research_opinion.c.value.label("opinion"))
-            .outerjoin(research_opinion, research_opinion.c.thesis_id == investment_thesis.c.id)
-            .where(investment_thesis.c.symbol == _symbol(symbol))
+            .outerjoin(
+                research_opinion,
+                and_(
+                    research_opinion.c.thesis_id == investment_thesis.c.id,
+                    research_opinion.c.created_at <= cutoff,
+                ),
+            )
+            .where(
+                investment_thesis.c.symbol == _symbol(symbol),
+                investment_thesis.c.as_of <= cutoff,
+                investment_thesis.c.created_at <= cutoff,
+            )
             .order_by(investment_thesis.c.as_of.desc())
         )
         .mappings()
@@ -388,10 +647,17 @@ def acknowledge_alert(
 
 
 @router.get("/portfolio")
-def get_portfolio(connection: ConnectionDependency) -> dict[str, Any]:
+def get_portfolio(connection: ConnectionDependency, decision_time: datetime) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
     latest_nav = (
         connection.execute(
-            select(portfolio_nav).order_by(portfolio_nav.c.event_time.desc()).limit(1)
+            select(portfolio_nav)
+            .where(
+                portfolio_nav.c.event_time <= cutoff,
+                portfolio_nav.c.available_at <= cutoff,
+            )
+            .order_by(portfolio_nav.c.event_time.desc(), portfolio_nav.c.available_at.desc())
+            .limit(1)
         )
         .mappings()
         .one_or_none()

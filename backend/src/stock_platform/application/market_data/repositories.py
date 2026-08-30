@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 
-from sqlalchemy import Connection, Engine, and_, select
+from sqlalchemy import Connection, Engine, and_, func, select
+from sqlalchemy.engine import RowMapping
 
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
@@ -101,6 +102,143 @@ def select_latest_visible_revisions(
 class PostgresMarketDataRepository:
     def __init__(self, connection: Connection) -> None:
         self._connection = connection
+
+    @staticmethod
+    def _market_bar_record(row: RowMapping) -> ProviderRecord:
+        payload = dict(row["payload"])
+        return ProviderRecord(
+            symbol=Symbol(str(row["symbol"])),
+            feed_type=FeedType.PRICE_BARS,
+            provider=str(row["provider"]),
+            event_time=row["event_time"],
+            available_at=row["available_at"],
+            ingested_at=row["ingested_at"],
+            content_hash=str(row["content_hash"]),
+            raw_object_key=str(row["raw_object_key"]),
+            payload={
+                **payload,
+                "open": str(row["open"]),
+                "high": str(row["high"]),
+                "low": str(row["low"]),
+                "close": str(row["close"]),
+                "volume": str(row["volume"]),
+                "coverage": str(row["coverage"]),
+                "session": str(row["session"]),
+                "conflict": bool(row["conflict"]),
+            },
+        )
+
+    @staticmethod
+    def _canonical_bar_query(
+        *,
+        symbols: Sequence[str],
+        decision_time: datetime,
+        coverage: MarketDataCoverage,
+        session: MarketSession,
+        timeframe: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> Any:
+        filters = [
+            market_bar.c.symbol.in_([str(Symbol(symbol)) for symbol in symbols]),
+            market_bar.c.provider == "ALPACA",
+            market_bar.c.feed_type == FeedType.PRICE_BARS.value,
+            market_bar.c.coverage == coverage.value,
+            market_bar.c.session == session.value,
+            market_bar.c.payload["timeframe"].astext == timeframe,
+            market_bar.c.event_time <= decision_time,
+            market_bar.c.available_at <= decision_time,
+        ]
+        if start is not None:
+            filters.append(market_bar.c.event_time >= start)
+        if end is not None:
+            filters.append(market_bar.c.event_time <= end)
+        revision_rank = (
+            func.row_number()
+            .over(
+                partition_by=(market_bar.c.symbol, market_bar.c.event_time),
+                order_by=(
+                    market_bar.c.available_at.desc(),
+                    market_bar.c.ingested_at.desc(),
+                    market_bar.c.content_hash.desc(),
+                    market_bar.c.raw_object_key.desc(),
+                ),
+            )
+            .label("revision_rank")
+        )
+        return select(market_bar, revision_rank).where(*filters).subquery()
+
+    def latest_bars_as_of(
+        self,
+        *,
+        symbols: Sequence[str],
+        decision_time: datetime,
+        coverage: MarketDataCoverage,
+        session: MarketSession,
+        timeframe: str,
+    ) -> tuple[ProviderRecord, ...]:
+        cutoff = require_aware(decision_time)
+        if not symbols:
+            return ()
+        canonical = self._canonical_bar_query(
+            symbols=symbols,
+            decision_time=cutoff,
+            coverage=coverage,
+            session=session,
+            timeframe=timeframe,
+        )
+        latest_rank = (
+            func.row_number()
+            .over(
+                partition_by=canonical.c.symbol,
+                order_by=(
+                    canonical.c.event_time.desc(),
+                    canonical.c.available_at.desc(),
+                    canonical.c.ingested_at.desc(),
+                    canonical.c.content_hash.desc(),
+                    canonical.c.raw_object_key.desc(),
+                ),
+            )
+            .label("latest_rank")
+        )
+        latest = select(canonical, latest_rank).where(canonical.c.revision_rank == 1).subquery()
+        rows = self._connection.execute(
+            select(latest).where(latest.c.latest_rank == 1).order_by(latest.c.symbol)
+        ).mappings()
+        return tuple(self._market_bar_record(row) for row in rows)
+
+    def historical_bars_as_of(
+        self,
+        *,
+        symbol: str,
+        start: datetime,
+        end: datetime,
+        decision_time: datetime,
+        coverage: MarketDataCoverage,
+        session: MarketSession,
+        timeframe: str,
+        limit: int,
+    ) -> tuple[ProviderRecord, ...]:
+        cutoff = require_aware(decision_time)
+        canonical = self._canonical_bar_query(
+            symbols=(symbol,),
+            decision_time=cutoff,
+            coverage=coverage,
+            session=session,
+            timeframe=timeframe,
+            start=require_aware(start),
+            end=require_aware(end),
+        )
+        rows = list(
+            self._connection.execute(
+                select(canonical)
+                .where(canonical.c.revision_rank == 1)
+                .order_by(canonical.c.event_time.desc())
+                .limit(limit)
+            ).mappings()
+        )
+        rows.reverse()
+        return tuple(self._market_bar_record(row) for row in rows)
 
     def as_of(
         self,

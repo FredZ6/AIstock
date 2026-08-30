@@ -8,14 +8,18 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
-from stock_platform.api.dependencies import get_connection, get_human_actor
+from stock_platform.api.dependencies import get_connection, get_human_actor, get_settings
 from stock_platform.api.main import app
 from stock_platform.application.learning.promotion import HumanActor
+from stock_platform.settings import Settings
 
 LOCKED_OPERATIONS = {
     ("GET", "/api/v1/events"),
     ("GET", "/api/v1/health"),
     ("GET", "/api/v1/providers/health"),
+    ("GET", "/api/v1/market-data/quotes"),
+    ("GET", "/api/v1/market-data/bars/{symbol}"),
+    ("GET", "/api/v1/data-quality"),
     ("GET", "/api/v1/watchlist"),
     ("POST", "/api/v1/watchlist"),
     ("PATCH", "/api/v1/watchlist/{symbol}"),
@@ -63,6 +67,9 @@ def client(api_engine: Engine) -> Iterator[TestClient]:
     with api_engine.connect() as connection:
         transaction = connection.begin()
         app.dependency_overrides[get_connection] = lambda: connection
+        app.dependency_overrides[get_settings] = lambda: Settings(  # type: ignore[call-arg]
+            environment="test", _env_file=None
+        )
         try:
             yield TestClient(app)
         finally:
@@ -96,6 +103,23 @@ def test_openapi_contains_the_locked_surface_and_no_live_broker() -> None:
 
     assert LOCKED_OPERATIONS <= actual
     assert all("broker" not in path.casefold() for _, path in actual)
+
+
+def test_live_read_endpoints_publish_closed_response_schemas() -> None:
+    document = app.openapi()
+
+    for path in (
+        "/api/v1/providers/health",
+        "/api/v1/market-data/quotes",
+        "/api/v1/market-data/bars/{symbol}",
+        "/api/v1/data-quality",
+    ):
+        schema = document["paths"][path]["get"]["responses"]["200"]["content"]["application/json"][
+            "schema"
+        ]
+        assert "$ref" in schema, path
+        component = document["components"]["schemas"][schema["$ref"].rsplit("/", 1)[-1]]
+        assert component.get("additionalProperties") is False, path
 
 
 @pytest.mark.parametrize(
@@ -192,13 +216,14 @@ def test_admission_limit_is_durable_and_cancellation_releases_capacity(
 
 
 def test_locked_read_views_are_callable(client: TestClient) -> None:
+    decision_time = datetime(2026, 8, 21, 21, tzinfo=UTC).isoformat().replace("+00:00", "Z")
     paths = (
         "/api/v1/health",
         "/api/v1/providers/health",
         "/api/v1/watchlist",
-        "/api/v1/stocks/NVDA/research",
+        f"/api/v1/stocks/NVDA/research?decision_time={decision_time}",
         "/api/v1/alerts",
-        "/api/v1/portfolio",
+        f"/api/v1/portfolio?decision_time={decision_time}",
         "/api/v1/portfolio/orders",
         "/api/v1/portfolio/fills",
         "/api/v1/weekly-reviews",

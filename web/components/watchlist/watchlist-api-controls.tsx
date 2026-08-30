@@ -10,6 +10,8 @@ import {
   updateWatchlistAction,
 } from '../../app/watchlist/actions'
 import type { ApiWatchlistItem } from '../../lib/product-types'
+import type { MarketQuote } from '../../lib/server/live-data-api'
+import { formatMoney } from '../../lib/format'
 import {
   initialWatchlistActionState,
   type WatchlistActionState,
@@ -80,7 +82,8 @@ function PersistedSettings({ item }: { item: ApiWatchlistItem }) {
   )
 }
 
-export function WatchlistApiControls({ items }: { items: ApiWatchlistItem[] }) {
+export function WatchlistApiControls({ items, quotes }: { items: ApiWatchlistItem[]; quotes: MarketQuote[] }) {
+  const quoteBySymbol = new Map(quotes.map((quote) => [quote.symbol, quote]))
   return (
     <section className="terminal-section first-section" aria-labelledby="watchlist-api-count">
       <div className="section-heading">
@@ -103,19 +106,20 @@ export function WatchlistApiControls({ items }: { items: ApiWatchlistItem[] }) {
             <tr><th scope="col">Symbol</th><th scope="col">Price</th><th scope="col">Day</th><th scope="col">Research opinion</th><th scope="col">Portfolio action</th><th scope="col">Next earnings</th><th scope="col">Monitoring</th><th scope="col">Last research</th><th scope="col">Data quality</th></tr>
           </thead>
           <tbody>
-            {items.map((item) => (
-              <tr key={item.symbol}>
+            {items.map((item) => {
+              const quote = quoteBySymbol.get(item.symbol)
+              return <tr key={item.symbol}>
                 <th scope="row"><Link href={`/research/${item.symbol}`}>{item.symbol}</Link></th>
-                <td className="unavailable-value">Unavailable</td>
+                <td className={quote ? undefined : 'unavailable-value'}>{quote ? formatMoney(quote.close, 'USD') : 'Unavailable'}</td>
                 <td className="unavailable-value">Unavailable</td>
                 <td className="unavailable-value">Unavailable</td>
                 <td className="unavailable-value">Unavailable</td>
                 <td className="unavailable-value">Unavailable</td>
                 <td><PersistedSettings item={item} /></td>
                 <td className="unavailable-value">Unavailable</td>
-                <td className="unavailable-value">Unavailable</td>
+                <td>{quote ? `${quote.provider} · ${quote.coverage}` : <span className="unavailable-value">Unavailable</span>}</td>
               </tr>
-            ))}
+            })}
           </tbody>
         </table>
       </div>

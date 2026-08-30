@@ -1,6 +1,7 @@
 import json
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -92,9 +93,66 @@ def test_head_can_downgrade_to_0024_and_upgrade_again(
     engine = create_engine(migration_database_url)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-            "0034_corp_action_guards"
+            "0035_portfolio_nav_availability"
         )
     engine.dispose()
+
+
+def test_0035_backfills_portfolio_nav_availability_and_round_trips(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "0034_corp_action_guards")
+    event_time = datetime(2026, 8, 21, 20, tzinfo=UTC)
+    portfolio_id = uuid4()
+    engine = create_engine(migration_database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO portfolio_nav (event_time, portfolio_id, nav) "
+                "VALUES (:event_time, :portfolio_id, 100000.00)"
+            ),
+            {"event_time": event_time, "portfolio_id": portfolio_id},
+        )
+    engine.dispose()
+    migration_started_at = datetime.now(UTC)
+    command.upgrade(config, "head")
+    migration_finished_at = datetime.now(UTC)
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        available_at = connection.execute(
+            text("SELECT available_at FROM portfolio_nav WHERE portfolio_id = :portfolio_id"),
+            {"portfolio_id": portfolio_id},
+        ).scalar_one()
+        assert migration_started_at <= available_at <= migration_finished_at
+    engine.dispose()
+    command.downgrade(config, "0034_corp_action_guards")
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        columns = {
+            row[0]
+            for row in connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = 'portfolio_nav'"
+                )
+            )
+        }
+        assert "available_at" not in columns
+    engine.dispose()
+
+
+def test_alembic_check_ignores_langgraph_owned_checkpoint_tables(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(migration_database_url)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE checkpoint_migrations (v integer PRIMARY KEY)"))
+    engine.dispose()
+
+    command.check(config)
 
 
 def test_0034_downgrade_restores_the_complete_0033_corporate_action_schema(

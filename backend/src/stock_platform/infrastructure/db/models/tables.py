@@ -1568,6 +1568,11 @@ portfolio_nav = time_series_table(
     "portfolio_nav",
     Column("portfolio_id", UUID(as_uuid=True), nullable=False),
     Column("nav", Numeric, nullable=False),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "event_time <= available_at",
+        name=conv("ck_portfolio_nav_availability"),
+    ),
 )
 alert_metric = time_series_table(
     "alert_metric",

@@ -1,4 +1,5 @@
 .env
+.env.local
 .DS_Store
 .next/
 .pnpm-store/
@@ -18,3 +19,4 @@ reports/
 .mypy_cache/
 .ruff_cache/
 .runtime/
+celerybeat-schedule*
