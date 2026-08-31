@@ -452,10 +452,10 @@ def test_research_worker_runs_real_graph_once_with_ordered_events(
             connection.execute(
                 select(func.count()).select_from(tool_call).where(tool_call.c.run_id == run_id)
             ).scalar_one()
-            == 5
+            == 6
         )
         replay = load_events(connection, run_id)
-        assert sum(event["type"] == "mcp.tool.completed" for event in replay) == 5
+        assert sum(event["type"] == "mcp.tool.completed" for event in replay) == 6
         assert {event["correlation_id"] for event in replay} == {correlation_id}
     engine.dispose()
 
@@ -518,16 +518,37 @@ def test_paper_research_provider_never_falls_back_to_persisted_fixture_news(
     as_of = datetime(2026, 8, 21, 20, tzinfo=UTC)
     with engine.begin() as connection:
         FixtureCatalog.load_default().seed_database(connection)
-        response = PostgresResearchProvider(
-            connection,
-            coverage=None,
-            gap_reason=None,
-        ).fetch(FeedType.COMPANY_NEWS, "NVDA", as_of)
+    provider = PostgresResearchProvider(
+        engine,
+        coverage=None,
+        gap_reason=None,
+    )
+    response = provider.fetch(FeedType.COMPANY_NEWS, "NVDA", as_of)
 
     assert response.status is ProviderStatus.NOT_FOUND
     assert response.provider == "ALPACA"
     assert response.records == ()
     assert response.missingness == "MISSING"
+    engine.dispose()
+
+
+def test_paper_research_provider_supports_parallel_fetches_with_independent_connections(
+    isolated_database_url: str,
+) -> None:
+    _migrate(isolated_database_url)
+    engine = create_engine(isolated_database_url)
+    as_of = datetime(2026, 8, 21, 20, tzinfo=UTC)
+    provider = PostgresResearchProvider(engine, coverage=None, gap_reason=None)
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        responses = tuple(
+            executor.map(
+                lambda feed: provider.fetch(feed, "NVDA", as_of),
+                tuple(FeedType),
+            )
+        )
+
+    assert tuple(response.feed_type for response in responses) == tuple(FeedType)
     engine.dispose()
 
 

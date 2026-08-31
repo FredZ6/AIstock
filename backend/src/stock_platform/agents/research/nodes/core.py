@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Protocol, TypedDict
 from uuid import UUID
 
-from stock_platform.agents.research.state import ResearchResult, ResearchState, ResearchStatus
+from stock_platform.agents.research.state import ReplaceById, ResearchState, ResearchStatus
 from stock_platform.application.research.citation_verifier import CitationVerifier
 from stock_platform.application.research.numeric_verifier import NumericUnit, NumericVerifier
 from stock_platform.application.research.persistence import ResearchStore
@@ -42,7 +42,17 @@ class ResearchCollectionProvider(Protocol):
     def fetch(self, feed_type: FeedType, symbol: str, as_of: datetime) -> ProviderResponse: ...
 
 
-_RESEARCH_FEEDS = (
+class CollectionTask(TypedDict):
+    feed_type: FeedType
+    symbol: str
+    data_cutoff: datetime
+
+
+class AnalysisTask(TypedDict):
+    evidence: EvidenceItem
+
+
+RESEARCH_FEEDS = (
     FeedType.COMPANY_FACTS,
     FeedType.PRICE_BARS,
     FeedType.COMPANY_NEWS,
@@ -93,20 +103,24 @@ class ResearchNodes:
         return update
 
     def planner(self, state: ResearchState) -> dict[str, object]:
-        del state
-        return _route("planner")
+        return {
+            **_route("planner"),
+            "collection_targets": tuple(
+                feed
+                for feed in RESEARCH_FEEDS
+                if feed.value in state["specification"].allowed_tools
+            ),
+        }
 
     def parallel_collection(self, state: ResearchState) -> dict[str, object]:
-        task = state["specification"]
-        responses: list[ProviderResponse] = []
-        for feed in _RESEARCH_FEEDS:
-            if feed.value in task.allowed_tools:
-                responses.append(self._provider.fetch(feed, task.symbols[0], task.data_cutoff))
-        warnings = tuple(warning for response in responses for warning in response.warnings)
+        del state
+        return _route("parallel_collection")
+
+    def collect_feed(self, task: CollectionTask) -> dict[str, object]:
+        response = self._provider.fetch(task["feed_type"], task["symbol"], task["data_cutoff"])
         return {
-            **_route("parallel_collection"),
-            "responses": tuple(responses),
-            "warnings": warnings,
+            "responses": (response,),
+            "warnings": response.warnings,
         }
 
     def normalize_freshness_lineage(self, state: ResearchState) -> dict[str, object]:
@@ -166,13 +180,17 @@ class ResearchNodes:
                 )
         return {
             **_route("normalize_freshness_lineage"),
-            "evidence": tuple(evidence),
+            "evidence": ReplaceById(tuple(evidence)),
+            "claims": ReplaceById(()),
             "gaps": tuple(gaps),
         }
 
     def parallel_analysts(self, state: ResearchState) -> dict[str, object]:
-        claims = tuple(_claim_for(item) for item in state["evidence"])
-        return {**_route("parallel_analysts"), "claims": claims}
+        del state
+        return _route("parallel_analysts")
+
+    def analyze_evidence(self, task: AnalysisTask) -> dict[str, object]:
+        return {"claims": (_claim_for(task["evidence"]),)}
 
     def evidence_judge(self, state: ResearchState) -> dict[str, object]:
         targets = [item for item in state["evidence"] if item.feed_type == "target_consensus"]
@@ -181,7 +199,13 @@ class ResearchNodes:
             value = str(item.payload.get("median_target"))
             target_values.setdefault(value, []).append(item)
         if len(target_values) <= 1:
-            return _route("evidence_judge")
+            return {
+                **_route("evidence_judge"),
+                "conflicts": (),
+                "gaps": tuple(
+                    gap for gap in state["gaps"] if gap.kind is not EvidenceGapKind.CONFLICTED
+                ),
+            }
         evidence_ids = tuple(item.id for item in targets)
         conflict = EvidenceConflict(
             field="median_target",
@@ -201,11 +225,24 @@ class ResearchNodes:
         return {
             **_route("evidence_judge"),
             "conflicts": (conflict,),
-            "gaps": (gap,),
+            "gaps": tuple(
+                item for item in state["gaps"] if item.kind is not EvidenceGapKind.CONFLICTED
+            )
+            + (gap,),
         }
 
     def reflect(self, state: ResearchState) -> dict[str, object]:
-        return {**_route("reflect"), "reflections": state["reflections"] + 1}
+        targets = {
+            feed for gap in state["gaps"] for feed in RESEARCH_FEEDS if gap.field == feed.value
+        }
+        if state["conflicts"]:
+            targets.add(FeedType.TARGET_CONSENSUS)
+        return {
+            **_route("reflect"),
+            "reflections": state["reflections"] + 1,
+            "collection_targets": tuple(sorted(targets, key=lambda item: item.value)),
+            "warnings": ("reflection:targeted_evidence_refetch",),
+        }
 
     def deterministic_score_confidence(self, state: ResearchState) -> dict[str, object]:
         versions = state["specification"].policy_versions
@@ -348,6 +385,20 @@ class ResearchNodes:
             "warnings": issue_warnings,
         }
 
+    def degrade_unverified_decision(self, state: ResearchState) -> dict[str, object]:
+        thesis = state["thesis"]
+        if thesis is None:
+            raise ValueError("thesis is required before validation downgrade")
+        return {
+            **_route("degrade_unverified_decision"),
+            "opinion": ResearchOpinion(
+                id=stable_research_id(state["run_id"], "opinion"),
+                thesis_id=thesis.id,
+                value=ResearchOpinionValue.ABSTAIN,
+            ),
+            "warnings": ("validation:decision_downgraded",),
+        }
+
     def decision_diff(self, state: ResearchState) -> dict[str, object]:
         thesis = state["thesis"]
         opinion = state["opinion"]
@@ -400,8 +451,4 @@ class ResearchNodes:
             "status": status,
             "decision_id": stable_research_id(state["run_id"], "decision"),
         }
-        complete_state = dict(state)
-        complete_state.update(update)
-        complete_state["route"] = state["route"] + ("persist_decision",)
-        self._store.persist(ResearchResult.from_state(complete_state))  # type: ignore[arg-type]
         return update

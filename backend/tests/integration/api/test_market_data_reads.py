@@ -560,6 +560,64 @@ def test_provider_health_does_not_report_success_while_latest_job_is_pending(
     assert response.json()["providers"]["alpaca"]["status"] == "DEGRADED"
 
 
+def test_provider_health_aggregates_latest_status_per_quality_dimension(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    now = datetime.now(UTC)
+    _quality_observation(
+        connection,
+        observed_at=now - timedelta(seconds=1),
+        available_at=now - timedelta(seconds=1),
+        status="FAIL",
+        suffix="health-conflict-fail",
+        dimension="CONFLICT",
+    )
+    _quality_observation(
+        connection,
+        observed_at=now,
+        available_at=now,
+        status="PASS",
+        suffix="health-coverage-pass",
+        dimension="COVERAGE",
+    )
+
+    response = client.get("/api/v1/providers/health")
+
+    assert response.status_code == 200
+    assert response.json()["providers"]["alpaca"]["latest_quality_status"] == "FAIL"
+    assert response.json()["providers"]["alpaca"]["status"] == "FAILURE"
+
+
+def test_provider_health_uses_worst_status_when_latest_dimension_observations_tie(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    observed_at = datetime.now(UTC)
+    _quality_observation(
+        connection,
+        observed_at=observed_at,
+        available_at=observed_at,
+        status="PASS",
+        suffix="health-conflict-tied-pass",
+        dimension="CONFLICT",
+    )
+    _quality_observation(
+        connection,
+        observed_at=observed_at,
+        available_at=observed_at,
+        status="FAIL",
+        suffix="health-conflict-tied-fail",
+        dimension="CONFLICT",
+    )
+
+    response = client.get("/api/v1/providers/health")
+
+    assert response.status_code == 200
+    assert response.json()["providers"]["alpaca"]["latest_quality_status"] == "FAIL"
+    assert response.json()["providers"]["alpaca"]["status"] == "FAILURE"
+
+
 def test_data_quality_status_is_independent_of_history_page_limit(
     market_client: tuple[TestClient, Connection],
 ) -> None:

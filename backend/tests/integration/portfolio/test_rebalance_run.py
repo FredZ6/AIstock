@@ -1,12 +1,17 @@
+from collections import Counter
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
-from uuid import UUID
+from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy import select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError
+from stock_platform.agents.checkpointing import postgres_checkpointer
 from stock_platform.agents.harness.budget import BudgetLimits
 from stock_platform.agents.harness.task_spec import PolicyVersions, TaskSpecification
 from stock_platform.agents.portfolio.graph import PortfolioDecisionGraph
@@ -73,6 +78,8 @@ def graph(
     slippage_bps: str = "0",
     fee_per_share: str = "0",
     minimum_fee: str = "0",
+    checkpointer: BaseCheckpointSaver[Any] | None = None,
+    on_node_completed: Any | None = None,
 ) -> PortfolioDecisionGraph:
     return PortfolioDecisionGraph(
         risk_policy=RiskPolicy(
@@ -95,6 +102,8 @@ def graph(
             minimum_fee=Decimal(minimum_fee),
             volume_participation=Decimal("1"),
         ),
+        checkpointer=checkpointer,
+        on_node_completed=on_node_completed,
     )
 
 
@@ -180,6 +189,73 @@ def test_overweight_model_proposal_is_clipped_before_next_bar_fill() -> None:
     assert result.fills[0].filled_at > DECISION_TIME
     assert result.nav.total == Decimal("1000.0")
     assert result.benchmarks.cash == ()
+
+
+def test_portfolio_graph_persists_native_checkpoint_by_run_id() -> None:
+    saver = InMemorySaver()
+    run_id = "portfolio-checkpoint-run"
+
+    result = graph(checkpointer=saver).run(
+        run_id=run_id,
+        portfolio_id=PORTFOLIO_ID,
+        specification=specification(),
+        market_context=market_context(),
+        research=(research(),),
+        bars=(decision_bar(),),
+        ledger=initial_funding(PORTFOLIO_ID, Decimal("1000"), "USD", DECISION_TIME),
+    )
+
+    assert result.nav.total == Decimal("1000")
+    assert saver.get({"configurable": {"thread_id": run_id}}) is not None
+
+
+def test_portfolio_postgres_checkpoint_resumes_without_repeating_completed_nodes(
+    engine: Engine,
+) -> None:
+    database_url = engine.url.render_as_string(hide_password=False)
+    run_id = f"portfolio-postgres-restart-{uuid4()}"
+    calls: Counter[str] = Counter()
+    failed = False
+
+    def inject_failure(node: str) -> None:
+        nonlocal failed
+        calls[node] += 1
+        if node == "risk_gateway" and not failed:
+            failed = True
+            raise RuntimeError("injected portfolio restart")
+
+    with postgres_checkpointer(database_url) as saver:
+        with pytest.raises(RuntimeError, match="injected portfolio restart"):
+            graph(checkpointer=saver, on_node_completed=inject_failure).run(
+                run_id=run_id,
+                portfolio_id=PORTFOLIO_ID,
+                specification=specification(),
+                market_context=market_context(),
+                research=(research(),),
+                bars=(decision_bar(),),
+                ledger=initial_funding(PORTFOLIO_ID, Decimal("1000"), "USD", DECISION_TIME),
+            )
+
+    completed_before_restart = calls.copy()
+    with postgres_checkpointer(database_url) as recreated_saver:
+        result = graph(
+            checkpointer=recreated_saver,
+            on_node_completed=lambda node: calls.update((node,)),
+        ).run(
+            run_id=run_id,
+            portfolio_id=PORTFOLIO_ID,
+            specification=specification(),
+            market_context=market_context(),
+            research=(research(),),
+            bars=(decision_bar(),),
+            ledger=initial_funding(PORTFOLIO_ID, Decimal("1000"), "USD", DECISION_TIME),
+        )
+
+    assert calls["load_frozen_research"] == completed_before_restart["load_frozen_research"]
+    assert calls["generate_candidates"] == completed_before_restart["generate_candidates"]
+    assert calls["build_target_weights"] == completed_before_restart["build_target_weights"]
+    assert result.route.count("load_frozen_research") == 1
+    assert result.nav.total == Decimal("1000")
 
 
 def test_future_or_stale_research_cannot_create_order_or_fill() -> None:

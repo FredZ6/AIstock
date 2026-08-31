@@ -2,8 +2,9 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import Connection, func, select
-from sqlalchemy.engine import RowMapping
+from sqlalchemy.engine import Engine, RowMapping
 
+from stock_platform.agents.checkpointing import postgres_checkpointer
 from stock_platform.agents.harness.budget import BudgetLimits
 from stock_platform.agents.harness.task_spec import PolicyVersions, TaskSpecification
 from stock_platform.agents.research.graph import DailyResearchGraph
@@ -43,12 +44,12 @@ class PostgresResearchProvider:
 
     def __init__(
         self,
-        connection: Connection,
+        engine: Engine,
         *,
         coverage: MarketDataCoverage | None,
         gap_reason: str | None,
     ) -> None:
-        self._repository = PostgresMarketDataRepository(connection)
+        self._engine = engine
         self._coverage = coverage
         self._gap_reason = gap_reason
 
@@ -62,12 +63,13 @@ class PostgresResearchProvider:
                 query_as_of=require_aware(as_of),
                 missingness=self._gap_reason or "market data entitlement unavailable",
             )
-        response = self._repository.as_of(
-            symbol=symbol,
-            feed_type=feed_type,
-            decision_time=as_of,
-            coverage=self._coverage if feed_type is FeedType.PRICE_BARS else None,
-        )
+        with self._engine.connect() as connection:
+            response = PostgresMarketDataRepository(connection).as_of(
+                symbol=symbol,
+                feed_type=feed_type,
+                decision_time=as_of,
+                coverage=self._coverage if feed_type is FeedType.PRICE_BARS else None,
+            )
         alpaca_records = tuple(record for record in response.records if record.provider == "ALPACA")
         if response.records and alpaca_records != response.records:
             response = ProviderResponse(
@@ -115,7 +117,7 @@ def execute_research_run(
             str(admission.get("reason")) if admission.get("gap_kind") == "UNAVAILABLE" else None
         )
         provider: ResearchDataProvider = PostgresResearchProvider(
-            connection,
+            connection.engine,
             coverage=(
                 MarketDataCoverage(str(selected_coverage))
                 if selected_coverage is not None
@@ -157,11 +159,13 @@ def execute_research_run(
                     connection, available_at=completion_time, record_events=False
                 ),
                 on_node_completed=control.node_completed,
+                checkpointer=checkpointer,
             ).run(run_id=run_id, specification=specification)
         finally:
             audit_sink.close()
 
-    return execute_run(database_url, UUID(run_id), "RESEARCH", work)
+    with postgres_checkpointer(database_url) as checkpointer:
+        return execute_run(database_url, UUID(run_id), "RESEARCH", work)
 
 
 @celery_app.task(name="stock_platform.workers.research_tasks.monitor_market")  # type: ignore[untyped-decorator]

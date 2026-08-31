@@ -166,7 +166,7 @@ class PortfolioNodes:
         ledger = state["ledger"]
         for fill in state["fills"]:
             ledger = apply_fill(ledger, fill)
-        all_fills = state["prior_fills"] + state["fills"]
+        all_fills = tuple(state["prior_fills"]) + tuple(state["fills"])
         nav_time = max(
             (fill.filled_at for fill in state["fills"]),
             default=state["specification"].decision_time,

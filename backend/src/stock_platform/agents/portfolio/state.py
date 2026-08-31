@@ -24,7 +24,7 @@ from stock_platform.domain.research.claims import ResearchOpinionValue
 
 
 def append_only[T](left: tuple[T, ...], right: tuple[T, ...]) -> tuple[T, ...]:
-    return left + right
+    return tuple(left) + tuple(right)
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,12 +122,12 @@ class PortfolioResult:
         return cls(
             run_id=state["run_id"],
             market_context=state["market_context"],
-            route=state["route"],
-            risk_decisions=state["risk_decisions"],
-            actions=state["actions"],
-            order_intents=state["order_intents"],
-            fills=state["fills"],
-            ledger=state["ledger"],
+            route=tuple(state["route"]),
+            risk_decisions=tuple(state["risk_decisions"]),
+            actions=tuple(state["actions"]),
+            order_intents=tuple(state["order_intents"]),
+            fills=tuple(state["fills"]),
+            ledger=tuple(state["ledger"]),
             nav=nav,
             benchmarks=state["benchmarks"],
             external_tool_calls=state["external_tool_calls"],
