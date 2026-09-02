@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Iterator
 from datetime import UTC, datetime
 
+import pytest
 from stock_platform.domain.ingestion.models import MarketDataCoverage
 from stock_platform.workers.alpaca_stream_supervisor import (
     AlpacaStreamArchiveUnavailable,
@@ -30,6 +31,19 @@ class FakeConnection:
             return next(self.messages)
         except StopIteration as error:
             raise StopAsyncIteration from error
+
+
+class FakeConnectionContext:
+    def __init__(self, connection: FakeConnection | None = None) -> None:
+        self.connection = connection
+
+    async def __aenter__(self) -> FakeConnection:
+        if self.connection is None:
+            raise asyncio.CancelledError
+        return self.connection
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None
 
 
 def test_stream_supervisor_publishes_batches_and_reconnect_recovery() -> None:
@@ -113,6 +127,49 @@ def test_stream_supervisor_archives_and_publishes_before_schema_validation() -> 
         assert "invalid JSON" in str(error)
 
     assert order == ["archive", "archive", "publish"]
+
+
+def test_stream_supervisor_reconnects_after_archiving_provider_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archived: list[tuple[str, bytes]] = []
+    published: list[tuple[str, list[str]]] = []
+    delays: list[float] = []
+    attempts = 0
+    provider_error = '[{"T":"error","code":406,"msg":"connection limit exceeded"}]'
+
+    def connect(*_args: object, **_kwargs: object) -> FakeConnectionContext:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            return FakeConnectionContext(FakeConnection((provider_error,)))
+        return FakeConnectionContext()
+
+    async def record_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr("websockets.asyncio.client.connect", connect)
+    monkeypatch.setattr("stock_platform.workers.alpaca_stream_supervisor.sleep", record_sleep)
+    supervisor = AlpacaStreamSupervisor(
+        data_key="test-key",
+        data_secret="test-secret",
+        coverage=MarketDataCoverage.IEX,
+        symbols=("NVDA",),
+        archive=lambda key, raw: archived.append((key, raw)),
+        publish=lambda task, args: published.append((task, args)),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(supervisor.run_forever())
+
+    assert attempts == 2
+    assert delays == [1.0]
+    assert archived[0][0].startswith("live/ALPACA/stream-recovery/iex/")
+    assert archived[1] == (
+        supervisor.raw_object_key(provider_error.encode()),
+        provider_error.encode(),
+    )
+    assert published[0][1][0] == provider_error
 
 
 def test_sidecar_survives_raw_archive_failure_and_is_replayable() -> None:

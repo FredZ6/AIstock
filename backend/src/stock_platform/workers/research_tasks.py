@@ -70,18 +70,33 @@ class PostgresResearchProvider:
                 decision_time=as_of,
                 coverage=self._coverage if feed_type is FeedType.PRICE_BARS else None,
             )
-        alpaca_records = tuple(record for record in response.records if record.provider == "ALPACA")
-        if response.records and alpaca_records != response.records:
+        alpaca_owned_feed = feed_type in {FeedType.PRICE_BARS, FeedType.COMPANY_NEWS}
+        permitted_records = tuple(
+            record
+            for record in response.records
+            if record.provider != "FIXTURE"
+            and (not alpaca_owned_feed or record.provider == "ALPACA")
+        )
+        if permitted_records != response.records:
+            providers = {record.provider for record in permitted_records}
             response = ProviderResponse(
-                status=ProviderStatus.OK if alpaca_records else ProviderStatus.NOT_FOUND,
-                provider="ALPACA",
+                status=ProviderStatus.OK if permitted_records else ProviderStatus.NOT_FOUND,
+                provider=(
+                    "ALPACA"
+                    if alpaca_owned_feed
+                    else next(iter(providers))
+                    if len(providers) == 1
+                    else "MULTIPLE"
+                    if providers
+                    else self.name
+                ),
                 feed_type=response.feed_type,
                 symbol=response.symbol,
                 query_as_of=response.query_as_of,
-                records=alpaca_records,
+                records=permitted_records,
                 warnings=response.warnings,
                 trace_id=response.trace_id,
-                missingness=None if alpaca_records else "MISSING",
+                missingness=None if permitted_records else "MISSING",
             )
         if feed_type is FeedType.PRICE_BARS and self._gap_reason is not None:
             return ProviderResponse(

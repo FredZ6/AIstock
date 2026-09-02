@@ -2,6 +2,7 @@ import { ApiFailurePage, ApiResearchPage } from '../../../components/live/api-pa
 import { ResearchPage } from '../../../components/research/research-page'
 import { MissingFixturePage } from '../../../components/states/missing-fixture-page'
 import { readWebDataConfig } from '../../../lib/server/data-mode'
+import { reportLiveDataFailure } from '../../../lib/server/live-data-diagnostics'
 import { getMarketQuotes, getStockResearch } from '../../../lib/server/live-data-api'
 
 export default async function ResearchRoute({ params }: { params: Promise<{ symbol: string }> }) {
@@ -22,6 +23,8 @@ export default async function ResearchRoute({ params }: { params: Promise<{ symb
       getMarketQuotes(options, [normalized]),
       getStockResearch(options, normalized),
     ])
+    if (quotesResult.status === 'rejected') reportLiveDataFailure(`/research/${normalized}`, 'market-quotes', quotesResult.reason)
+    if (recordsResult.status === 'rejected') reportLiveDataFailure(`/research/${normalized}`, 'research', recordsResult.reason)
     if (quotesResult.status === 'rejected' && recordsResult.status === 'rejected') {
       return <ApiFailurePage currentPath={`/research/${normalized}`} title={`${normalized} research`} />
     }
@@ -36,7 +39,8 @@ export default async function ResearchRoute({ params }: { params: Promise<{ symb
         ...(recordsResult.status === 'rejected' ? ['Research API'] : []),
       ]}
     />
-  } catch {
+  } catch (error) {
+    reportLiveDataFailure(`/research/${normalized}`, 'route', error)
     return <ApiFailurePage currentPath={`/research/${normalized}`} title={`${normalized} research`} />
   }
 }

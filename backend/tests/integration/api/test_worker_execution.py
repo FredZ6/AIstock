@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from threading import Event
 from uuid import UUID, uuid4
@@ -16,11 +16,17 @@ from stock_platform.infrastructure.db.models.tables import (
     agent_event,
     agent_run,
     cash_ledger,
+    decision_diff,
+    decision_outcome,
     decision_snapshot,
     evidence_gap,
     execution_policy_version,
+    investment_thesis,
+    market_bar,
     market_context_snapshot,
+    normalized_record,
     paper_portfolio_config,
+    raw_data_object,
     risk_decision,
     risk_policy_version,
     tool_call,
@@ -34,7 +40,7 @@ from stock_platform.workers.research_tasks import (
     execute_market_monitor_run,
     execute_research_run,
 )
-from stock_platform.workers.review_tasks import execute_weekly_review_run
+from stock_platform.workers.review_tasks import _paper_prices, execute_weekly_review_run
 from stock_platform.workers.schedules import recover_queued_runs
 
 
@@ -532,6 +538,76 @@ def test_paper_research_provider_never_falls_back_to_persisted_fixture_news(
     engine.dispose()
 
 
+def test_paper_research_provider_preserves_persisted_sec_company_facts(
+    isolated_database_url: str,
+) -> None:
+    _migrate(isolated_database_url)
+    engine = create_engine(isolated_database_url)
+    as_of = datetime(2026, 8, 21, 20, tzinfo=UTC)
+    event_time = datetime(2026, 8, 20, 20, tzinfo=UTC)
+    available_at = event_time + timedelta(minutes=1)
+    raw_id = uuid4()
+    fixture_raw_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            insert(raw_data_object),
+            [
+                {
+                    "id": raw_id,
+                    "provider": "SEC",
+                    "feed_type": FeedType.COMPANY_FACTS.value,
+                    "event_time": event_time,
+                    "available_at": available_at,
+                    "ingested_at": available_at,
+                    "content_hash": "e" * 64,
+                    "raw_object_key": "test/sec/NVDA/company-facts.json",
+                },
+                {
+                    "id": fixture_raw_id,
+                    "provider": "FIXTURE",
+                    "feed_type": FeedType.COMPANY_FACTS.value,
+                    "event_time": event_time,
+                    "available_at": available_at,
+                    "ingested_at": available_at,
+                    "content_hash": "f" * 64,
+                    "raw_object_key": "fixtures/NVDA/company-facts.json",
+                },
+            ],
+        )
+        connection.execute(
+            insert(normalized_record),
+            [
+                {
+                    "raw_data_object_id": raw_id,
+                    "record_type": FeedType.COMPANY_FACTS.value,
+                    "record_key": "NVDA:revenue:2026-Q2",
+                    "normalization_version": "sec-company-facts-v1",
+                    "payload": {"symbol": "NVDA", "revenue": "1000000"},
+                },
+                {
+                    "raw_data_object_id": fixture_raw_id,
+                    "record_type": FeedType.COMPANY_FACTS.value,
+                    "record_key": "NVDA:fixture-revenue:2026-Q2",
+                    "normalization_version": "fixture-v1",
+                    "payload": {"symbol": "NVDA", "revenue": "9999999"},
+                },
+            ],
+        )
+
+    response = PostgresResearchProvider(
+        engine,
+        coverage=None,
+        gap_reason=None,
+    ).fetch(FeedType.COMPANY_FACTS, "NVDA", as_of)
+
+    assert response.status is ProviderStatus.OK
+    assert response.provider == "SEC"
+    assert len(response.records) == 1
+    assert response.records[0].provider == "SEC"
+    assert response.records[0].payload["revenue"] == "1000000"
+    engine.dispose()
+
+
 def test_paper_research_provider_supports_parallel_fetches_with_independent_connections(
     isolated_database_url: str,
 ) -> None:
@@ -614,6 +690,144 @@ def test_weekly_worker_runs_real_review_graph_and_is_idempotent(
             .all()
         )
         assert event_types == ["run.started", *(["node.completed"] * 6), "run.completed"]
+    engine.dispose()
+
+
+def test_paper_weekly_worker_uses_only_persisted_alpaca_prices(
+    isolated_database_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _migrate(isolated_database_url)
+    engine = create_engine(isolated_database_url)
+    research_id = uuid4()
+    weekly_id = uuid4()
+    research_time = datetime(2026, 8, 16, tzinfo=UTC)
+    weekly_time = datetime(2026, 8, 21, tzinfo=UTC)
+    with engine.begin() as connection:
+        connection.execute(
+            insert(agent_run),
+            [
+                {
+                    "id": research_id,
+                    "run_type": "RESEARCH",
+                    "idempotency_key": f"paper-weekly-source-{research_id}",
+                    "request_hash": "4" * 64,
+                    "request_payload": {"symbol": "NVDA"},
+                    "symbol": "NVDA",
+                    "decision_time": research_time,
+                    "data_cutoff": research_time,
+                    "created_at": research_time,
+                    "status": "QUEUED",
+                },
+                {
+                    "id": weekly_id,
+                    "run_type": "WEEKLY_REVIEW",
+                    "idempotency_key": f"paper-weekly-{weekly_id}",
+                    "request_hash": "5" * 64,
+                    "request_payload": {"scheduled": True},
+                    "symbol": None,
+                    "decision_time": weekly_time,
+                    "data_cutoff": weekly_time,
+                    "created_at": weekly_time,
+                    "status": "QUEUED",
+                },
+            ],
+        )
+
+    assert execute_research_run(
+        isolated_database_url,
+        str(research_id),
+        completed_at=research_time,
+    )
+    with engine.begin() as connection:
+        decision_id = connection.execute(
+            select(decision_snapshot.c.id).where(decision_snapshot.c.thesis_id.is_not(None))
+        ).scalar_one()
+        for index, (event_time, close) in enumerate(
+            (
+                (datetime(2026, 8, 15, 20, tzinfo=UTC), Decimal("180")),
+                (datetime(2026, 8, 17, 20, tzinfo=UTC), Decimal("183")),
+                (datetime(2026, 8, 20, 20, tzinfo=UTC), Decimal("186")),
+            ),
+            start=1,
+        ):
+            raw_id = uuid4()
+            normalized_id = uuid4()
+            available_at = event_time + timedelta(minutes=1)
+            content_hash = f"{index:064x}"
+            raw_object_key = f"test/alpaca/NVDA/{event_time.isoformat()}"
+            connection.execute(
+                insert(raw_data_object).values(
+                    id=raw_id,
+                    provider="ALPACA",
+                    feed_type=FeedType.PRICE_BARS.value,
+                    event_time=event_time,
+                    available_at=available_at,
+                    ingested_at=available_at,
+                    content_hash=content_hash,
+                    raw_object_key=raw_object_key,
+                )
+            )
+            connection.execute(
+                insert(normalized_record).values(
+                    id=normalized_id,
+                    raw_data_object_id=raw_id,
+                    record_type="market_bar",
+                    record_key=f"NVDA:{event_time.isoformat()}",
+                    normalization_version="test-alpaca-v1",
+                    payload={"close": str(close)},
+                )
+            )
+            connection.execute(
+                insert(market_bar).values(
+                    id=uuid4(),
+                    event_time=event_time,
+                    symbol="NVDA",
+                    raw_data_object_id=raw_id,
+                    normalized_record_id=normalized_id,
+                    provider="ALPACA",
+                    feed_type=FeedType.PRICE_BARS.value,
+                    coverage="IEX",
+                    session="REGULAR",
+                    content_hash=content_hash,
+                    raw_object_key=raw_object_key,
+                    available_at=available_at,
+                    ingested_at=available_at,
+                    close=close,
+                    payload={"close": str(close)},
+                )
+            )
+        persisted_prices = _paper_prices(
+            connection,
+            symbols=("NVDA", "QQQ"),
+            cutoff=weekly_time,
+        )
+        assert [item.event_time for item in persisted_prices["NVDA"]]
+        assert any(item.event_time <= research_time for item in persisted_prices["NVDA"])
+
+    def fixture_forbidden() -> FixtureCatalog:
+        raise AssertionError("paper weekly review must not load Fixture data")
+
+    monkeypatch.setattr(FixtureCatalog, "load_default", fixture_forbidden)
+
+    assert execute_weekly_review_run(
+        isolated_database_url,
+        str(weekly_id),
+        fixture_mode=False,
+    )
+    with engine.connect() as connection:
+        review = (
+            connection.execute(
+                select(weekly_review_run).where(weekly_review_run.c.run_key == str(weekly_id))
+            )
+            .mappings()
+            .one()
+        )
+        assert review["decision_ids"] == [str(decision_id)]
+        outcome_count = connection.execute(
+            select(func.count()).select_from(decision_outcome)
+        ).scalar_one()
+        assert outcome_count == 1
     engine.dispose()
 
 
@@ -807,6 +1021,99 @@ def test_portfolio_and_weekly_workers_exclude_decisions_not_yet_available(
             ).scalar_one()
             == []
         )
+    engine.dispose()
+
+
+def test_weekly_worker_excludes_append_only_superseded_research_decision(
+    isolated_database_url: str,
+) -> None:
+    _migrate(isolated_database_url)
+    engine = create_engine(isolated_database_url)
+    contaminated_run_id = uuid4()
+    corrected_run_id = uuid4()
+    weekly_id = uuid4()
+    contaminated_time = datetime(2026, 8, 16, 20, 15, tzinfo=UTC)
+    corrected_time = datetime(2026, 8, 16, 20, 16, tzinfo=UTC)
+    # The replacement fact is persisted during this test, so the review cutoff must
+    # be after its actual database creation time as well as its historical data cutoff.
+    cutoff = datetime.now(UTC) + timedelta(minutes=1)
+    with engine.begin() as connection:
+        connection.execute(
+            insert(agent_run),
+            [
+                {
+                    "id": contaminated_run_id,
+                    "run_type": "RESEARCH",
+                    "idempotency_key": f"superseded-source-{contaminated_run_id}",
+                    "request_hash": "4" * 64,
+                    "request_payload": {"symbol": "NVDA"},
+                    "symbol": "NVDA",
+                    "decision_time": contaminated_time,
+                    "data_cutoff": contaminated_time,
+                    "created_at": contaminated_time,
+                    "status": "QUEUED",
+                },
+                {
+                    "id": corrected_run_id,
+                    "run_type": "RESEARCH",
+                    "idempotency_key": f"corrected-source-{corrected_run_id}",
+                    "request_hash": "5" * 64,
+                    "request_payload": {"symbol": "NVDA"},
+                    "symbol": "NVDA",
+                    "decision_time": corrected_time,
+                    "data_cutoff": corrected_time,
+                    "created_at": corrected_time,
+                    "status": "QUEUED",
+                },
+                {
+                    "id": weekly_id,
+                    "run_type": "WEEKLY_REVIEW",
+                    "idempotency_key": f"superseded-weekly-{weekly_id}",
+                    "request_hash": "6" * 64,
+                    "request_payload": {"scheduled": True},
+                    "symbol": None,
+                    "decision_time": cutoff,
+                    "data_cutoff": cutoff,
+                    "created_at": cutoff,
+                    "status": "QUEUED",
+                },
+            ],
+        )
+
+    assert execute_research_run(
+        isolated_database_url, str(contaminated_run_id), completed_at=contaminated_time
+    )
+    assert execute_research_run(
+        isolated_database_url, str(corrected_run_id), completed_at=corrected_time
+    )
+    with engine.begin() as connection:
+        contaminated_decision_id = connection.execute(
+            select(decision_snapshot.c.id)
+            .join(investment_thesis, decision_snapshot.c.thesis_id == investment_thesis.c.id)
+            .where(investment_thesis.c.run_id == contaminated_run_id)
+        ).scalar_one()
+        corrected_decision_id = connection.execute(
+            select(decision_snapshot.c.id)
+            .join(investment_thesis, decision_snapshot.c.thesis_id == investment_thesis.c.id)
+            .where(investment_thesis.c.run_id == corrected_run_id)
+        ).scalar_one()
+        connection.execute(
+            insert(decision_diff).values(
+                decision_id=corrected_decision_id,
+                previous_decision_id=contaminated_decision_id,
+                generator="DETERMINISTIC_CODE",
+                changes={"provenance": {"before": "FIXTURE", "after": "ALPACA"}},
+                created_at=corrected_time,
+            )
+        )
+
+    assert execute_weekly_review_run(isolated_database_url, str(weekly_id))
+    with engine.connect() as connection:
+        assert connection.execute(
+            select(weekly_review_run.c.decision_ids).where(
+                weekly_review_run.c.run_key == str(weekly_id)
+            )
+        ).scalar_one() == [str(corrected_decision_id)]
     engine.dispose()
 
 

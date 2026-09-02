@@ -13,6 +13,7 @@ import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
+from minio import Minio
 from psycopg import sql
 from sqlalchemy import create_engine, func, insert, select
 from sqlalchemy.engine import Connection, Engine, make_url
@@ -210,8 +211,29 @@ def alert_engine() -> Iterator[Engine]:
 
 
 @pytest.fixture(scope="module")
-def minio_raw_store() -> MinioRawObjectStore:
-    return MinioRawObjectStore.from_settings(Settings(environment="test"))
+def minio_raw_store() -> Iterator[MinioRawObjectStore]:
+    settings = Settings(environment="test")
+    client = Minio(
+        settings.minio_endpoint,
+        access_key=settings.minio_access_key,
+        secret_key=settings.minio_secret_key,
+        secure=settings.minio_secure,
+    )
+    bucket = f"alert-e2e-{uuid4().hex}"
+    store = MinioRawObjectStore(client=client, bucket=bucket)
+    try:
+        yield store
+    finally:
+        for item in client.list_objects(bucket, recursive=True):
+            if item.object_name is not None:
+                client.remove_object(bucket, item.object_name)
+        client.remove_bucket(bucket)
+
+
+def test_alert_minio_store_is_isolated_from_runtime_bucket(
+    minio_raw_store: MinioRawObjectStore,
+) -> None:
+    assert minio_raw_store._bucket != Settings(environment="test").minio_bucket
 
 
 @pytest.fixture
@@ -598,26 +620,12 @@ def test_out_of_order_bar_still_has_complete_database_lineage(
 def test_alpaca_raw_bytes_exist_in_minio_before_database_lineage(
     minio_raw_store: MinioRawObjectStore,
 ) -> None:
-    from minio import Minio
-
-    settings = Settings(environment="test")
     raw = raw_bar(50, close="101", volume="100", symbol="OBJ")
     item = AlpacaStreamNormalizer(raw_store=minio_raw_store).normalize(
         raw,
         received_at=START + timedelta(minutes=50, seconds=2),
     )
-    client = Minio(
-        settings.minio_endpoint,
-        access_key=settings.minio_access_key,
-        secret_key=settings.minio_secret_key,
-        secure=settings.minio_secure,
-    )
-    response = client.get_object(settings.minio_bucket, item.raw_object_key)
-    try:
-        assert response.read() == raw
-    finally:
-        response.close()
-        response.release_conn()
+    assert minio_raw_store.get(item.raw_object_key) == raw
 
 
 def test_gap_context_uses_true_regular_session_open_and_previous_close(

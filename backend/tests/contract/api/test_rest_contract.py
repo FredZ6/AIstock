@@ -1,16 +1,24 @@
 import os
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from contextlib import nullcontext
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, cast
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from pydantic import SecretStr
+from sqlalchemy import create_engine, delete, insert
 from sqlalchemy.engine import Engine
-from stock_platform.api.dependencies import get_connection, get_human_actor, get_settings
+from stock_platform.api.dependencies import (
+    get_connection,
+    get_human_actor,
+    get_read_connection_factory,
+    get_settings,
+)
 from stock_platform.api.main import app
 from stock_platform.application.learning.promotion import HumanActor
+from stock_platform.infrastructure.db.models.tables import alert_event
 from stock_platform.settings import Settings
 
 LOCKED_OPERATIONS = {
@@ -31,10 +39,12 @@ LOCKED_OPERATIONS = {
     ("GET", "/api/v1/alerts"),
     ("POST", "/api/v1/alerts/{alert_id}/acknowledge"),
     ("GET", "/api/v1/portfolio"),
+    ("POST", "/api/v1/portfolio/initialize"),
     ("POST", "/api/v1/portfolio/rebalance-runs"),
     ("GET", "/api/v1/portfolio/orders"),
     ("GET", "/api/v1/portfolio/fills"),
     ("GET", "/api/v1/weekly-reviews"),
+    ("GET", "/api/v1/weekly-reviews/{review_id}"),
     ("POST", "/api/v1/weekly-reviews/{review_id}/lessons/{lesson_id}/approve"),
     ("POST", "/api/v1/weekly-reviews/{review_id}/lessons/{lesson_id}/reject"),
     ("POST", "/api/v1/policies/{policy_id}/activate"),
@@ -67,6 +77,9 @@ def client(api_engine: Engine) -> Iterator[TestClient]:
     with api_engine.connect() as connection:
         transaction = connection.begin()
         app.dependency_overrides[get_connection] = lambda: connection
+        app.dependency_overrides[get_read_connection_factory] = lambda: (
+            lambda: nullcontext(connection)
+        )
         app.dependency_overrides[get_settings] = lambda: Settings(  # type: ignore[call-arg]
             environment="test", _env_file=None
         )
@@ -113,6 +126,13 @@ def test_live_read_endpoints_publish_closed_response_schemas() -> None:
         "/api/v1/market-data/quotes",
         "/api/v1/market-data/bars/{symbol}",
         "/api/v1/data-quality",
+        "/api/v1/portfolio",
+        "/api/v1/stocks/{symbol}/research",
+        "/api/v1/alerts",
+        "/api/v1/portfolio/orders",
+        "/api/v1/portfolio/fills",
+        "/api/v1/weekly-reviews",
+        "/api/v1/evals/runs",
     ):
         schema = document["paths"][path]["get"]["responses"]["200"]["content"]["application/json"][
             "schema"
@@ -120,6 +140,27 @@ def test_live_read_endpoints_publish_closed_response_schemas() -> None:
         assert "$ref" in schema, path
         component = document["components"]["schemas"][schema["$ref"].rsplit("/", 1)[-1]]
         assert component.get("additionalProperties") is False, path
+
+
+def test_provider_health_inventory_matches_implemented_adapters(client: TestClient) -> None:
+    app.dependency_overrides[get_settings] = lambda: Settings(  # type: ignore[call-arg]
+        environment="test",
+        alpha_vantage_api_key=SecretStr("configured-for-contract-test"),
+        _env_file=None,
+    )
+
+    response = client.get("/api/v1/providers/health")
+
+    assert response.status_code == 200
+    assert set(response.json()["providers"]) == {"sec", "alpaca", "alpha_vantage"}
+    assert response.json()["providers"]["alpha_vantage"] == {
+        "configured": True,
+        "mode": "read_only",
+        "status": None,
+        "coverage": None,
+        "latest_job_state": None,
+        "latest_quality_status": None,
+    }
 
 
 @pytest.mark.parametrize(
@@ -222,16 +263,80 @@ def test_locked_read_views_are_callable(client: TestClient) -> None:
         "/api/v1/providers/health",
         "/api/v1/watchlist",
         f"/api/v1/stocks/NVDA/research?decision_time={decision_time}",
-        "/api/v1/alerts",
+        f"/api/v1/alerts?decision_time={decision_time}",
         f"/api/v1/portfolio?decision_time={decision_time}",
-        "/api/v1/portfolio/orders",
-        "/api/v1/portfolio/fills",
-        "/api/v1/weekly-reviews",
-        "/api/v1/evals/runs",
+        f"/api/v1/portfolio/orders?decision_time={decision_time}",
+        f"/api/v1/portfolio/fills?decision_time={decision_time}",
+        f"/api/v1/weekly-reviews?decision_time={decision_time}",
+        f"/api/v1/evals/runs?decision_time={decision_time}",
     )
 
     for path in paths:
         assert client.get(path).status_code == 200, path
+
+
+def test_alerts_are_point_in_time_bounded_and_cursor_paginated(
+    client: TestClient,
+    api_engine: Engine,
+) -> None:
+    cutoff = datetime(2026, 8, 21, 21, tzinfo=UTC)
+    key_prefix = f"contract-alert-{uuid4()}"
+    with api_engine.begin() as connection:
+        connection.execute(
+            insert(alert_event),
+            [
+                {
+                    "alert_key": f"{key_prefix}-{index}",
+                    "symbol": "NVDA",
+                    "event_time": cutoff - timedelta(minutes=index),
+                    "rule_id": "contract-rule",
+                    "rule_version": "v1",
+                    "severity": "HIGH",
+                    "materiality": "0.8",
+                    "created_at": cutoff - timedelta(minutes=index),
+                }
+                for index in range(1, 4)
+            ]
+            + [
+                {
+                    "alert_key": f"{key_prefix}-future",
+                    "symbol": "NVDA",
+                    "event_time": cutoff + timedelta(minutes=1),
+                    "rule_id": "contract-rule",
+                    "rule_version": "v1",
+                    "severity": "HIGH",
+                    "materiality": "0.8",
+                    "created_at": cutoff + timedelta(minutes=1),
+                }
+            ],
+        )
+
+    try:
+        first = client.get(
+            "/api/v1/alerts",
+            params={"decision_time": cutoff.isoformat(), "limit": 2},
+        )
+        assert first.status_code == 200
+        assert len(first.json()["items"]) == 2
+        assert first.json()["next_cursor"] is not None
+        assert all(item["event_time"] <= cutoff.isoformat() for item in first.json()["items"])
+
+        second = client.get(
+            "/api/v1/alerts",
+            params={
+                "decision_time": cutoff.isoformat(),
+                "limit": 2,
+                "cursor": first.json()["next_cursor"],
+            },
+        )
+        assert second.status_code == 200
+        assert len(second.json()["items"]) == 1
+        assert second.json()["next_cursor"] is None
+    finally:
+        with api_engine.begin() as connection:
+            connection.execute(
+                delete(alert_event).where(alert_event.c.alert_key.like(f"{key_prefix}%"))
+            )
 
 
 def test_missing_resources_and_actions_use_the_error_envelope(client: TestClient) -> None:
@@ -244,6 +349,10 @@ def test_missing_resources_and_actions_use_the_error_envelope(client: TestClient
         client.get(f"/api/v1/research-runs/{missing}"),
         client.get(f"/api/v1/research-runs/{missing}/report"),
         client.get(f"/api/v1/evals/runs/{missing}"),
+        client.get(
+            f"/api/v1/weekly-reviews/{missing}",
+            params={"decision_time": datetime.now(UTC).isoformat()},
+        ),
         client.post(f"/api/v1/alerts/{missing}/acknowledge", json=action),
         client.post(f"/api/v1/weekly-reviews/{missing}/lessons/{uuid4()}/approve", json=action),
         client.post(f"/api/v1/weekly-reviews/{missing}/lessons/{uuid4()}/reject", json=action),

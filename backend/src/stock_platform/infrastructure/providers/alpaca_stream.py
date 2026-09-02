@@ -37,6 +37,13 @@ def _decimal(payload: dict[str, object], key: str) -> Decimal:
         raise ValueError(f"Alpaca minute bar field {key} is invalid") from error
 
 
+class AlpacaStreamProviderError(ValueError):
+    def __init__(self, code: object, message: object) -> None:
+        self.code = code
+        self.provider_message = str(message)
+        super().__init__(f"Alpaca stream provider error {code}: {message}")
+
+
 class AlpacaStreamDecoder:
     def decode_batch(self, raw: bytes, *, received_at: datetime) -> tuple[ProviderEvent, ...]:
         try:
@@ -49,6 +56,8 @@ class AlpacaStreamDecoder:
             message_type = item.get("T") if isinstance(item, dict) else None
             if message_type in {"success", "subscription"}:
                 continue
+            if message_type == "error" and isinstance(item, dict):
+                raise AlpacaStreamProviderError(item.get("code"), item.get("msg"))
             if message_type not in {"b", "u", "t", "q", "s"}:
                 raise ValueError("Alpaca stream payload must be a supported event")
             supported.append(item)
@@ -130,6 +139,17 @@ class AlpacaStreamReplayWriter:
         try:
             events = self._decoder.decode_batch(raw, received_at=observed_at)
         except ValueError as error:
+            error_class = (
+                "PROVIDER_ERROR" if isinstance(error, AlpacaStreamProviderError) else "SCHEMA_DRIFT"
+            )
+            error_detail: dict[str, object] = {
+                "type": type(error).__name__,
+                "message": str(error),
+            }
+            if isinstance(error, AlpacaStreamProviderError):
+                error_detail.update(
+                    {"code": error.code, "provider_message": error.provider_message}
+                )
             with self._engine.begin() as connection:
                 raw_id = connection.execute(
                     insert(raw_data_object)
@@ -165,8 +185,8 @@ class AlpacaStreamReplayWriter:
                             raw_data_object_id=raw_id,
                             record_key=f"stream:{coverage.value}",
                             normalization_version="alpaca-stream-v2",
-                            error_class="SCHEMA_DRIFT",
-                            error_detail={"type": type(error).__name__, "message": str(error)},
+                            error_class=error_class,
+                            error_detail=error_detail,
                         )
                     )
             raise

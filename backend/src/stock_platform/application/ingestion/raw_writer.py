@@ -138,7 +138,14 @@ def report_orphaned_raw_objects(
     inventory: RawObjectInventory,
     *,
     prefix: str = "",
+    excluded_prefixes: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     with engine.connect() as connection:
         referenced = set(connection.execute(select(raw_data_object.c.raw_object_key)).scalars())
-    return tuple(sorted(set(inventory.list_keys(prefix)) - referenced))
+    return tuple(
+        sorted(
+            key
+            for key in set(inventory.list_keys(prefix)) - referenced
+            if not key.startswith(excluded_prefixes)
+        )
+    )

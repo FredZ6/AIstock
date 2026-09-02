@@ -5,6 +5,8 @@ import {
   getPortfolioSummary,
   getProviderHealth,
   getStockResearch,
+  getWeeklyReviewDetail,
+  initializePortfolio,
   LiveDataApiError,
 } from '../lib/server/live-data-api'
 
@@ -53,14 +55,32 @@ describe('live data API client', () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.endsWith('/providers/health')) return jsonResponse({
-        mode: 'paper', providers: { alpaca: { configured: true, mode: 'read_only', status: 'SUCCESS', coverage: 'IEX' } },
+        mode: 'paper',
+        providers: {
+          alpaca: { configured: true, mode: 'read_only', status: 'FAILURE', coverage: 'IEX' },
+          alpha_vantage: { configured: false, mode: 'unavailable', status: null, coverage: null },
+          sec: { configured: false, mode: 'unavailable', status: null, coverage: null },
+        },
       })
-      if (url.includes('/portfolio?')) return jsonResponse({ latest_nav: null, trading: 'paper_only' })
-      return jsonResponse([])
+      if (url.includes('/portfolio?')) return jsonResponse({
+        cash: null, cash_ledger: [], configuration: null, decision_time: options.decisionTime,
+        fills: [], initialized_at: null, latest_nav: null, orders: [], performance_history: [],
+        positions: [], risk_decisions: [], status: 'EMPTY', trading: 'paper_only',
+      })
+      return jsonResponse({ decision_time: options.decisionTime, items: [], next_cursor: null })
     })
 
-    await expect(getProviderHealth({ ...options, fetchImpl })).resolves.toMatchObject({ mode: 'paper' })
-    await expect(getPortfolioSummary({ ...options, fetchImpl })).resolves.toEqual({ latestNav: null, trading: 'paper_only' })
+    await expect(getProviderHealth({ ...options, fetchImpl })).resolves.toMatchObject({
+      mode: 'paper',
+      providers: {
+        alpaca: { status: 'FAILURE' },
+        alpha_vantage: { status: undefined },
+        sec: { status: undefined },
+      },
+    })
+    await expect(getPortfolioSummary({ ...options, fetchImpl })).resolves.toMatchObject({
+      cash: null, latestNav: null, status: 'EMPTY', trading: 'paper_only',
+    })
     await expect(getStockResearch({ ...options, fetchImpl }, 'NVDA')).resolves.toEqual([])
   })
 
@@ -73,5 +93,46 @@ describe('live data API client', () => {
     expect(error).toBeInstanceOf(LiveDataApiError)
     expect(error).toMatchObject({ kind: 'response', status: 503 })
     expect((error as Error).message).not.toContain('private upstream body')
+  })
+
+  it('initializes only the singleton paper portfolio with an idempotency key', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      currency: 'USD',
+      initial_cash: '100000',
+      initialized_at: options.decisionTime,
+      name: 'default-paper',
+      portfolio_id: '10000000-0000-0000-0000-000000000001',
+      status: 'READY',
+    }))
+
+    await expect(initializePortfolio({ ...options, fetchImpl }, 'initialize-default-paper-v1'))
+      .resolves.toMatchObject({ initialCash: '100000', status: 'READY' })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://api.test/api/v1/portfolio/initialize',
+      expect.objectContaining({
+        body: JSON.stringify({ effective_at: options.decisionTime }),
+        method: 'POST',
+        headers: expect.objectContaining({ 'Idempotency-Key': 'initialize-default-paper-v1' }),
+      }),
+    )
+  })
+
+  it('parses normalized weekly review detail without accepting numeric Decimal fields', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      approvals: [],
+      attributions: [{ category: 'TIMING_ERROR', controllable: true, created_at: options.decisionTime, id: 'a1', outcome_id: 'o1', rationale: 'Late entry.' }],
+      calibration: [{ calibration_error: '0.2', confidence: '0.8', decision_id: 'd1', realized_return: '0.03', status: 'MATURED' }],
+      decision_time: options.decisionTime,
+      lessons: [{ attribution_id: 'a1', confidence: '0.7', counter_evidence: [], created_at: options.decisionTime, creator: 'weekly-review', evidence: ['o1'], id: 'l1', replay_delta: '0.1', scope: 'TIMING', statement: 'Wait for confirmation.', status: 'CANDIDATE' }],
+      outcomes: [{ calibration_error: '0.2', computed_at: options.decisionTime, confidence: '0.8', created_at: options.decisionTime, decision_id: 'd1', excess_returns: {}, id: 'o1', maximum_adverse_excursion: '-0.01', maximum_favorable_excursion: '0.04', opinion: 'BULLISH', returns: { '1': '0.03' }, risk_adjusted_return: '3', status: 'MATURED', symbol: 'NVDA' }],
+      replays: [],
+      review: { confidence_policy_version: 'confidence-v1', created_at: options.decisionTime, data_cutoff: options.decisionTime, decision_ids: ['d1'], decision_time: options.decisionTime, execution_policy_version: 'execution-v1', id: 'r1', model_version: 'model-v1', prompt_version: 'prompt-v1', research_scoring_policy_version: 'research-v1', risk_policy_version: 'risk-v1', run_key: 'run-1', status: 'COMPLETED' },
+    }))
+
+    await expect(getWeeklyReviewDetail({ ...options, fetchImpl }, 'r1')).resolves.toMatchObject({
+      outcomes: [{ confidence: '0.8', symbol: 'NVDA' }],
+      calibration: [{ realizedReturn: '0.03' }],
+      lessons: [{ statement: 'Wait for confirmation.' }],
+    })
   })
 })

@@ -50,7 +50,11 @@ describe('home page', () => {
     render(await Home())
 
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
-    expect(screen.getByRole('status', { name: 'Some decision facts are unavailable' })).toHaveTextContent('Portfolio API')
+    const degraded = screen.getByRole('status', { name: 'Some decision facts are unavailable' })
+    expect(degraded).toHaveTextContent('5 unavailable facts')
+    expect(screen.getByText('Decision Domain')).toBeInTheDocument()
+    expect(degraded).toHaveTextContent('Portfolio API')
+    expect(screen.queryByRole('list', { name: 'Degraded providers' })).not.toBeInTheDocument()
     expect(screen.queryByRole('alert', { name: 'Today unavailable' })).not.toBeInTheDocument()
   })
 
@@ -70,7 +74,11 @@ describe('home page', () => {
         missingSymbols: [],
         status: 'DEGRADED',
       })),
-      getPortfolioSummary: vi.fn(async () => ({ latestNav: null, trading: 'paper_only' })),
+      getPortfolioSummary: vi.fn(async () => ({
+        cash: null, cashLedger: [], configuration: null, fills: [], initializedAt: null,
+        latestNav: null, orders: [], performanceHistory: [], positions: [], riskDecisions: [],
+        status: 'EMPTY', trading: 'paper_only',
+      })),
       getProviderHealth: vi.fn(async () => ({
         mode: 'paper',
         providers: { alpaca: { configured: true, coverage: 'IEX', mode: 'read_only', status: 'SUCCESS' } },

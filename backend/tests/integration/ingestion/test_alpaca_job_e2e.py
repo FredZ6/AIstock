@@ -285,6 +285,29 @@ def test_websocket_schema_drift_keeps_raw_object_and_rejection(
     engine.dispose()
 
 
+def test_websocket_provider_error_is_not_misclassified_as_schema_drift(
+    isolated_database_url: str,
+    isolated_minio_store: MinioRawObjectStore,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    raw = b'[{"T":"error","code":406,"msg":"connection limit exceeded"}]'
+
+    with pytest.raises(ValueError):
+        AlpacaStreamReplayWriter(engine=engine, raw_store=isolated_minio_store).persist_batch(
+            raw,
+            received_at=NOW,
+            coverage=MarketDataCoverage.IEX,
+        )
+
+    with engine.connect() as connection:
+        rejection = connection.execute(select(normalization_rejection)).mappings().one()
+    assert rejection["error_class"] == "PROVIDER_ERROR"
+    assert rejection["error_detail"]["code"] == 406
+    assert len(isolated_minio_store.list_keys("live/ALPACA/stream/iex/")) == 1
+    engine.dispose()
+
+
 def test_registered_celery_task_executes_through_redis_worker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -329,6 +352,7 @@ def test_ingestion_low_worker_runs_full_minio_postgres_pipeline(
         start=event_base,
         end=event_base + timedelta(minutes=2),
     )
+    queue = f"ingestion-e2e-{uuid4().hex}"
     base_pages = (
         _batch(
             (
@@ -389,11 +413,12 @@ def test_ingestion_low_worker_runs_full_minio_postgres_pipeline(
         celery_app,
         perform_ping_check=False,
         pool="solo",
-        queues=["ingestion-low"],
+        queues=[queue],
     ):
         celery_app.send_task(
             "stock_platform.workers.ingestion_tasks.run_alpaca_ingestion_job",
             args=[str(job_id)],
+            queue=queue,
         )
         deadline = monotonic() + 10
         state = "QUEUED"

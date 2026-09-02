@@ -93,7 +93,7 @@ def test_head_can_downgrade_to_0024_and_upgrade_again(
     engine = create_engine(migration_database_url)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-            "0035_portfolio_nav_availability"
+            "0036_runtime_acceptance_guards"
         )
     engine.dispose()
 

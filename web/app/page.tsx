@@ -1,6 +1,7 @@
 import { ApiFailurePage, ApiTodayPage } from '../components/live/api-pages'
 import { TodayPage } from '../components/today-page'
 import { readWebDataConfig } from '../lib/server/data-mode'
+import { reportLiveDataFailure } from '../lib/server/live-data-diagnostics'
 import { getMarketQuotes, getPortfolioSummary, getProviderHealth } from '../lib/server/live-data-api'
 import { listWatchlist } from '../lib/server/watchlist-api'
 
@@ -20,11 +21,17 @@ export default async function Home() {
       getProviderHealth(options),
       getPortfolioSummary(options),
     ])
+    if (watchlistResult.status === 'rejected') reportLiveDataFailure('/', 'watchlist', watchlistResult.reason)
+    if (healthResult.status === 'rejected') reportLiveDataFailure('/', 'provider-health', healthResult.reason)
+    if (portfolioResult.status === 'rejected') reportLiveDataFailure('/', 'portfolio', portfolioResult.reason)
     const watchlist = watchlistResult.status === 'fulfilled' ? watchlistResult.value : []
     const quotesResult = watchlist.length
       ? await getMarketQuotes(options, watchlist.map((item) => item.symbol)).then(
         (value) => ({ status: 'fulfilled' as const, value }),
-        () => ({ status: 'rejected' as const }),
+        (error) => {
+          reportLiveDataFailure('/', 'market-quotes', error)
+          return { status: 'rejected' as const }
+        },
       )
       : { status: 'rejected' as const }
     const availableFacts = [healthResult, portfolioResult, quotesResult]
@@ -45,7 +52,8 @@ export default async function Home() {
       quotes={quotesResult.status === 'fulfilled' ? quotesResult.value.items : []}
       unavailableDomains={unavailableDomains}
     />
-  } catch {
+  } catch (error) {
+    reportLiveDataFailure('/', 'route', error)
     return <ApiFailurePage currentPath="/" title="Today" />
   }
 }

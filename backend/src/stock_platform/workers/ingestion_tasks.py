@@ -1916,7 +1916,11 @@ def report_minio_orphans() -> int:
     engine = create_engine(settings.database_url)
     try:
         inventory = MinioRawObjectStore.from_settings(settings)
-        orphaned_keys = report_orphaned_raw_objects(engine, inventory)
+        orphaned_keys = report_orphaned_raw_objects(
+            engine,
+            inventory,
+            excluded_prefixes=("live/ALPACA/stream-recovery/",),
+        )
         return record_orphan_inventory(orphaned_keys)
     finally:
         engine.dispose()
