@@ -96,6 +96,11 @@ a:active, button:active { transform: scale(0.98); transition: transform 100ms ea
 .state-timestamp { margin: 0.65rem 0 0; color: var(--text-tertiary); font-size: 0.7rem; }
 .state-tags { display: flex; flex-wrap: wrap; gap: 0.45rem; padding: 0; margin: 0.7rem 0 0; list-style: none; }
 .state-tags li { padding: 0.35rem 0.6rem; border: 1px solid color-mix(in oklch, var(--signal) 35%, var(--line)); border-radius: 999px; color: var(--signal); font-size: 0.68rem; font-weight: 650; }
+.state-details { margin-left: auto; }
+.state-details summary { color: var(--signal); cursor: pointer; font-size: 0.7rem; font-weight: 700; }
+.state-detail-groups { display: grid; gap: 0.65rem; min-width: min(38rem, 80vw); padding-top: 0.7rem; }
+.state-detail-groups h3 { margin: 0; color: var(--muted); font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.state-detail-groups .state-tags { margin-top: 0.35rem; }
 .state-retry { display: inline-block; margin-top: 0.7rem; color: var(--negative); font-size: 0.75rem; font-weight: 700; }
 .state-surface[data-state="degraded"] > p,
 .state-surface[data-state="degraded"] > h2,

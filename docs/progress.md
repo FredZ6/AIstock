@@ -2610,3 +2610,319 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   format clean, Ruff clean, strict Mypy clean over 274 source files, no Alembic/OpenAPI drift,
   backend 695 passed / 4 credential-gated live tests skipped, frontend TypeScript and ESLint clean,
   Vitest 18 files / 109 tests passed, and the ten-route Next.js production build succeeded.
+
+### Local paper-mode real-data runtime closure (2026-08-31)
+
+- PostgreSQL, MinIO, and Redis were healthy; Alembic upgraded to head with exit 0. FastAPI, one
+  default Celery worker, one `ingestion-low` worker, Celery Beat, the read-only Alpaca Market Data
+  stream supervisor, and the API-mode Next.js frontend were started without any brokerage path.
+- The credential-safe settings probe reported `environment=paper`, Alpaca key and secret present,
+  `coverage=IEX`, and entitlement version `operator-verified-2026-08-31`. Live Alpaca contract
+  verification passed 1/1 after the ingestion suite passed 74/74; SEC and Alpha live checks remained
+  explicitly skipped because their separate opt-in flags were not set.
+- An approved AVGO daily-bar backfill succeeded. PostgreSQL held seven AVGO IEX bars for completed
+  trading days, with the latest ingestion at `2026-08-31T04:16:36.938126Z`; all 23 recently referenced
+  Alpaca raw objects were present in MinIO (`23/23`, zero missing). The API returned AVGO and NVDA
+  from persisted `ALPACA · IEX` facts under the requested point-in-time cutoff.
+- Real Alpaca payloads exposed a locked-response defect: raw provider keys such as `c`, `h`, `o`,
+  and `vw` leaked into strict `MarketDataItem` validation and caused HTTP 500. The new regression
+  failed for that exact reason, then passed after `_market_record` changed to an explicit response
+  allowlist. Focused GREEN was 1 passed / 14 deselected; the full market-data API file passed 15/15.
+- Playwright verified Today, Watchlist, AVGO Research, and Portfolio in `API Mode`. Today and Research
+  displayed persisted AVGO/NVDA values with `ALPACA · IEX`; unavailable domains remained explicit
+  Degraded/Failure states. During a reversible FastAPI outage, Today rendered `Failure` and stated
+  `No Fixture data was substituted`; after FastAPI restarted it again rendered the persisted facts.
+  Screenshots are stored at `output/playwright/api-mode-today.png` and
+  `output/playwright/api-outage-no-fixture.png`.
+- An intentionally manual Sunday daily-ingestion invocation produced 11 append-only DEAD_LETTER bar
+  jobs because its derived interval contained no completed trading day. The supported bounded
+  backfill proved successful recovery; the audit records were retained rather than deleted. Provider
+  Health may remain Failure/Degraded outside the freshness window even while the latest job is
+  `SUCCEEDED` and latest quality is `PASS`; this is expected truthful behavior, not Fixture fallback.
+- The first full `make verify` reached 695 passed / 4 skipped but exited 2 because the running local
+  `ingestion-low` worker consumed an isolated test task from their shared Redis broker before the
+  in-process test worker could receive it. After application workers were paused, that exact
+  Celery/MinIO/PostgreSQL test passed 1/1 in 2.42 seconds. The clean second `make verify` exited 0:
+  315 files format clean, Ruff clean, strict Mypy clean over 274 source files, no Alembic/OpenAPI
+  drift, backend 696 passed / 4 credential- or condition-gated tests skipped, frontend TypeScript
+  and ESLint clean, Vitest 18 files / 109 tests passed, and the ten-route Next.js production build
+  succeeded.
+
+### Product completeness remediation — runtime safety batch 1 (2026-08-31)
+
+- AUD-001 RED: a real Alpaca `T:error` payload terminated `run_forever` with an uncaught
+  `ValueError`; the persistence path also labeled the provider control error as `SCHEMA_DRIFT`.
+  GREEN: the supervisor archives the recovery envelope and raw batch, publishes it for durable
+  persistence, reconnects with bounded backoff, and stores the rejection as `PROVIDER_ERROR` with
+  the provider code/message. Supervisor tests passed 7/7.
+- AUD-002 reused the observed full-gate RED where a running `ingestion-low` worker consumed the
+  isolated E2E task. The full MinIO/PostgreSQL pipeline now uses a per-test UUID queue and explicitly
+  routes the task to it; the focused infrastructure test passed 1/1 while the normal queue remained
+  independent.
+- AUD-017 RED proved that the SSE generator required a long-lived `Connection` and that
+  `load_events` had no limit. GREEN introduces an injectable short-lived read-connection factory,
+  releases the only pool slot between polls, and caps replay batches (default 100, validated range
+  1–1000). Idle streams emit SSE comment heartbeats without retaining the pool slot, and generator
+  close therefore has no open database resource to leak. REST/SSE contract tests passed 17/17,
+  including resume, heartbeat, and a one-connection-pool writer.
+- Complete related regression command over the supervisor, Alpaca Celery/MinIO/PostgreSQL E2E,
+  SSE, and REST contract files exited 0 with 51 passed in 12.87 seconds. Ruff passed on all touched
+  files; strict Mypy passed on the five changed source modules. The repository-wide `make verify`
+  remains the delivery gate after the remaining runtime-safety acceptance work.
+
+### Product completeness remediation — honest API boundaries (2026-09-01)
+
+- AUD-013 RED proved Alerts, Run Trace, Weekly Review, and Eval API mode still imported or merged
+  Fixture snapshots. Each route now selects its data mode before importing fixtures; API mode reads
+  only persisted contracts and renders explicit Empty or Failure without substituting synthetic
+  data. The focused boundary/degradation/fixture suite passed 9/9 before the next contract batch.
+- AUD-014 RED showed stock research still published an open array schema and alerts had no PIT
+  pagination contract. Research, alerts, paper orders, paper fills, weekly reviews, and eval runs now
+  use strict response models, aware `decision_time`, bounded limits (1–100), deterministic
+  time-plus-UUID keyset cursors, and business-time plus creation-time visibility filters. Research
+  uses one PIT-bounded latest-opinion scalar query, avoiding duplicate thesis rows. The frontend
+  research client now consumes the same page envelope. Complete REST contract passed 13/13; the
+  focused frontend client/boundary suite passed 13/13; Ruff and strict Mypy passed.
+- AUD-018 RED reported `fmp` while the configured earnings adapter is Alpha Vantage. Provider
+  Health now exposes `alpha_vantage` from `alpha_vantage_api_key`; the inventory/OpenAPI regression
+  passed 2/2.
+- AUD-020 adds typed, secret-safe server diagnostics for every audited API-mode page and each
+  independently degraded domain. Logs contain only route, domain, failure kind, HTTP status, and
+  backend correlation ID. AUD-021 adds shared native App Router Loading, Error/retry, and Not Found
+  boundaries with accessible semantics and no Fixture fallback. Diagnostics/boundary/API route
+  regressions passed 15/15 and TypeScript passed. The complete frontend Vitest suite then passed
+  21 files / 118 tests; the complete REST contract passed 14/14; the regenerated locked OpenAPI
+  artifact passed its drift check; Ruff and strict Mypy remained green. Repository-wide
+  `make verify` remains pending.
+
+### Product completeness remediation — paper portfolio foundation (2026-09-01)
+
+- AUD-005 RED: `GET /api/v1/portfolio` returned only `latest_nav=null`, which the frontend rendered
+  as Failure; no user action could create the approved singleton portfolio. GREEN adds an audited,
+  idempotent, paper-only `POST /api/v1/portfolio/initialize` operation. The fixed
+  `initialize-default-paper-v1` key produces exactly two balanced append-only CashLedger entries
+  for USD 100,000, and replay writes nothing. The UI renders an actionable Empty state before
+  initialization and never substitutes Fixture data.
+- AUD-015 RED: the portfolio response omitted configuration, cash, positions, risk decisions,
+  orders, fills, ledger, and performance history, and its OpenAPI response was open. GREEN adds a
+  strict PIT response assembled only from authoritative paper facts visible at `decision_time`.
+  Position quantities and weighted-average costs are computed with `Decimal`; open unpriced
+  positions remain explicit rather than fabricated, and an initialized account without NAV shows
+  its persisted cash with a Degraded state.
+- Focused TDD GREEN: backend unit/integration/REST contract regression exited 0 with 19 passed;
+  complete frontend Vitest exited 0 with 22 files / 122 tests. Ruff and strict Mypy passed for the
+  changed backend sources. OpenAPI was intentionally observed stale, regenerated, then its drift
+  check exited 0. The first sandboxed PostgreSQL run failed only because local TCP was denied; the
+  authorized rerun against Docker PostgreSQL passed and is the recorded product result.
+- Repository-wide `make verify` remains the delivery gate after the remaining authoritative
+  product-chain work.
+
+### Product completeness remediation — paper weekly-review input (2026-09-01)
+
+- AUD-006/AUD-004 prerequisite RED: `execute_weekly_review_run(..., fixture_mode=False)` failed at
+  the function boundary because the Worker had no mode parameter and always loaded FixtureCatalog.
+- GREEN: the Celery entry point now propagates `Settings.fixture_mode`. Paper mode reads only
+  PostgreSQL `ALPACA` bars visible by `data_cutoff`, deterministically collapses revisions, uses QQQ
+  only when persisted, and preserves missing future horizons as Pending. The regression disables the
+  Fixture loader and supplies explicit RawDataObject → NormalizedRecord → MarketBar test lineage.
+- Focused Weekly Worker regression passed 3/3; the complete Research/Portfolio/Weekly Worker execution
+  file passed 18/18. Ruff and strict Mypy passed. Weekly detail contracts and the complete real
+  product-chain runtime evidence remain open; no completion claim is made yet.
+
+### Product completeness remediation — Weekly Review detail (2026-09-02)
+
+- AUD-016 backend RED: a completed normalized Weekly Review existed, but
+  `GET /api/v1/weekly-reviews/{review_id}` returned 404 because only the summary list was exposed.
+  GREEN adds a strict closed response for the frozen review, Outcome, ErrorAttribution,
+  CandidateLesson, human LessonApproval, ReplayRun, and deterministic calibration input facts.
+- PIT protection: review/data cutoffs, DecisionSnapshot availability, and every nested business and
+  creation timestamp must be visible at the requested `decision_time`. An isolated regression inserts
+  future Approval and Replay facts and proves neither appears early. Strict response validation also
+  caught and removed internal `weekly_review_run_id` and `duplicate_key` leakage.
+- AUD-004 frontend RED: API Mode counted weekly rows but never loaded their details. GREEN loads the
+  latest persisted review, validates every Decimal as a string, and renders outcomes, confidence
+  calibration, attribution, and Candidate Lessons. Empty/Degraded/Failure states remain explicit and
+  no API path imports Fixture snapshots.
+- Verification: backend Weekly detail + Worker + REST contract exited 0 with 33 passed. Complete Web
+  Vitest exited 0 with 22 files / 125 tests; TypeScript and ESLint passed. Ruff, strict Mypy, OpenAPI
+  regeneration/drift check, and `git diff --check` passed. Repository-wide `make verify` remains the
+  final delivery gate after the outstanding real product-chain and provider correctness work.
+
+### Product completeness remediation — authoritative product chain (2026-09-02)
+
+- AUD-006 root-cause RED used an isolated PostgreSQL fact set and proved paper-mode Research returned
+  `NOT_FOUND` for a real SEC company fact because `PostgresResearchProvider` applied an Alpaca-only
+  filter to every feed. After preserving SEC, a bounded runtime diagnostic exposed the inverse leak:
+  historical Fixture company facts/options/targets could enter a paper-mode thesis. The diagnostic
+  run `a01322d7-b06d-4895-a91e-0c075ed54b37` remains append-only and is explicitly excluded from
+  acceptance evidence.
+- GREEN applies one provider boundary: paper mode excludes every `FIXTURE` record, limits Alpaca-owned
+  price/news feeds to ALPACA, and preserves real non-Alpaca domains such as SEC. The focused RED failed
+  with `MULTIPLE` instead of `SEC`; the GREEN provider/worker command exited 0 with 4 passed. The
+  related Worker/admission/scheduling/Portfolio/Weekly regression exited 0 with 29 passed.
+- Corrected NVDA Research run `df630fa8-b751-4db9-b296-6f4711fb6c79` completed from persisted facts
+  with opinion `ABSTAIN`, 188 ALPACA evidence items, and typed gaps for missing company facts, news,
+  options, targets, and unavailable SIP. Its evidence contained no Fixture Provider.
+- The approved singleton `default-paper` portfolio initialized through the idempotent API with USD
+  100,000 and exactly two balanced ledger rows. The IEX-only rebalance request returned HTTP 403
+  `MARKET_DATA_NOT_ENTITLED`; therefore zero orders, fills, risk decisions, or PortfolioAction rows
+  were created. This is the locked deterministic rejection path and does not relabel IEX as SIP.
+- Paper-mode Weekly run `7cb2f805-7369-4430-b436-7eacb2d09a3b` completed from persisted ALPACA bars
+  without Fixture fallback. Outcomes remain empty because no post-decision horizon is mature. At a
+  `2026-09-02T00:00:00Z` cutoff, Research, Portfolio, Weekly list, and Weekly detail APIs all returned
+  HTTP 200; Portfolio exposed USD 100,000 cash with zero orders/fills and latest Research exposed the
+  corrected `ABSTAIN` decision.
+- Full-gate remediation: the first `make verify` exited 2 on two Ruff formatting drifts; the second
+  exited 2 on an imprecise SSE `Iterator` annotation; the third reached the full backend suite and
+  exposed five stale tests that assumed an array Research response, an uninitialized/random Portfolio,
+  or an empty policy database with unordered `LIMIT 1` lineage. Each failure was reproduced directly.
+  Tests now use the strict page contract, formal Portfolio initialization, and exact policy/decision
+  IDs while rolling back their probes; no historical row was deleted or rewritten.
+- Final fresh `make verify` exited 0: 319 files format clean; Ruff clean; strict Mypy clean over 278
+  source files; Alembic reported no new upgrade operations; backend 710 passed / 4 credential- or
+  condition-gated skips; frontend TypeScript and ESLint clean; Vitest 22 files / 125 tests passed;
+  and the ten-route Next.js 15.4.6 production build completed successfully.
+
+### Append-only Research correction closure (2026-09-02)
+
+- Root cause: `decision_diff.previous_decision_id` and
+  `decision_snapshot.supersedes_decision_id` existed in the frozen schema, but product consumers did
+  not treat either append-only relation as a point-in-time supersession fact. The provider fix
+  prevented new Fixture leakage but did not durably exclude the already-persisted diagnostic
+  decision from future Research, Portfolio, or Weekly selection.
+- TDD RED proved both visible symptoms: Stock Research returned the contaminated Thesis alongside
+  its correction, and a new Weekly Review included both Decision IDs. GREEN adds one shared PIT
+  predicate used by Stock Research, Portfolio, and Weekly Review. Run-specific reports remain
+  retrievable for audit, while regular decision surfaces exclude a prior decision only after its
+  correction is visible. A legacy Thesis with no DecisionSnapshot remains visible as before.
+- The operator-only recorder appends one deterministic DecisionDiff and rejects self-replacement,
+  cross-symbol replacement, backward data cutoffs, and conflicting redelivery. Exact duplicate
+  delivery returns false without writing. No UPDATE or DELETE was performed and no new REST endpoint
+  was added.
+- Read-only preflight confirmed diagnostic run `a01322d7-b06d-4895-a91e-0c075ed54b37` / decision
+  `c934dc46-33b8-584c-a6f2-8ab2c5def5a5` had providers `ALPACA, FIXTURE`; corrected run
+  `df630fa8-b751-4db9-b296-6f4711fb6c79` / decision
+  `78f1333e-b4e8-5a5b-b8e7-4b80954da21f` had provider `ALPACA` only and a later data cutoff. The
+  correction command created exactly one link. Immediate replay reported `duplicate_created=false`,
+  `link_count=1`, and the active selection contained only the corrected run/decision.
+- Verification: focused REDs failed for the missing filtering and recorder; focused GREEN passed
+  3/3. The related Research/API/Worker files passed 39/39. Final `make verify` exited 0: 320 files
+  format clean; Ruff clean; strict Mypy clean over 279 source files; Alembic reported no new upgrade
+  operations; backend 713 passed / 4 skipped; frontend TypeScript and ESLint clean; Vitest 22 files /
+  125 tests passed; and the Next.js production build completed successfully.
+
+### MinIO orphan classification and cleanup (2026-09-02)
+
+- Root cause: the 23-object warning combined two categories. Twenty legacy
+  `alpaca-stream/...` objects were integration-test payloads left after isolated database rollback;
+  three `live/ALPACA/stream-recovery/...` objects were durable operational envelopes whose target
+  raw objects already had committed PostgreSQL lineage.
+- A guarded cleanup re-read the complete MinIO inventory and PostgreSQL key set immediately before
+  deletion, aborted on any set mismatch, and removed only the 20 reviewed exact test keys. It
+  retained all three recovery envelopes and every referenced raw object. The immutable key/hash
+  manifest is recorded in `docs/audits/2026-09-02-minio-orphan-cleanup.md`.
+- TDD RED failed because the orphan reporter could not distinguish operational recovery metadata.
+  GREEN adds an explicit excluded-prefix boundary at the Alpaca task caller; an unrecovered raw
+  stream object remains reportable because its separate `live/ALPACA/stream/...` key is not excluded.
+  Focused regression passed 2/2.
+- The first full gate then recreated all 20 test objects, proving the alerting integration module
+  still wrote to the runtime `fixture-raw` bucket. A second RED asserted isolation and failed on the
+  shared bucket. GREEN uses a unique `alert-e2e-*` bucket with teardown cleanup and keeps the raw-byte
+  assertion inside that store; the complete alerting file passed 10/10 and left the runtime report at
+  zero.
+- Post-cleanup verification reported zero actionable orphans; all 3 recovery targets remained in
+  MinIO and retained PostgreSQL lineage. Final fresh `make verify` exited 0: backend 715 passed / 4 skipped,
+  frontend Vitest 22 files / 125 tests passed, and all formatting, Ruff, Mypy, Alembic drift,
+  TypeScript, ESLint, and Next.js production-build gates passed. A post-gate runtime check again
+  returned zero orphans, proving the full suite no longer contaminates the runtime bucket. The
+  default Celery Worker was gracefully restarted and online task
+  `50f2f84e-630d-4804-a1a2-1d9dbc4c6a48` returned 0 from the updated reporter.
+
+### Live runtime restart and provider-health contract closure (2026-09-02)
+
+- PostgreSQL, Redis, and MinIO remained healthy. FastAPI, the default and ingestion Celery Workers,
+  Beat, the Alpaca WebSocket supervisor, and Next.js were restarted from the current worktree. Both
+  Celery nodes returned `pong`; the recovery reconciler replayed zero already-committed envelopes.
+- HTTP smoke checks returned 200 for health, provider health, Watchlist, PIT Portfolio, PIT Research,
+  PIT Alerts, PIT Weekly Review, and the Today, Watchlist, Portfolio, Research, and Weekly Review web
+  routes. The two initial 422 responses were the expected strict rejection of missing
+  `decision_time`; the same endpoints returned 200 with an aware UTC cutoff.
+- Browser RED: the real provider-health payload includes `status: null` for unconfigured SEC and
+  Alpha Vantage providers. The Web parser treated only `undefined` as absent, raised a contract
+  error, and duplicated Provider-health degradation on Today. The focused Vitest regression first
+  failed on the exact backend response shape. GREEN accepts only `null`/`undefined` as absent while
+  preserving the closed enum for non-null status; focused Vitest passed 6/6.
+- Playwright then rendered Today, Watchlist, NVDA Research, Portfolio, Alerts, Weekly Review, and Eval
+  in API Mode without application console errors or Fixture substitution. Research emitted only
+  third-party TradingView iframe preload warnings. `AUD-012` remains an explicit P2: provider health
+  can become Failure outside its current freshness window until IEX heartbeat/session-aware semantics
+  replace observation-age aggregation; no threshold was weakened to manufacture a healthy state.
+- Final fresh `make verify` exited 0: 320 files format clean; Ruff clean; strict Mypy clean over 279
+  source files; Alembic reported no drift; backend 715 passed / 4 skipped; frontend TypeScript and
+  ESLint clean; Vitest 22 files / 125 tests passed; and the Next.js production build completed. A
+  post-gate runtime check again returned zero actionable MinIO orphans.
+
+### Runtime acceptance review closure (2026-09-03)
+
+- A second professional review found three remaining P1 acceptance gaps. TDD RED proved that Today
+  still exposed a flat list of equal-weight degradation pills, Portfolio initialization ignored the
+  declared `Idempotency-Key`, and a DecisionDiff could hide a prior decision before its replacement
+  fact was point-in-time visible.
+- AUD-007 GREEN keeps the compact severity summary and count in the primary Today surface, then
+  groups unavailable facts under Provider, Market Data, and Decision Domain inside native
+  progressive disclosure. Available persisted quotes and Portfolio facts remain visible, and API
+  Mode still never substitutes Fixture data.
+- Portfolio initialization now records the canonical request hash and aware effective time in a
+  durable `portfolio_initialization_request` admission row. The same key and payload replays the
+  exact result; the same key with a different payload returns HTTP 409 `IDEMPOTENCY_CONFLICT`; a new
+  operation against the already-initialized singleton returns HTTP 409
+  `PORTFOLIO_ALREADY_INITIALIZED`. The server-rendered form binds one stable key to one stable aware
+  timestamp instead of combining a fixed key with a changing timestamp.
+- Migration `0036_runtime_acceptance_guards` adds the initialization-admission table and a database
+  unique constraint on `decision_diff.previous_decision_id`. Supersession recording rejects a
+  timestamp earlier than the replacement's `available_at` or `created_at`, while all active-decision
+  reads require both the correction and replacement facts to be visible at the cutoff. A direct
+  legacy-invalid relation regression proves the prior decision remains active before replacement
+  visibility, and a database regression proves competing replacements are rejected.
+- Focused GREEN passed 7/7 backend integration regressions and 10/10 frontend component/action
+  regressions; Ruff, strict Mypy, frontend TypeScript, and migration upgrade checks passed. The first
+  full `make verify` exposed two stale test assumptions (the old `0035` head and a review cutoff that
+  preceded actual replacement persistence) plus a non-reproducing isolated-database teardown race.
+  Both assumptions were corrected without weakening PIT rules; the teardown test passed on focused
+  rerun and did not recur.
+- Final fresh `make verify` exited 0: 321 files format clean; Ruff clean; strict Mypy clean over 279
+  source files; Alembic reported no drift; backend 718 passed / 4 skipped; frontend TypeScript and
+  ESLint clean; Vitest 22 files / 125 tests passed; and the Next.js production build completed.
+  The post-gate MinIO reporter returned zero actionable orphans.
+
+### PR #19 second-review blocker closure (2026-09-03)
+
+- The first remote PR run exposed a clean-database test dependency: CI upgraded an empty database
+  but did not seed demo policies, while the immutable risk-decision integration test assumed four
+  `*-v1` PolicyVersion rows already existed. The failed run reported 717 passed / 1 failed / 4
+  skipped. The test now creates its exact policy prerequisites transactionally and remains safe when
+  those versions already exist.
+- TDD PIT regressions proved three product leaks before implementation: a late Alpaca revision
+  changed a historical reference price and turned a positive return into `-81.68%`; an Opinion
+  appended after the weekly cutoff produced conflicting immutable Outcomes; and future Opinion or
+  conflicting Evidence facts suppressed an otherwise eligible paper order. Portfolio and Weekly
+  selection now require `research_opinion.created_at <= data_cutoff`; Portfolio evidence completeness
+  also requires both EvidenceItem and ThesisEvidenceLink creation times to be visible. Historical
+  reference prices are resolved by a database query bounded at each decision time, while outcome
+  prices retain the later weekly cutoff.
+- Research persistence now applies one explicit aware availability timestamp to DecisionSnapshot,
+  ResearchOpinion, generated EvidenceItem, and ThesisEvidenceLink. This keeps facts written by the
+  same completed research operation temporally coherent without weakening append-only protection.
+- Today now uses one canonical `Provider health` degradation key. When that endpoint is unavailable,
+  progressive disclosure contains one provider-health fact instead of both `Provider health API`
+  and `Provider health`; persisted quotes and Portfolio facts remain visible and Fixture fallback is
+  still forbidden.
+- RED evidence: the late-revision return assertion failed with `-0.816816...`; the future Opinion run
+  failed with `semantic outcome retry changed immutable facts`; both Portfolio future-fact cases
+  produced zero orders; and Vitest rendered six unavailable facts with duplicate provider-health
+  labels. GREEN focused verification passed 5/5 backend cases and the complete Web suite passed
+  22 files / 126 tests. Related Research, Portfolio, and Weekly integration files passed 62/62.
+- Final fresh `make verify` exited 0: 321 files format clean; Ruff clean; strict Mypy clean over 279
+  source files; Alembic reported no drift; backend 721 passed / 4 skipped; frontend TypeScript and
+  ESLint clean; Vitest 22 files / 126 tests passed; and the Next.js production build completed. The
+  post-gate MinIO orphan reporter returned 0.

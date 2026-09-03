@@ -10,13 +10,19 @@ from sqlalchemy.engine import Engine
 from stock_platform.api.dependencies import get_connection, get_settings
 from stock_platform.api.main import app
 from stock_platform.infrastructure.db.models.tables import (
+    confidence_policy_version,
     data_quality_observation,
+    decision_diff,
+    decision_snapshot,
+    execution_policy_version,
     ingestion_job,
     investment_thesis,
     market_bar,
     normalized_record,
     raw_data_object,
     research_opinion,
+    research_scoring_policy_version,
+    risk_policy_version,
 )
 from stock_platform.settings import Settings
 
@@ -63,6 +69,7 @@ def _bar(
     feed_type: str = "price_bars",
     timeframe: str = "1Day",
     conflict: bool = False,
+    payload_extra: dict[str, str] | None = None,
 ) -> None:
     content_hash = (suffix * 64)[:64]
     raw_id = connection.execute(
@@ -109,7 +116,7 @@ def _bar(
             close=Decimal(close),
             volume=Decimal("1000"),
             conflict=conflict,
-            payload={"timeframe": timeframe},
+            payload={"timeframe": timeframe, **(payload_extra or {})},
         )
     )
     connection.execute(
@@ -207,6 +214,59 @@ def _ingestion_job(
             updated_at=created_at,
         )
     )
+
+
+def test_quotes_exclude_raw_provider_fields_from_locked_response(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    visible_at = datetime(2026, 8, 20, 20, tzinfo=UTC)
+    _bar(
+        connection,
+        event_time=datetime(2026, 8, 20, 19, tzinfo=UTC),
+        available_at=visible_at,
+        close="180.50",
+        suffix="r",
+        payload_extra={
+            "c": "180.50",
+            "h": "181.50",
+            "l": "178.50",
+            "n": "100",
+            "o": "179.50",
+            "t": "2026-08-20T19:00:00Z",
+            "v": "1000",
+            "vw": "180.10",
+        },
+    )
+
+    response = client.get(
+        "/api/v1/market-data/quotes",
+        params={
+            "symbols": "NVDA",
+            "decision_time": datetime(2026, 8, 21, tzinfo=UTC).isoformat(),
+        },
+    )
+
+    assert response.status_code == 200
+    assert set(response.json()["items"][0]) == {
+        "symbol",
+        "provider",
+        "feed_type",
+        "timeframe",
+        "event_time",
+        "available_at",
+        "ingested_at",
+        "content_hash",
+        "raw_object_key",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "coverage",
+        "session",
+        "conflict",
+    }
 
 
 def test_quotes_and_bars_enforce_point_in_time_visibility(
@@ -454,8 +514,128 @@ def test_research_read_enforces_decision_time(
     )
 
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == [str(past_id)]
-    assert response.json()[0]["opinion"] is None
+    assert [item["id"] for item in response.json()["items"]] == [str(past_id)]
+    assert response.json()["items"][0]["opinion"] is None
+
+
+def test_research_read_excludes_a_decision_superseded_by_append_only_diff(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    contaminated_thesis_id = uuid4()
+    corrected_thesis_id = uuid4()
+    contaminated_decision_id = uuid4()
+    corrected_decision_id = uuid4()
+    contaminated_time = datetime(2026, 8, 20, 20, 15, tzinfo=UTC)
+    corrected_time = datetime(2026, 8, 20, 20, 16, tzinfo=UTC)
+    cutoff = datetime(2026, 8, 20, 20, 17, tzinfo=UTC)
+    connection.execute(
+        investment_thesis.insert(),
+        [
+            {
+                "id": contaminated_thesis_id,
+                "symbol": "NVDA",
+                "as_of": contaminated_time,
+                "direction": "NEUTRAL",
+                "summary": "fixture-contaminated diagnosis",
+                "horizon": "20_TRADING_DAYS",
+                "confidence": Decimal("0.10"),
+                "created_at": contaminated_time,
+            },
+            {
+                "id": corrected_thesis_id,
+                "symbol": "NVDA",
+                "as_of": corrected_time,
+                "direction": "NEUTRAL",
+                "summary": "provider-only correction",
+                "horizon": "20_TRADING_DAYS",
+                "confidence": Decimal("0.10"),
+                "created_at": corrected_time,
+            },
+        ],
+    )
+    connection.execute(
+        research_opinion.insert(),
+        [
+            {
+                "thesis_id": contaminated_thesis_id,
+                "value": "ABSTAIN",
+                "created_at": contaminated_time,
+            },
+            {
+                "thesis_id": corrected_thesis_id,
+                "value": "ABSTAIN",
+                "created_at": corrected_time,
+            },
+        ],
+    )
+    policy_ids = {
+        "research": uuid4(),
+        "risk": uuid4(),
+        "execution": uuid4(),
+        "confidence": uuid4(),
+    }
+    for table, key in (
+        (research_scoring_policy_version, "research"),
+        (risk_policy_version, "risk"),
+        (execution_policy_version, "execution"),
+        (confidence_policy_version, "confidence"),
+    ):
+        connection.execute(
+            table.insert().values(
+                id=policy_ids[key],
+                version=f"supersession-{key}-v1",
+                policy={},
+            )
+        )
+    connection.execute(
+        decision_snapshot.insert(),
+        [
+            {
+                "id": contaminated_decision_id,
+                "thesis_id": contaminated_thesis_id,
+                "research_scoring_policy_version_id": policy_ids["research"],
+                "risk_policy_version_id": policy_ids["risk"],
+                "execution_policy_version_id": policy_ids["execution"],
+                "confidence_policy_version_id": policy_ids["confidence"],
+                "prompt_version": "prompt-v1",
+                "model_version": "model-v1",
+                "data_cutoff": contaminated_time,
+                "available_at": contaminated_time,
+                "created_at": contaminated_time,
+            },
+            {
+                "id": corrected_decision_id,
+                "thesis_id": corrected_thesis_id,
+                "research_scoring_policy_version_id": policy_ids["research"],
+                "risk_policy_version_id": policy_ids["risk"],
+                "execution_policy_version_id": policy_ids["execution"],
+                "confidence_policy_version_id": policy_ids["confidence"],
+                "prompt_version": "prompt-v1",
+                "model_version": "model-v1",
+                "data_cutoff": corrected_time,
+                "available_at": corrected_time,
+                "created_at": corrected_time,
+            },
+        ],
+    )
+    connection.execute(
+        decision_diff.insert().values(
+            decision_id=corrected_decision_id,
+            previous_decision_id=contaminated_decision_id,
+            generator="DETERMINISTIC_CODE",
+            changes={"provenance": {"before": "FIXTURE", "after": "ALPACA"}},
+            created_at=corrected_time,
+        )
+    )
+
+    response = client.get(
+        "/api/v1/stocks/NVDA/research",
+        params={"decision_time": cutoff.isoformat()},
+    )
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["items"]] == [str(corrected_thesis_id)]
 
 
 def test_portfolio_nav_has_availability_and_enforces_decision_time(
@@ -464,8 +644,12 @@ def test_portfolio_nav_has_availability_and_enforces_decision_time(
     client, connection = market_client
     columns = {column["name"] for column in inspect(connection).get_columns("portfolio_nav")}
     assert "available_at" in columns
-    portfolio_id = uuid4()
-    cutoff = datetime(2026, 8, 21, 20, tzinfo=UTC)
+    portfolio_id = connection.execute(text("SELECT id FROM paper_portfolio_config")).scalar_one()
+    cutoff = datetime.now(UTC) + timedelta(minutes=5)
+    past_event = cutoff - timedelta(days=2)
+    past_available = past_event + timedelta(minutes=1)
+    future_event = cutoff - timedelta(hours=1)
+    future_available = cutoff + timedelta(days=1)
     connection.execute(
         text(
             "INSERT INTO portfolio_nav (event_time, available_at, portfolio_id, nav) "
@@ -473,15 +657,21 @@ def test_portfolio_nav_has_availability_and_enforces_decision_time(
             "(:future_event, :future_available, :portfolio_id, :future_nav)"
         ),
         {
-            "past_event": datetime(2026, 8, 20, 20, tzinfo=UTC),
-            "past_available": datetime(2026, 8, 20, 20, 1, tzinfo=UTC),
-            "future_event": datetime(2026, 8, 21, 19, tzinfo=UTC),
-            "future_available": datetime(2026, 8, 22, 20, tzinfo=UTC),
+            "past_event": past_event,
+            "past_available": past_available,
+            "future_event": future_event,
+            "future_available": future_available,
             "portfolio_id": portfolio_id,
             "past_nav": Decimal("100000.00"),
             "future_nav": Decimal("999999.00"),
         },
     )
+    initialized = client.post(
+        "/api/v1/portfolio/initialize",
+        headers={"Idempotency-Key": f"portfolio-nav-{uuid4()}"},
+        json={"effective_at": (past_event - timedelta(hours=1)).isoformat()},
+    )
+    assert initialized.status_code == 200
 
     response = client.get(
         "/api/v1/portfolio",
@@ -490,9 +680,7 @@ def test_portfolio_nav_has_availability_and_enforces_decision_time(
 
     assert response.status_code == 200
     assert response.json()["latest_nav"]["nav"] == "100000.00"
-    assert datetime.fromisoformat(response.json()["latest_nav"]["available_at"]) == datetime(
-        2026, 8, 20, 20, 1, tzinfo=UTC
-    )
+    assert datetime.fromisoformat(response.json()["latest_nav"]["available_at"]) == past_available
 
 
 def test_data_quality_uses_latest_dimension_state_and_raw_availability(

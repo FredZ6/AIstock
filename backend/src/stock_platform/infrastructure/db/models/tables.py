@@ -300,6 +300,7 @@ decision_diff = Table(
     Column("generator", Text, nullable=False, server_default=text("'DETERMINISTIC_CODE'")),
     Column("changes", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     created_at(),
+    UniqueConstraint("previous_decision_id", name="decision_diff_previous_decision_id_key"),
     CheckConstraint("generator = 'DETERMINISTIC_CODE'", name=conv("ck_decision_diff_generator")),
 )
 tool_call = Table(
@@ -402,6 +403,24 @@ paper_portfolio_config = Table(
     ),
     CheckConstraint("initial_cash > 0", name=conv("ck_paper_portfolio_config_cash")),
     CheckConstraint("currency = 'USD'", name=conv("ck_paper_portfolio_config_currency")),
+)
+portfolio_initialization_request = Table(
+    "portfolio_initialization_request",
+    metadata,
+    uuid_pk(),
+    Column(
+        "portfolio_id",
+        UUID(as_uuid=True),
+        ForeignKey("paper_portfolio_config.id"),
+        nullable=False,
+    ),
+    Column("idempotency_key", Text, nullable=False),
+    Column("request_hash", Text, nullable=False),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+    created_at(),
+    UniqueConstraint(
+        "idempotency_key", name="portfolio_initialization_request_idempotency_key_key"
+    ),
 )
 security = Table(
     "security",

@@ -1,6 +1,233 @@
 {
   "components": {
     "schemas": {
+      "AlertItem": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledged_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged At"
+          },
+          "acknowledged_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged By"
+          },
+          "alert_key": {
+            "title": "Alert Key",
+            "type": "string"
+          },
+          "conditions": {
+            "items": {},
+            "title": "Conditions",
+            "type": "array"
+          },
+          "correlation_id": {
+            "format": "uuid",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_quality": {
+            "additionalProperties": true,
+            "title": "Data Quality",
+            "type": "object"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "materiality": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Materiality",
+            "type": "string"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "title": "Metrics",
+            "type": "object"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "rule_version": {
+            "title": "Rule Version",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "CRITICAL"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "correlation_id",
+          "alert_key",
+          "symbol",
+          "event_time",
+          "rule_id",
+          "rule_version",
+          "severity",
+          "materiality",
+          "conditions",
+          "metrics",
+          "data_quality",
+          "acknowledged_at",
+          "acknowledged_by",
+          "created_at"
+        ],
+        "title": "AlertItem",
+        "type": "object"
+      },
+      "AlertPage": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AlertItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "decision_time",
+          "items",
+          "next_cursor"
+        ],
+        "title": "AlertPage",
+        "type": "object"
+      },
+      "CashLedgerItem": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "title": "Account",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "credit": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Credit",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "debit": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Debit",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "reversal_of_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reversal Of Id"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "transaction_id": {
+            "format": "uuid",
+            "title": "Transaction Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "transaction_id",
+          "source_id",
+          "account",
+          "debit",
+          "credit",
+          "currency",
+          "occurred_at",
+          "idempotency_key",
+          "reversal_of_id",
+          "created_at"
+        ],
+        "title": "CashLedgerItem",
+        "type": "object"
+      },
       "DataQualityItem": {
         "additionalProperties": false,
         "properties": {
@@ -155,6 +382,67 @@
           "items"
         ],
         "title": "DataQualityResponse",
+        "type": "object"
+      },
+      "EvalRunItem": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "created_at"
+        ],
+        "title": "EvalRunItem",
+        "type": "object"
+      },
+      "EvalRunPage": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvalRunItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "decision_time",
+          "items",
+          "next_cursor"
+        ],
+        "title": "EvalRunPage",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -377,6 +665,616 @@
         "title": "MarketDataResponse",
         "type": "object"
       },
+      "PaperFillItem": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "execution_policy_version_id": {
+            "format": "uuid",
+            "title": "Execution Policy Version Id",
+            "type": "string"
+          },
+          "fee": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Fee",
+            "type": "string"
+          },
+          "filled_at": {
+            "format": "date-time",
+            "title": "Filled At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price",
+            "type": "string"
+          },
+          "quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "reversal_of_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reversal Of Id"
+          },
+          "side": {
+            "enum": [
+              "BUY",
+              "SELL"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "source_bar_time": {
+            "format": "date-time",
+            "title": "Source Bar Time",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "order_id",
+          "portfolio_id",
+          "symbol",
+          "side",
+          "quantity",
+          "price",
+          "fee",
+          "currency",
+          "filled_at",
+          "source_bar_time",
+          "execution_policy_version_id",
+          "idempotency_key",
+          "reversal_of_id",
+          "created_at"
+        ],
+        "title": "PaperFillItem",
+        "type": "object"
+      },
+      "PaperFillPage": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PaperFillItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "decision_time",
+          "items",
+          "next_cursor"
+        ],
+        "title": "PaperFillPage",
+        "type": "object"
+      },
+      "PaperOrderItem": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "execution_policy_version_id": {
+            "format": "uuid",
+            "title": "Execution Policy Version Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "order_intent_id": {
+            "format": "uuid",
+            "title": "Order Intent Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "risk_approved": {
+            "title": "Risk Approved",
+            "type": "boolean"
+          },
+          "side": {
+            "enum": [
+              "BUY",
+              "SELL"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "REJECTED",
+              "PENDING",
+              "PARTIALLY_FILLED",
+              "FILLED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "order_intent_id",
+          "portfolio_id",
+          "symbol",
+          "side",
+          "quantity",
+          "decision_time",
+          "execution_policy_version_id",
+          "risk_approved",
+          "status",
+          "created_at"
+        ],
+        "title": "PaperOrderItem",
+        "type": "object"
+      },
+      "PaperOrderPage": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PaperOrderItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "decision_time",
+          "items",
+          "next_cursor"
+        ],
+        "title": "PaperOrderPage",
+        "type": "object"
+      },
+      "PortfolioCash": {
+        "additionalProperties": false,
+        "properties": {
+          "balance": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Balance",
+            "type": "string"
+          },
+          "currency": {
+            "const": "USD",
+            "title": "Currency",
+            "type": "string"
+          }
+        },
+        "required": [
+          "balance",
+          "currency"
+        ],
+        "title": "PortfolioCash",
+        "type": "object"
+      },
+      "PortfolioConfiguration": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "const": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "initial_cash": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Initial Cash",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "initial_cash",
+          "currency"
+        ],
+        "title": "PortfolioConfiguration",
+        "type": "object"
+      },
+      "PortfolioInitializationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_at": {
+            "format": "date-time",
+            "title": "Effective At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "effective_at"
+        ],
+        "title": "PortfolioInitializationRequest",
+        "type": "object"
+      },
+      "PortfolioInitializationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "const": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "initial_cash": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Initial Cash",
+            "type": "string"
+          },
+          "initialized_at": {
+            "format": "date-time",
+            "title": "Initialized At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "READY",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "portfolio_id",
+          "name",
+          "initial_cash",
+          "currency",
+          "initialized_at"
+        ],
+        "title": "PortfolioInitializationResponse",
+        "type": "object"
+      },
+      "PortfolioNavItem": {
+        "additionalProperties": false,
+        "properties": {
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "nav": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Nav",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "event_time",
+          "portfolio_id",
+          "nav",
+          "available_at"
+        ],
+        "title": "PortfolioNavItem",
+        "type": "object"
+      },
+      "PortfolioPositionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "average_cost": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Average Cost",
+            "type": "string"
+          },
+          "market_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Price"
+          },
+          "market_value": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Value"
+          },
+          "price_available_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Available At"
+          },
+          "quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "unrealized_pnl": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unrealized Pnl"
+          }
+        },
+        "required": [
+          "symbol",
+          "quantity",
+          "average_cost",
+          "market_price",
+          "market_value",
+          "unrealized_pnl",
+          "price_available_at"
+        ],
+        "title": "PortfolioPositionItem",
+        "type": "object"
+      },
+      "PortfolioResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "cash": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortfolioCash"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cash_ledger": {
+            "items": {
+              "$ref": "#/components/schemas/CashLedgerItem"
+            },
+            "title": "Cash Ledger",
+            "type": "array"
+          },
+          "configuration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortfolioConfiguration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "fills": {
+            "items": {
+              "$ref": "#/components/schemas/PaperFillItem"
+            },
+            "title": "Fills",
+            "type": "array"
+          },
+          "initialized_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initialized At"
+          },
+          "latest_nav": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortfolioNavItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/PaperOrderItem"
+            },
+            "title": "Orders",
+            "type": "array"
+          },
+          "performance_history": {
+            "items": {
+              "$ref": "#/components/schemas/PortfolioNavItem"
+            },
+            "title": "Performance History",
+            "type": "array"
+          },
+          "positions": {
+            "items": {
+              "$ref": "#/components/schemas/PortfolioPositionItem"
+            },
+            "title": "Positions",
+            "type": "array"
+          },
+          "risk_decisions": {
+            "items": {
+              "$ref": "#/components/schemas/RiskDecisionItem"
+            },
+            "title": "Risk Decisions",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "EMPTY",
+              "SUCCESS"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trading": {
+            "const": "paper_only",
+            "title": "Trading",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "decision_time",
+          "trading",
+          "configuration",
+          "initialized_at",
+          "cash",
+          "latest_nav",
+          "positions",
+          "risk_decisions",
+          "orders",
+          "fills",
+          "cash_ledger",
+          "performance_history"
+        ],
+        "title": "PortfolioResponse",
+        "type": "object"
+      },
       "PortfolioRunRequest": {
         "additionalProperties": false,
         "properties": {
@@ -500,7 +1398,7 @@
           "alpaca": {
             "$ref": "#/components/schemas/ProviderState"
           },
-          "fmp": {
+          "alpha_vantage": {
             "$ref": "#/components/schemas/ProviderState"
           },
           "sec": {
@@ -510,9 +1408,165 @@
         "required": [
           "sec",
           "alpaca",
-          "fmp"
+          "alpha_vantage"
         ],
         "title": "ProviderStates",
+        "type": "object"
+      },
+      "ResearchItem": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "catalysts": {
+            "items": {},
+            "title": "Catalysts",
+            "type": "array"
+          },
+          "confidence": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Confidence",
+            "type": "string"
+          },
+          "confidence_policy_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Policy Version Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "invalidation_conditions": {
+            "items": {},
+            "title": "Invalidation Conditions",
+            "type": "array"
+          },
+          "opinion": {
+            "anyOf": [
+              {
+                "enum": [
+                  "BULLISH",
+                  "NEUTRAL",
+                  "BEARISH",
+                  "ABSTAIN"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opinion"
+          },
+          "risks": {
+            "items": {},
+            "title": "Risks",
+            "type": "array"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "supersedes_thesis_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Thesis Id"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "symbol",
+          "as_of",
+          "direction",
+          "summary",
+          "catalysts",
+          "risks",
+          "invalidation_conditions",
+          "horizon",
+          "confidence",
+          "confidence_policy_version_id",
+          "supersedes_thesis_id",
+          "created_at",
+          "opinion"
+        ],
+        "title": "ResearchItem",
+        "type": "object"
+      },
+      "ResearchPage": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "decision_time",
+          "items",
+          "next_cursor"
+        ],
+        "title": "ResearchPage",
         "type": "object"
       },
       "ResearchRunRequest": {
@@ -541,7 +1595,172 @@
         "title": "ResearchRunRequest",
         "type": "object"
       },
+      "RiskDecisionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_delta": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Approved Delta",
+            "type": "string"
+          },
+          "approved_weight": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Approved Weight",
+            "type": "string"
+          },
+          "authorization_source": {
+            "title": "Authorization Source",
+            "type": "string"
+          },
+          "authorized_side": {
+            "anyOf": [
+              {
+                "enum": [
+                  "BUY",
+                  "SELL"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorized Side"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_weight": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Current Weight",
+            "type": "string"
+          },
+          "decided_at": {
+            "format": "date-time",
+            "title": "Decided At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "market_context_snapshot_id": {
+            "format": "uuid",
+            "title": "Market Context Snapshot Id",
+            "type": "string"
+          },
+          "max_order_quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Max Order Quantity",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "proposal_id": {
+            "format": "uuid",
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "reference_nav": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Nav"
+          },
+          "reference_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Price"
+          },
+          "requested_weight": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Requested Weight",
+            "type": "string"
+          },
+          "research_decision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Decision Id"
+          },
+          "risk_policy_version_id": {
+            "format": "uuid",
+            "title": "Risk Policy Version Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "APPROVED",
+              "CLIPPED",
+              "REJECTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "proposal_id",
+          "research_decision_id",
+          "portfolio_id",
+          "symbol",
+          "status",
+          "requested_weight",
+          "approved_weight",
+          "current_weight",
+          "approved_delta",
+          "reference_nav",
+          "reference_price",
+          "max_order_quantity",
+          "authorization_source",
+          "authorized_side",
+          "market_context_snapshot_id",
+          "reason_codes",
+          "risk_policy_version_id",
+          "decided_at",
+          "created_at"
+        ],
+        "title": "RiskDecisionItem",
+        "type": "object"
+      },
       "RunResponse": {
+        "additionalProperties": false,
         "properties": {
           "data_cutoff": {
             "format": "date-time",
@@ -709,6 +1928,584 @@
         ],
         "title": "WatchlistRequest",
         "type": "object"
+      },
+      "WeeklyApprovalItem": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "APPROVE",
+              "REJECT"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lesson_id": {
+            "format": "uuid",
+            "title": "Lesson Id",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "lesson_id",
+          "actor_id",
+          "action",
+          "rationale",
+          "created_at"
+        ],
+        "title": "WeeklyApprovalItem",
+        "type": "object"
+      },
+      "WeeklyAttributionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "enum": [
+              "STALE_DATA",
+              "MISSING_EVIDENCE",
+              "FACT_ERROR",
+              "CONFLICT_IGNORED",
+              "THESIS_ERROR",
+              "TIMING_ERROR",
+              "POSITION_SIZING_ERROR",
+              "EXECUTION_ERROR",
+              "REGIME_CHANGE",
+              "RISK_POLICY_FAILURE",
+              "UNCONTROLLABLE_EVENT"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "controllable": {
+            "title": "Controllable",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "outcome_id": {
+            "format": "uuid",
+            "title": "Outcome Id",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "outcome_id",
+          "category",
+          "rationale",
+          "controllable",
+          "created_at"
+        ],
+        "title": "WeeklyAttributionItem",
+        "type": "object"
+      },
+      "WeeklyCalibrationItem": {
+        "additionalProperties": false,
+        "properties": {
+          "calibration_error": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Calibration Error",
+            "type": "string"
+          },
+          "confidence": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Confidence",
+            "type": "string"
+          },
+          "decision_id": {
+            "format": "uuid",
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "realized_return": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Realized Return"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "MATURED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision_id",
+          "confidence",
+          "status",
+          "realized_return",
+          "calibration_error"
+        ],
+        "title": "WeeklyCalibrationItem",
+        "type": "object"
+      },
+      "WeeklyLessonItem": {
+        "additionalProperties": false,
+        "properties": {
+          "attribution_id": {
+            "format": "uuid",
+            "title": "Attribution Id",
+            "type": "string"
+          },
+          "confidence": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Confidence",
+            "type": "string"
+          },
+          "counter_evidence": {
+            "items": {},
+            "title": "Counter Evidence",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "creator": {
+            "title": "Creator",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {},
+            "title": "Evidence",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "replay_delta": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Replay Delta",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "CANDIDATE",
+              "APPROVED",
+              "REJECTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "attribution_id",
+          "scope",
+          "statement",
+          "evidence",
+          "counter_evidence",
+          "confidence",
+          "replay_delta",
+          "creator",
+          "status",
+          "created_at"
+        ],
+        "title": "WeeklyLessonItem",
+        "type": "object"
+      },
+      "WeeklyOutcomeItem": {
+        "additionalProperties": false,
+        "properties": {
+          "calibration_error": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Calibration Error",
+            "type": "string"
+          },
+          "computed_at": {
+            "format": "date-time",
+            "title": "Computed At",
+            "type": "string"
+          },
+          "confidence": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Confidence",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_id": {
+            "format": "uuid",
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "excess_returns": {
+            "additionalProperties": {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            "title": "Excess Returns",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "maximum_adverse_excursion": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Maximum Adverse Excursion",
+            "type": "string"
+          },
+          "maximum_favorable_excursion": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Maximum Favorable Excursion",
+            "type": "string"
+          },
+          "opinion": {
+            "enum": [
+              "BULLISH",
+              "NEUTRAL",
+              "BEARISH",
+              "ABSTAIN"
+            ],
+            "title": "Opinion",
+            "type": "string"
+          },
+          "returns": {
+            "additionalProperties": {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            "title": "Returns",
+            "type": "object"
+          },
+          "risk_adjusted_return": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Risk Adjusted Return",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "MATURED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "decision_id",
+          "symbol",
+          "opinion",
+          "confidence",
+          "status",
+          "returns",
+          "excess_returns",
+          "maximum_favorable_excursion",
+          "maximum_adverse_excursion",
+          "risk_adjusted_return",
+          "calibration_error",
+          "computed_at",
+          "created_at"
+        ],
+        "title": "WeeklyOutcomeItem",
+        "type": "object"
+      },
+      "WeeklyReplayItem": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Baseline Score",
+            "type": "string"
+          },
+          "candidate_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Candidate Score",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_cutoff": {
+            "format": "date-time",
+            "title": "Data Cutoff",
+            "type": "string"
+          },
+          "decision_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Decision Ids",
+            "type": "array"
+          },
+          "delta": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Delta",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lesson_id": {
+            "format": "uuid",
+            "title": "Lesson Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "lesson_id",
+          "decision_ids",
+          "baseline_score",
+          "candidate_score",
+          "delta",
+          "data_cutoff",
+          "created_at"
+        ],
+        "title": "WeeklyReplayItem",
+        "type": "object"
+      },
+      "WeeklyReviewDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "approvals": {
+            "items": {
+              "$ref": "#/components/schemas/WeeklyApprovalItem"
+            },
+            "title": "Approvals",
+            "type": "array"
+          },
+          "attributions": {
+            "items": {
+              "$ref": "#/components/schemas/WeeklyAttributionItem"
+            },
+            "title": "Attributions",
+            "type": "array"
+          },
+          "calibration": {
+            "items": {
+              "$ref": "#/components/schemas/WeeklyCalibrationItem"
+            },
+            "title": "Calibration",
+            "type": "array"
+          },
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "lessons": {
+            "items": {
+              "$ref": "#/components/schemas/WeeklyLessonItem"
+            },
+            "title": "Lessons",
+            "type": "array"
+          },
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/WeeklyOutcomeItem"
+            },
+            "title": "Outcomes",
+            "type": "array"
+          },
+          "replays": {
+            "items": {
+              "$ref": "#/components/schemas/WeeklyReplayItem"
+            },
+            "title": "Replays",
+            "type": "array"
+          },
+          "review": {
+            "$ref": "#/components/schemas/WeeklyReviewItem"
+          }
+        },
+        "required": [
+          "decision_time",
+          "review",
+          "outcomes",
+          "attributions",
+          "lessons",
+          "approvals",
+          "replays",
+          "calibration"
+        ],
+        "title": "WeeklyReviewDetail",
+        "type": "object"
+      },
+      "WeeklyReviewItem": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence_policy_version": {
+            "title": "Confidence Policy Version",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_cutoff": {
+            "format": "date-time",
+            "title": "Data Cutoff",
+            "type": "string"
+          },
+          "decision_ids": {
+            "items": {},
+            "title": "Decision Ids",
+            "type": "array"
+          },
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "execution_policy_version": {
+            "title": "Execution Policy Version",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "research_scoring_policy_version": {
+            "title": "Research Scoring Policy Version",
+            "type": "string"
+          },
+          "risk_policy_version": {
+            "title": "Risk Policy Version",
+            "type": "string"
+          },
+          "run_key": {
+            "title": "Run Key",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "RUNNING",
+              "COMPLETED",
+              "FAILED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "run_key",
+          "decision_ids",
+          "decision_time",
+          "data_cutoff",
+          "research_scoring_policy_version",
+          "risk_policy_version",
+          "execution_policy_version",
+          "confidence_policy_version",
+          "prompt_version",
+          "model_version",
+          "status",
+          "created_at"
+        ],
+        "title": "WeeklyReviewItem",
+        "type": "object"
+      },
+      "WeeklyReviewPage": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WeeklyReviewItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "decision_time",
+          "items",
+          "next_cursor"
+        ],
+        "title": "WeeklyReviewPage",
+        "type": "object"
       }
     }
   },
@@ -721,21 +2518,66 @@
     "/api/v1/alerts": {
       "get": {
         "operationId": "list_alerts_api_v1_alerts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  "title": "Response List Alerts Api V1 Alerts Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/AlertPage"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Alerts"
@@ -884,21 +2726,38 @@
     "/api/v1/evals/runs": {
       "get": {
         "operationId": "list_eval_runs_api_v1_evals_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  "title": "Response List Eval Runs Api V1 Evals Runs Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/EvalRunPage"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Eval Runs"
@@ -1336,9 +3195,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Portfolio Api V1 Portfolio Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PortfolioResponse"
                 }
               }
             },
@@ -1361,44 +3218,185 @@
     "/api/v1/portfolio/fills": {
       "get": {
         "operationId": "list_fills_api_v1_portfolio_fills_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  "title": "Response List Fills Api V1 Portfolio Fills Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/PaperFillPage"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Fills"
       }
     },
-    "/api/v1/portfolio/orders": {
-      "get": {
-        "operationId": "list_orders_api_v1_portfolio_orders_get",
+    "/api/v1/portfolio/initialize": {
+      "post": {
+        "operationId": "initialize_portfolio_api_v1_portfolio_initialize_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortfolioInitializationRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  "title": "Response List Orders Api V1 Portfolio Orders Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/PortfolioInitializationResponse"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Initialize Portfolio"
+      }
+    },
+    "/api/v1/portfolio/orders": {
+      "get": {
+        "operationId": "list_orders_api_v1_portfolio_orders_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperOrderPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Orders"
@@ -1668,6 +3666,34 @@
               "title": "Decision Time",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
           }
         ],
         "responses": {
@@ -1675,12 +3701,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  "title": "Response Get Stock Research Api V1 Stocks  Symbol  Research Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/ResearchPage"
                 }
               }
             },
@@ -1845,24 +3866,119 @@
     "/api/v1/weekly-reviews": {
       "get": {
         "operationId": "list_weekly_reviews_api_v1_weekly_reviews_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  "title": "Response List Weekly Reviews Api V1 Weekly Reviews Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/WeeklyReviewPage"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Weekly Reviews"
+      }
+    },
+    "/api/v1/weekly-reviews/{review_id}": {
+      "get": {
+        "operationId": "get_weekly_review_detail_api_v1_weekly_reviews__review_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Review Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyReviewDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Weekly Review Detail"
       }
     },
     "/api/v1/weekly-reviews/{review_id}/lessons/{lesson_id}/approve": {

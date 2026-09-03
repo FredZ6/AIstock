@@ -74,6 +74,8 @@ def specification() -> TaskSpecification:
 
 def graph(
     *,
+    risk_policy_id: UUID = RISK_POLICY_ID,
+    execution_policy_id: UUID = EXECUTION_POLICY_ID,
     spread_bps: str = "0",
     slippage_bps: str = "0",
     fee_per_share: str = "0",
@@ -83,7 +85,7 @@ def graph(
 ) -> PortfolioDecisionGraph:
     return PortfolioDecisionGraph(
         risk_policy=RiskPolicy(
-            id=RISK_POLICY_ID,
+            id=risk_policy_id,
             version="risk-v1",
             max_position_weight=Decimal("0.20"),
             max_gross_exposure=Decimal("1"),
@@ -94,7 +96,7 @@ def graph(
             earnings_blackout=timedelta(days=1),
         ),
         execution_policy=ExecutionPolicy(
-            id=EXECUTION_POLICY_ID,
+            id=execution_policy_id,
             version="execution-v1",
             spread_bps=Decimal(spread_bps),
             slippage_bps=Decimal(slippage_bps),
@@ -557,53 +559,58 @@ def test_rebalance_rejects_mismatched_research_policy_pins() -> None:
 
 def test_accepted_order_persists_immutable_risk_decision_link(engine: Engine) -> None:
     next_bar_time = DECISION_TIME + timedelta(minutes=1)
-    result = graph().run(
-        run_id="portfolio-run-persisted",
-        portfolio_id=PORTFOLIO_ID,
-        specification=specification(),
-        market_context=market_context(),
-        research=(research(),),
-        bars=(
-            decision_bar(),
-            ExecutionBar(
-                Symbol("NVDA"),
-                event_time=next_bar_time,
-                available_at=next_bar_time + timedelta(seconds=2),
-                open=Decimal("100"),
-                volume=Decimal("100"),
-                content_hash="rebalance-persisted-bar",
-            ),
-        ),
-        ledger=initial_funding(PORTFOLIO_ID, Decimal("1000"), "USD", DECISION_TIME),
-    )
-    decision = result.risk_decisions[0]
-    order = result.order_intents[0]
-
     with engine.connect() as connection:
         transaction = connection.begin()
-        research_policy_id = UUID(int=201)
-        confidence_policy_id = UUID(int=202)
-        connection.execute(
-            text(
-                "INSERT INTO research_scoring_policy_version (id, version) "
-                "VALUES (:id, 'research-v1')"
+        policies = {
+            "research_scoring_policy_version": (UUID(int=301), "research-v1"),
+            "risk_policy_version": (UUID(int=302), "risk-v1"),
+            "execution_policy_version": (UUID(int=303), "execution-v1"),
+            "confidence_policy_version": (UUID(int=304), "confidence-v1"),
+        }
+        for table_name, (policy_id, version) in policies.items():
+            connection.execute(
+                text(
+                    f"INSERT INTO {table_name} (id, version) VALUES (:id, :version) "
+                    "ON CONFLICT (version) DO NOTHING"
+                ),
+                {"id": policy_id, "version": version},
+            )
+        research_policy_id = connection.execute(
+            text("SELECT id FROM research_scoring_policy_version WHERE version = 'research-v1'")
+        ).scalar_one()
+        risk_policy_id = connection.execute(
+            text("SELECT id FROM risk_policy_version WHERE version = 'risk-v1'")
+        ).scalar_one()
+        execution_policy_id = connection.execute(
+            text("SELECT id FROM execution_policy_version WHERE version = 'execution-v1'")
+        ).scalar_one()
+        confidence_policy_id = connection.execute(
+            text("SELECT id FROM confidence_policy_version WHERE version = 'confidence-v1'")
+        ).scalar_one()
+        result = graph(
+            risk_policy_id=risk_policy_id,
+            execution_policy_id=execution_policy_id,
+        ).run(
+            run_id="portfolio-run-persisted",
+            portfolio_id=PORTFOLIO_ID,
+            specification=specification(),
+            market_context=market_context(),
+            research=(research(),),
+            bars=(
+                decision_bar(),
+                ExecutionBar(
+                    Symbol("NVDA"),
+                    event_time=next_bar_time,
+                    available_at=next_bar_time + timedelta(seconds=2),
+                    open=Decimal("100"),
+                    volume=Decimal("100"),
+                    content_hash="rebalance-persisted-bar",
+                ),
             ),
-            {"id": research_policy_id},
+            ledger=initial_funding(PORTFOLIO_ID, Decimal("1000"), "USD", DECISION_TIME),
         )
-        connection.execute(
-            text("INSERT INTO risk_policy_version (id, version) VALUES (:id, 'risk-v1')"),
-            {"id": RISK_POLICY_ID},
-        )
-        connection.execute(
-            text("INSERT INTO execution_policy_version (id, version) VALUES (:id, 'execution-v1')"),
-            {"id": EXECUTION_POLICY_ID},
-        )
-        connection.execute(
-            text(
-                "INSERT INTO confidence_policy_version (id, version) VALUES (:id, 'confidence-v1')"
-            ),
-            {"id": confidence_policy_id},
-        )
+        decision = result.risk_decisions[0]
+        order = result.order_intents[0]
         connection.execute(
             text(
                 "INSERT INTO investment_thesis (id, confidence_policy_version_id) "
@@ -629,8 +636,8 @@ def test_accepted_order_persists_immutable_risk_decision_link(engine: Engine) ->
                 "id": UUID(int=101),
                 "thesis_id": UUID(int=102),
                 "research_policy_id": research_policy_id,
-                "risk_policy_id": RISK_POLICY_ID,
-                "execution_policy_id": EXECUTION_POLICY_ID,
+                "risk_policy_id": risk_policy_id,
+                "execution_policy_id": execution_policy_id,
                 "confidence_policy_id": confidence_policy_id,
                 "data_cutoff": DECISION_TIME,
             },
@@ -712,7 +719,7 @@ def test_accepted_order_persists_immutable_risk_decision_link(engine: Engine) ->
                 ),
                 {
                     "portfolio_id": PORTFOLIO_ID,
-                    "risk_policy_id": RISK_POLICY_ID,
+                    "risk_policy_id": risk_policy_id,
                     "market_context_id": MARKET_CONTEXT_ID,
                     "decided_at": DECISION_TIME,
                 },

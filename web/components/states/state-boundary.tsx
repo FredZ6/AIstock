@@ -24,7 +24,8 @@ type StaleState = MessageState & {
 
 type DegradedState = MessageState & {
   kind: 'degraded'
-  providers: string[]
+  providers?: string[]
+  groups?: { label: string; items: string[] }[]
 }
 
 type PartialState = MessageState & {
@@ -80,13 +81,27 @@ function StateMessage({ compact, state }: { compact?: boolean; state: EmptyState
         </p>
       ) : null}
       {state.kind === 'degraded' ? (
-        <ul aria-label="Degraded providers" className="state-tags">
-          {state.providers.map((provider) => (
-            <li key={provider}>
-              {provider}
-            </li>
-          ))}
-        </ul>
+        state.groups?.length ? (
+          <details className="state-details">
+            <summary>
+              {state.groups.reduce((count, group) => count + group.items.length, 0)} unavailable facts
+            </summary>
+            <div className="state-detail-groups">
+              {state.groups.map((group) => (
+                <section aria-label={group.label} key={group.label}>
+                  <h3>{group.label}</h3>
+                  <ul className="state-tags">
+                    {group.items.map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          </details>
+        ) : (
+          <ul aria-label="Degraded providers" className="state-tags">
+            {(state.providers ?? []).map((provider) => <li key={provider}>{provider}</li>)}
+          </ul>
+        )
       ) : null}
       {state.kind === 'partial' ? (
         <ul aria-label="Missing records" className="state-tags">
@@ -105,6 +120,7 @@ export function StateBoundary({ children, compact, state }: StateBoundaryProps) 
   if (state.kind === 'loading') {
     return (
       <section
+        aria-label={`Loading ${state.label}`}
         aria-live="polite"
         className={`state-surface surface-card${compact ? ' state-compact' : ''}`}
         data-state="loading"
@@ -138,7 +154,9 @@ export function StateBoundary({ children, compact, state }: StateBoundaryProps) 
   return (
     <>
       <StateMessage compact={compact} state={state} />
-      {state.kind === 'degraded' || state.kind === 'partial' ? children : null}
+      {state.kind === 'degraded' || state.kind === 'partial' || state.kind === 'empty'
+        ? children
+        : null}
     </>
   )
 }

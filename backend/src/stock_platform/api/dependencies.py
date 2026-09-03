@@ -1,4 +1,5 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager
 from functools import lru_cache
 from hmac import compare_digest
 from typing import Annotated
@@ -22,10 +23,20 @@ def _engine(database_url: str) -> Engine:
     return create_engine(database_url)
 
 
+def get_engine(settings: Annotated[Settings, Depends(get_settings)]) -> Engine:
+    return _engine(settings.database_url)
+
+
+def get_read_connection_factory(
+    engine: Annotated[Engine, Depends(get_engine)],
+) -> Callable[[], AbstractContextManager[Connection]]:
+    return engine.connect
+
+
 def get_connection(
-    settings: Annotated[Settings, Depends(get_settings)],
+    engine: Annotated[Engine, Depends(get_engine)],
 ) -> Iterator[Connection]:
-    with _engine(settings.database_url).begin() as connection:
+    with engine.begin() as connection:
         yield connection
 
 

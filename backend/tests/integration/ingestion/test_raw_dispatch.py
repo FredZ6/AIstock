@@ -469,3 +469,25 @@ def test_database_failure_after_minio_is_reported_as_an_orphan(
         ).scalar_one()
         assert raw_count == 0
     engine.dispose()
+
+
+def test_orphan_report_ignores_operational_recovery_envelopes(
+    isolated_database_url: str,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    raw_store = RecordingRawStore()
+    raw_store.keys.extend(
+        [
+            "live/ALPACA/stream/iex/unreferenced.json",
+            "live/ALPACA/stream-recovery/iex/envelope.json",
+        ]
+    )
+
+    reporter = raw_writer_module.report_orphaned_raw_objects
+    assert reporter(
+        engine,
+        raw_store,
+        excluded_prefixes=("live/ALPACA/stream-recovery/",),
+    ) == ("live/ALPACA/stream/iex/unreferenced.json",)
+    engine.dispose()

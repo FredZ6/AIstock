@@ -50,7 +50,11 @@ describe('home page', () => {
     render(await Home())
 
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
-    expect(screen.getByRole('status', { name: 'Some decision facts are unavailable' })).toHaveTextContent('Portfolio API')
+    const degraded = screen.getByRole('status', { name: 'Some decision facts are unavailable' })
+    expect(degraded).toHaveTextContent('5 unavailable facts')
+    expect(screen.getByText('Decision Domain')).toBeInTheDocument()
+    expect(degraded).toHaveTextContent('Portfolio API')
+    expect(screen.queryByRole('list', { name: 'Degraded providers' })).not.toBeInTheDocument()
     expect(screen.queryByRole('alert', { name: 'Today unavailable' })).not.toBeInTheDocument()
   })
 
@@ -70,7 +74,11 @@ describe('home page', () => {
         missingSymbols: [],
         status: 'DEGRADED',
       })),
-      getPortfolioSummary: vi.fn(async () => ({ latestNav: null, trading: 'paper_only' })),
+      getPortfolioSummary: vi.fn(async () => ({
+        cash: null, cashLedger: [], configuration: null, fills: [], initializedAt: null,
+        latestNav: null, orders: [], performanceHistory: [], positions: [], riskDecisions: [],
+        status: 'EMPTY', trading: 'paper_only',
+      })),
       getProviderHealth: vi.fn(async () => ({
         mode: 'paper',
         providers: { alpaca: { configured: true, coverage: 'IEX', mode: 'read_only', status: 'SUCCESS' } },
@@ -84,5 +92,38 @@ describe('home page', () => {
     expect(screen.getByRole('status', { name: 'Some decision facts are unavailable' })).toHaveTextContent(
       'Market quote quality',
     )
+  })
+
+  it('shows one canonical provider-health gap when the health API is unavailable', async () => {
+    vi.stubEnv('WEB_DATA_MODE', 'api')
+    vi.stubEnv('API_BASE_URL', 'http://api.test')
+    vi.doMock('../lib/server/watchlist-api', () => ({
+      listWatchlist: vi.fn(async () => [{ symbol: 'NVDA' }]),
+    }))
+    vi.doMock('../lib/server/live-data-api', () => ({
+      getMarketQuotes: vi.fn(async () => ({
+        decisionTime: '2026-08-29T09:30:00Z',
+        items: [{
+          availableAt: '2026-08-29T09:20:00Z', close: '217.545', coverage: 'IEX',
+          eventTime: '2026-08-28T04:00:00Z', provider: 'ALPACA', symbol: 'NVDA',
+        }],
+        missingSymbols: [],
+        status: 'SUCCESS',
+      })),
+      getPortfolioSummary: vi.fn(async () => ({
+        cash: null, cashLedger: [], configuration: null, fills: [], initializedAt: null,
+        latestNav: null, orders: [], performanceHistory: [], positions: [], riskDecisions: [],
+        status: 'EMPTY', trading: 'paper_only',
+      })),
+      getProviderHealth: vi.fn(async () => { throw new Error('health unavailable') }),
+    }))
+    const { default: Home } = await import('../app/page')
+
+    render(await Home())
+
+    const degraded = screen.getByRole('status', { name: 'Some decision facts are unavailable' })
+    expect(degraded).toHaveTextContent('Provider health')
+    expect(degraded).not.toHaveTextContent('Provider health API')
+    expect(degraded.querySelectorAll('li')).toHaveLength(5)
   })
 })

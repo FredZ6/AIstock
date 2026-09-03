@@ -1,27 +1,41 @@
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+from binascii import Error as Base64Error
+from collections.abc import Sequence
 from dataclasses import asdict
 from datetime import UTC, datetime
 from decimal import Decimal
+from hashlib import sha256
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Response
-from sqlalchemy import Connection, and_, func, insert, select, text, update
+from sqlalchemy import Connection, and_, func, insert, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import NoResultFound
 
 from stock_platform.api.dependencies import get_connection, get_human_actor, get_settings
 from stock_platform.api.schemas.errors import ApiError
 from stock_platform.api.schemas.rest import (
+    AlertPage,
     DataQualityResponse,
+    EvalRunPage,
     HumanAction,
     MarketDataResponse,
+    PaperFillPage,
+    PaperOrderPage,
+    PortfolioInitializationRequest,
+    PortfolioInitializationResponse,
+    PortfolioResponse,
     PortfolioRunRequest,
     ProviderHealthResponse,
+    ResearchPage,
     ResearchRunRequest,
     RunResponse,
     WatchlistPatch,
     WatchlistRequest,
+    WeeklyReviewDetail,
+    WeeklyReviewPage,
 )
 from stock_platform.application.learning.approval import LessonNotFound, record_lesson_decision
 from stock_platform.application.learning.promotion import (
@@ -38,6 +52,12 @@ from stock_platform.application.market_data.policy import (
 )
 from stock_platform.application.market_data.quality import QualityPolicy
 from stock_platform.application.market_data.repositories import PostgresMarketDataRepository
+from stock_platform.application.portfolio.accounting import (
+    PostgresPaperAccountingStore,
+    initial_funding,
+)
+from stock_platform.application.portfolio.read_model import PositionFill, build_positions
+from stock_platform.application.research.supersession import decision_is_active_at
 from stock_platform.application.runs import (
     IdempotencyConflict,
     RunAdmissionLimit,
@@ -54,14 +74,26 @@ from stock_platform.domain.ingestion.models import (
 from stock_platform.infrastructure.db.models.tables import (
     agent_run,
     alert_event,
+    candidate_lesson,
+    cash_ledger,
     data_quality_observation,
+    decision_outcome,
+    decision_snapshot,
+    error_attribution,
     ingestion_job,
     investment_thesis,
+    lesson_approval,
+    lesson_attribution_link,
+    market_bar,
     paper_fill,
     paper_order,
+    paper_portfolio_config,
+    portfolio_initialization_request,
     portfolio_nav,
     raw_data_object,
+    replay_run,
     research_opinion,
+    risk_decision,
     security,
     security_identifier_version,
     watchlist_item,
@@ -110,6 +142,38 @@ def _aware_query_time(value: datetime, field: str) -> datetime:
         raise ApiError(422, "INVALID_REQUEST", f"{field} must include a timezone") from exception
 
 
+def _encode_cursor(sort_time: datetime, row_id: UUID) -> str:
+    payload = f"{sort_time.astimezone(UTC).isoformat()}|{row_id}".encode()
+    return urlsafe_b64encode(payload).decode().rstrip("=")
+
+
+def _decode_cursor(value: str) -> tuple[datetime, UUID]:
+    try:
+        padded = value + "=" * (-len(value) % 4)
+        timestamp, row_id = urlsafe_b64decode(padded).decode().split("|", 1)
+        return _aware_query_time(datetime.fromisoformat(timestamp), "cursor"), UUID(row_id)
+    except (Base64Error, UnicodeDecodeError, ValueError) as exception:
+        raise ApiError(422, "INVALID_REQUEST", "cursor is invalid") from exception
+
+
+def _cursor_filter(sort_column: Any, id_column: Any, cursor: str | None) -> Any:
+    if cursor is None:
+        return True
+    sort_time, row_id = _decode_cursor(cursor)
+    return or_(sort_column < sort_time, and_(sort_column == sort_time, id_column < row_id))
+
+
+def _page(
+    rows: Sequence[Any], limit: int, sort_key: str
+) -> tuple[list[dict[str, Any]], str | None]:
+    visible = rows[:limit]
+    next_cursor = None
+    if len(rows) > limit and visible:
+        last = visible[-1]
+        next_cursor = _encode_cursor(last[sort_key], last["id"])
+    return [_row(row) for row in visible], next_cursor
+
+
 def _coverage(settings: Settings) -> MarketDataCoverage:
     configured = settings.alpaca_entitlement_coverage or ""
     return (
@@ -118,6 +182,7 @@ def _coverage(settings: Settings) -> MarketDataCoverage:
 
 
 def _market_record(record: Any) -> dict[str, Any]:
+    payload = record.payload
     return cast(
         dict[str, Any],
         _value(
@@ -130,7 +195,15 @@ def _market_record(record: Any) -> dict[str, Any]:
                 "ingested_at": record.ingested_at,
                 "content_hash": record.content_hash,
                 "raw_object_key": record.raw_object_key,
-                **record.payload,
+                "timeframe": payload["timeframe"],
+                "open": payload["open"],
+                "high": payload["high"],
+                "low": payload["low"],
+                "close": payload["close"],
+                "volume": payload["volume"],
+                "coverage": payload["coverage"],
+                "session": payload["session"],
+                "conflict": payload["conflict"],
             }
         ),
     )
@@ -329,9 +402,9 @@ def provider_health(
                 "latest_job_state": latest_job,
                 "latest_quality_status": latest_quality_status,
             },
-            "fmp": {
-                "configured": bool(settings.fmp_api_key),
-                "mode": "read_only" if settings.fmp_api_key else "unavailable",
+            "alpha_vantage": {
+                "configured": bool(settings.alpha_vantage_api_key),
+                "mode": "read_only" if settings.alpha_vantage_api_key else "unavailable",
             },
         },
     }
@@ -603,42 +676,80 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
     return _row(row)
 
 
-@router.get("/stocks/{symbol}/research")
+@router.get("/stocks/{symbol}/research", response_model=ResearchPage)
 def get_stock_research(
-    symbol: str, connection: ConnectionDependency, decision_time: datetime
-) -> list[dict[str, Any]]:
+    symbol: str,
+    connection: ConnectionDependency,
+    decision_time: datetime,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: str | None = None,
+) -> dict[str, Any]:
     cutoff = _aware_query_time(decision_time, "decision_time")
+    has_superseded_decision = (
+        select(decision_snapshot.c.id)
+        .where(
+            decision_snapshot.c.thesis_id == investment_thesis.c.id,
+            decision_snapshot.c.data_cutoff <= cutoff,
+            decision_snapshot.c.available_at <= cutoff,
+            decision_snapshot.c.created_at <= cutoff,
+            ~decision_is_active_at(decision_snapshot.c.id, cutoff),
+        )
+        .exists()
+    )
+    latest_opinion = (
+        select(research_opinion.c.value)
+        .where(
+            research_opinion.c.thesis_id == investment_thesis.c.id,
+            research_opinion.c.created_at <= cutoff,
+        )
+        .order_by(research_opinion.c.created_at.desc(), research_opinion.c.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
     rows = (
         connection.execute(
-            select(investment_thesis, research_opinion.c.value.label("opinion"))
-            .outerjoin(
-                research_opinion,
-                and_(
-                    research_opinion.c.thesis_id == investment_thesis.c.id,
-                    research_opinion.c.created_at <= cutoff,
-                ),
-            )
+            select(investment_thesis, latest_opinion.label("opinion"))
             .where(
                 investment_thesis.c.symbol == _symbol(symbol),
                 investment_thesis.c.as_of <= cutoff,
                 investment_thesis.c.created_at <= cutoff,
+                ~has_superseded_decision,
+                _cursor_filter(investment_thesis.c.as_of, investment_thesis.c.id, cursor),
             )
-            .order_by(investment_thesis.c.as_of.desc())
+            .order_by(investment_thesis.c.as_of.desc(), investment_thesis.c.id.desc())
+            .limit(limit + 1)
         )
         .mappings()
         .all()
     )
-    return [_row(row) for row in rows]
+    items, next_cursor = _page(rows, limit, "as_of")
+    return {"decision_time": cutoff, "items": items, "next_cursor": next_cursor}
 
 
-@router.get("/alerts")
-def list_alerts(connection: ConnectionDependency) -> list[dict[str, Any]]:
-    return [
-        _row(row)
-        for row in connection.execute(
-            select(alert_event).order_by(alert_event.c.event_time.desc())
-        ).mappings()
-    ]
+@router.get("/alerts", response_model=AlertPage)
+def list_alerts(
+    connection: ConnectionDependency,
+    decision_time: datetime,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
+    rows = (
+        connection.execute(
+            select(alert_event)
+            .where(
+                alert_event.c.event_time <= cutoff,
+                alert_event.c.created_at <= cutoff,
+                _cursor_filter(alert_event.c.event_time, alert_event.c.id, cursor),
+            )
+            .order_by(alert_event.c.event_time.desc(), alert_event.c.id.desc())
+            .limit(limit + 1)
+        )
+        .mappings()
+        .all()
+    )
+    items, next_cursor = _page(rows, limit, "event_time")
+    return {"decision_time": cutoff, "items": items, "next_cursor": next_cursor}
 
 
 @router.post("/alerts/{alert_id}/acknowledge")
@@ -663,13 +774,124 @@ def acknowledge_alert(
     return _row(row)
 
 
-@router.get("/portfolio")
+@router.get("/portfolio", response_model=PortfolioResponse)
 def get_portfolio(connection: ConnectionDependency, decision_time: datetime) -> dict[str, Any]:
     cutoff = _aware_query_time(decision_time, "decision_time")
+    configuration = (
+        connection.execute(
+            select(
+                paper_portfolio_config.c.id,
+                paper_portfolio_config.c.name,
+                paper_portfolio_config.c.initial_cash,
+                paper_portfolio_config.c.currency,
+            ).where(paper_portfolio_config.c.created_at <= cutoff)
+        )
+        .mappings()
+        .one_or_none()
+    )
+    empty = {
+        "status": "EMPTY",
+        "decision_time": cutoff,
+        "trading": "paper_only",
+        "configuration": _row(configuration) if configuration else None,
+        "initialized_at": None,
+        "cash": None,
+        "latest_nav": None,
+        "positions": [],
+        "risk_decisions": [],
+        "orders": [],
+        "fills": [],
+        "cash_ledger": [],
+        "performance_history": [],
+    }
+    if configuration is None:
+        return empty
+    portfolio_id = configuration["id"]
+    initialized_at = connection.execute(
+        select(cash_ledger.c.occurred_at)
+        .where(
+            cash_ledger.c.portfolio_id == portfolio_id,
+            cash_ledger.c.account == "EQUITY:OPENING_BALANCE",
+            cash_ledger.c.occurred_at <= cutoff,
+            cash_ledger.c.created_at <= cutoff,
+        )
+        .order_by(cash_ledger.c.occurred_at, cash_ledger.c.id)
+        .limit(1)
+    ).scalar_one_or_none()
+    if initialized_at is None:
+        return empty
+
+    cash = connection.execute(
+        select(func.coalesce(func.sum(cash_ledger.c.debit - cash_ledger.c.credit), 0)).where(
+            cash_ledger.c.portfolio_id == portfolio_id,
+            cash_ledger.c.account == "ASSET:CASH",
+            cash_ledger.c.occurred_at <= cutoff,
+            cash_ledger.c.created_at <= cutoff,
+        )
+    ).scalar_one()
+    fill_rows = (
+        connection.execute(
+            select(paper_fill)
+            .where(
+                paper_fill.c.portfolio_id == portfolio_id,
+                paper_fill.c.filled_at <= cutoff,
+                paper_fill.c.created_at <= cutoff,
+            )
+            .order_by(paper_fill.c.filled_at, paper_fill.c.id)
+            .limit(5001)
+        )
+        .mappings()
+        .all()
+    )
+    if len(fill_rows) > 5000:
+        raise ApiError(
+            503,
+            "READ_MODEL_LIMIT",
+            "Portfolio position history exceeds the bounded read model",
+            retryable=True,
+        )
+    symbols = tuple(sorted({str(row["symbol"]) for row in fill_rows}))
+    prices: dict[str, tuple[Decimal, datetime]] = {}
+    if symbols:
+        ranked_prices = (
+            select(
+                market_bar.c.symbol,
+                market_bar.c.close,
+                market_bar.c.available_at,
+                func.row_number()
+                .over(
+                    partition_by=market_bar.c.symbol,
+                    order_by=(market_bar.c.event_time.desc(), market_bar.c.available_at.desc()),
+                )
+                .label("rank"),
+            )
+            .where(
+                market_bar.c.symbol.in_(symbols),
+                market_bar.c.event_time <= cutoff,
+                market_bar.c.available_at <= cutoff,
+                market_bar.c.close.is_not(None),
+            )
+            .subquery()
+        )
+        price_rows = connection.execute(select(ranked_prices).where(ranked_prices.c.rank == 1))
+        prices = {str(row.symbol): (Decimal(row.close), row.available_at) for row in price_rows}
+    positions = build_positions(
+        tuple(
+            PositionFill(
+                str(row["symbol"]),
+                cast(Literal["BUY", "SELL"], row["side"]),
+                Decimal(row["quantity"]),
+                Decimal(row["price"]),
+            )
+            for row in fill_rows
+        ),
+        prices=prices,
+    )
     latest_nav = (
         connection.execute(
             select(portfolio_nav)
             .where(
+                portfolio_nav.c.portfolio_id == portfolio_id,
                 portfolio_nav.c.event_time <= cutoff,
                 portfolio_nav.c.available_at <= cutoff,
             )
@@ -679,7 +901,175 @@ def get_portfolio(connection: ConnectionDependency, decision_time: datetime) -> 
         .mappings()
         .one_or_none()
     )
-    return {"latest_nav": _row(latest_nav) if latest_nav else None, "trading": "paper_only"}
+    nav_rows = list(
+        reversed(
+            connection.execute(
+                select(portfolio_nav)
+                .where(
+                    portfolio_nav.c.portfolio_id == portfolio_id,
+                    portfolio_nav.c.event_time <= cutoff,
+                    portfolio_nav.c.available_at <= cutoff,
+                )
+                .order_by(portfolio_nav.c.event_time.desc(), portfolio_nav.c.id.desc())
+                .limit(365)
+            )
+            .mappings()
+            .all()
+        )
+    )
+    risk_rows = (
+        connection.execute(
+            select(risk_decision)
+            .where(
+                risk_decision.c.portfolio_id == portfolio_id,
+                risk_decision.c.decided_at <= cutoff,
+                risk_decision.c.created_at <= cutoff,
+            )
+            .order_by(risk_decision.c.decided_at.desc(), risk_decision.c.id.desc())
+            .limit(100)
+        )
+        .mappings()
+        .all()
+    )
+    order_rows = (
+        connection.execute(
+            select(paper_order)
+            .where(
+                paper_order.c.portfolio_id == portfolio_id,
+                paper_order.c.decision_time <= cutoff,
+                paper_order.c.created_at <= cutoff,
+            )
+            .order_by(paper_order.c.decision_time.desc(), paper_order.c.id.desc())
+            .limit(100)
+        )
+        .mappings()
+        .all()
+    )
+    ledger_rows = list(
+        reversed(
+            connection.execute(
+                select(
+                    cash_ledger.c.id,
+                    cash_ledger.c.transaction_id,
+                    cash_ledger.c.source_id,
+                    cash_ledger.c.account,
+                    cash_ledger.c.debit,
+                    cash_ledger.c.credit,
+                    cash_ledger.c.currency,
+                    cash_ledger.c.occurred_at,
+                    cash_ledger.c.idempotency_key,
+                    cash_ledger.c.reversal_of_id,
+                    cash_ledger.c.created_at,
+                )
+                .where(
+                    cash_ledger.c.portfolio_id == portfolio_id,
+                    cash_ledger.c.occurred_at <= cutoff,
+                    cash_ledger.c.created_at <= cutoff,
+                )
+                .order_by(
+                    cash_ledger.c.occurred_at.desc(),
+                    cash_ledger.c.account.desc(),
+                    cash_ledger.c.id.desc(),
+                )
+                .limit(100)
+            )
+            .mappings()
+            .all()
+        )
+    )
+    return {
+        "status": "SUCCESS",
+        "decision_time": cutoff,
+        "trading": "paper_only",
+        "configuration": _row(configuration),
+        "initialized_at": initialized_at,
+        "cash": {"balance": cash, "currency": configuration["currency"]},
+        "latest_nav": _row(latest_nav) if latest_nav else None,
+        "positions": [_value(asdict(position)) for position in positions],
+        "risk_decisions": [_row(row) for row in risk_rows],
+        "orders": [_row(row) for row in order_rows],
+        "fills": [_row(row) for row in reversed(fill_rows[-100:])],
+        "cash_ledger": [_row(row) for row in ledger_rows],
+        "performance_history": [_row(row) for row in nav_rows],
+    }
+
+
+@router.post("/portfolio/initialize", response_model=PortfolioInitializationResponse)
+def initialize_portfolio(
+    request: PortfolioInitializationRequest,
+    response: Response,
+    connection: ConnectionDependency,
+    idempotency_key: IdempotencyKey,
+) -> dict[str, Any]:
+    connection.execute(text("SELECT pg_advisory_xact_lock(hashtext('paper-portfolio-initialize'))"))
+    config = connection.execute(select(paper_portfolio_config)).mappings().one()
+    effective_at = request.effective_at.astimezone(UTC)
+    request_hash = sha256(effective_at.isoformat().encode()).hexdigest()
+    admitted = (
+        connection.execute(
+            select(portfolio_initialization_request).where(
+                portfolio_initialization_request.c.idempotency_key == idempotency_key
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if admitted is not None:
+        if admitted["request_hash"] != request_hash:
+            raise ApiError(
+                409,
+                "IDEMPOTENCY_CONFLICT",
+                "Idempotency-Key was already used with a different request payload",
+            )
+        response.headers["Idempotency-Replayed"] = "true"
+        return {
+            "status": "READY",
+            "portfolio_id": config["id"],
+            "name": config["name"],
+            "initial_cash": config["initial_cash"],
+            "currency": config["currency"],
+            "initialized_at": admitted["effective_at"],
+        }
+    initialized_at = connection.execute(
+        select(cash_ledger.c.occurred_at)
+        .where(
+            cash_ledger.c.portfolio_id == config["id"],
+            cash_ledger.c.account == "EQUITY:OPENING_BALANCE",
+        )
+        .order_by(cash_ledger.c.occurred_at, cash_ledger.c.id)
+        .limit(1)
+    ).scalar_one_or_none()
+    if initialized_at is not None:
+        raise ApiError(
+            409,
+            "PORTFOLIO_ALREADY_INITIALIZED",
+            "The singleton paper portfolio has already been initialized",
+        )
+    connection.execute(
+        insert(portfolio_initialization_request).values(
+            portfolio_id=config["id"],
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
+            effective_at=effective_at,
+        )
+    )
+    PostgresPaperAccountingStore(connection).persist_ledger(
+        initial_funding(
+            config["id"],
+            config["initial_cash"],
+            config["currency"],
+            effective_at,
+        )
+    )
+    response.headers["Idempotency-Replayed"] = "false"
+    return {
+        "status": "READY",
+        "portfolio_id": config["id"],
+        "name": config["name"],
+        "initial_cash": config["initial_cash"],
+        "currency": config["currency"],
+        "initialized_at": effective_at,
+    }
 
 
 @router.post("/portfolio/rebalance-runs", response_model=RunResponse, status_code=202)
@@ -713,34 +1103,247 @@ def create_portfolio_run(
     )
 
 
-@router.get("/portfolio/orders")
-def list_orders(connection: ConnectionDependency) -> list[dict[str, Any]]:
-    return [
-        _row(row)
-        for row in connection.execute(
-            select(paper_order).order_by(paper_order.c.created_at.desc())
-        ).mappings()
-    ]
+@router.get("/portfolio/orders", response_model=PaperOrderPage)
+def list_orders(
+    connection: ConnectionDependency,
+    decision_time: datetime,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
+    rows = (
+        connection.execute(
+            select(paper_order)
+            .where(
+                paper_order.c.decision_time <= cutoff,
+                paper_order.c.created_at <= cutoff,
+                _cursor_filter(paper_order.c.decision_time, paper_order.c.id, cursor),
+            )
+            .order_by(paper_order.c.decision_time.desc(), paper_order.c.id.desc())
+            .limit(limit + 1)
+        )
+        .mappings()
+        .all()
+    )
+    items, next_cursor = _page(rows, limit, "decision_time")
+    return {"decision_time": cutoff, "items": items, "next_cursor": next_cursor}
 
 
-@router.get("/portfolio/fills")
-def list_fills(connection: ConnectionDependency) -> list[dict[str, Any]]:
-    return [
-        _row(row)
-        for row in connection.execute(
-            select(paper_fill).order_by(paper_fill.c.filled_at.desc())
-        ).mappings()
-    ]
+@router.get("/portfolio/fills", response_model=PaperFillPage)
+def list_fills(
+    connection: ConnectionDependency,
+    decision_time: datetime,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
+    rows = (
+        connection.execute(
+            select(paper_fill)
+            .where(
+                paper_fill.c.filled_at <= cutoff,
+                paper_fill.c.created_at <= cutoff,
+                _cursor_filter(paper_fill.c.filled_at, paper_fill.c.id, cursor),
+            )
+            .order_by(paper_fill.c.filled_at.desc(), paper_fill.c.id.desc())
+            .limit(limit + 1)
+        )
+        .mappings()
+        .all()
+    )
+    items, next_cursor = _page(rows, limit, "filled_at")
+    return {"decision_time": cutoff, "items": items, "next_cursor": next_cursor}
 
 
-@router.get("/weekly-reviews")
-def list_weekly_reviews(connection: ConnectionDependency) -> list[dict[str, Any]]:
-    return [
-        _row(row)
-        for row in connection.execute(
-            select(weekly_review_run).order_by(weekly_review_run.c.created_at.desc())
-        ).mappings()
-    ]
+@router.get("/weekly-reviews", response_model=WeeklyReviewPage)
+def list_weekly_reviews(
+    connection: ConnectionDependency,
+    decision_time: datetime,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
+    rows = (
+        connection.execute(
+            select(weekly_review_run)
+            .where(
+                weekly_review_run.c.decision_time <= cutoff,
+                weekly_review_run.c.data_cutoff <= cutoff,
+                weekly_review_run.c.created_at <= cutoff,
+                _cursor_filter(weekly_review_run.c.decision_time, weekly_review_run.c.id, cursor),
+            )
+            .order_by(weekly_review_run.c.decision_time.desc(), weekly_review_run.c.id.desc())
+            .limit(limit + 1)
+        )
+        .mappings()
+        .all()
+    )
+    items, next_cursor = _page(rows, limit, "decision_time")
+    return {"decision_time": cutoff, "items": items, "next_cursor": next_cursor}
+
+
+@router.get("/weekly-reviews/{review_id}", response_model=WeeklyReviewDetail)
+def get_weekly_review_detail(
+    review_id: UUID,
+    connection: ConnectionDependency,
+    decision_time: datetime,
+) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
+    review = (
+        connection.execute(
+            select(weekly_review_run).where(
+                weekly_review_run.c.id == review_id,
+                weekly_review_run.c.decision_time <= cutoff,
+                weekly_review_run.c.data_cutoff <= cutoff,
+                weekly_review_run.c.created_at <= cutoff,
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if review is None:
+        raise ApiError(404, "NOT_FOUND", "Weekly review not found")
+
+    outcomes = (
+        connection.execute(
+            select(
+                decision_outcome.c.id,
+                decision_outcome.c.decision_id,
+                decision_outcome.c.status,
+                decision_outcome.c.returns,
+                decision_outcome.c.excess_returns,
+                decision_outcome.c.maximum_favorable_excursion,
+                decision_outcome.c.maximum_adverse_excursion,
+                decision_outcome.c.risk_adjusted_return,
+                decision_outcome.c.calibration_error,
+                decision_outcome.c.computed_at,
+                decision_outcome.c.created_at,
+                investment_thesis.c.symbol,
+                investment_thesis.c.confidence,
+                research_opinion.c.value.label("opinion"),
+            )
+            .select_from(
+                decision_outcome.join(
+                    decision_snapshot,
+                    decision_outcome.c.decision_id == decision_snapshot.c.id,
+                )
+                .join(
+                    investment_thesis,
+                    decision_snapshot.c.thesis_id == investment_thesis.c.id,
+                )
+                .join(
+                    research_opinion,
+                    research_opinion.c.thesis_id == investment_thesis.c.id,
+                )
+            )
+            .where(
+                decision_outcome.c.weekly_review_run_id == review_id,
+                decision_outcome.c.computed_at <= cutoff,
+                decision_outcome.c.created_at <= cutoff,
+                decision_snapshot.c.data_cutoff <= cutoff,
+                decision_snapshot.c.available_at <= cutoff,
+                investment_thesis.c.as_of <= cutoff,
+                investment_thesis.c.created_at <= cutoff,
+                research_opinion.c.created_at <= cutoff,
+            )
+            .order_by(decision_outcome.c.computed_at, decision_outcome.c.id)
+        )
+        .mappings()
+        .all()
+    )
+    outcome_ids = tuple(item["id"] for item in outcomes)
+    attributions = (
+        connection.execute(
+            select(error_attribution)
+            .where(
+                error_attribution.c.outcome_id.in_(outcome_ids),
+                error_attribution.c.created_at <= cutoff,
+            )
+            .order_by(error_attribution.c.created_at, error_attribution.c.id)
+        )
+        .mappings()
+        .all()
+    )
+    attribution_ids = tuple(item["id"] for item in attributions)
+    lesson_ids = select(lesson_attribution_link.c.lesson_id).where(
+        lesson_attribution_link.c.attribution_id.in_(attribution_ids),
+        lesson_attribution_link.c.created_at <= cutoff,
+    )
+    lessons = (
+        connection.execute(
+            select(
+                candidate_lesson.c.id,
+                candidate_lesson.c.attribution_id,
+                candidate_lesson.c.scope,
+                candidate_lesson.c.statement,
+                candidate_lesson.c.evidence,
+                candidate_lesson.c.counter_evidence,
+                candidate_lesson.c.confidence,
+                candidate_lesson.c.replay_delta,
+                candidate_lesson.c.creator,
+                candidate_lesson.c.status,
+                candidate_lesson.c.created_at,
+            )
+            .where(
+                candidate_lesson.c.id.in_(lesson_ids),
+                candidate_lesson.c.created_at <= cutoff,
+            )
+            .order_by(candidate_lesson.c.created_at, candidate_lesson.c.id)
+        )
+        .mappings()
+        .all()
+    )
+    visible_lesson_ids = tuple(item["id"] for item in lessons)
+    approvals = (
+        connection.execute(
+            select(lesson_approval)
+            .where(
+                lesson_approval.c.lesson_id.in_(visible_lesson_ids),
+                lesson_approval.c.created_at <= cutoff,
+            )
+            .order_by(lesson_approval.c.created_at, lesson_approval.c.id)
+        )
+        .mappings()
+        .all()
+    )
+    replays = (
+        connection.execute(
+            select(replay_run)
+            .where(
+                replay_run.c.lesson_id.in_(visible_lesson_ids),
+                replay_run.c.data_cutoff <= cutoff,
+                replay_run.c.created_at <= cutoff,
+            )
+            .order_by(replay_run.c.data_cutoff, replay_run.c.id)
+        )
+        .mappings()
+        .all()
+    )
+    calibration = []
+    for outcome in outcomes:
+        returns = outcome["returns"] or {}
+        final_return = None
+        if returns:
+            final_return = Decimal(str(returns[max(returns, key=lambda value: int(value))]))
+        calibration.append(
+            {
+                "decision_id": outcome["decision_id"],
+                "confidence": outcome["confidence"],
+                "status": outcome["status"],
+                "realized_return": final_return,
+                "calibration_error": outcome["calibration_error"],
+            }
+        )
+    return {
+        "decision_time": cutoff,
+        "review": review,
+        "outcomes": outcomes,
+        "attributions": attributions,
+        "lessons": lessons,
+        "approvals": approvals,
+        "replays": replays,
+        "calibration": calibration,
+    }
 
 
 def _lesson_action(
@@ -831,9 +1434,10 @@ def rollback_policy(
     return _policy_action(connection, policy_id, action, actor, "rollback")
 
 
-@router.get("/evals/runs")
-def list_eval_runs() -> list[dict[str, Any]]:
-    return []
+@router.get("/evals/runs", response_model=EvalRunPage)
+def list_eval_runs(decision_time: datetime) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
+    return {"decision_time": cutoff, "items": [], "next_cursor": None}
 
 
 @router.get("/evals/runs/{eval_run_id}")

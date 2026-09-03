@@ -4,10 +4,10 @@ from uuid import uuid4
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, insert, update
+from sqlalchemy import create_engine, insert, select, update
 from stock_platform.api.dependencies import get_settings
 from stock_platform.api.main import app
-from stock_platform.application.events.sse import stream_events
+from stock_platform.application.events.sse import load_events, stream_events
 from stock_platform.infrastructure.db.models.tables import agent_event, agent_run
 from stock_platform.settings import Settings
 
@@ -144,7 +144,12 @@ def test_sse_polls_postgres_until_a_running_run_becomes_terminal(
     config = Config("backend/alembic.ini")
     config.set_main_option("sqlalchemy.url", isolated_database_url)
     command.upgrade(config, "head")
-    engine = create_engine(isolated_database_url)
+    engine = create_engine(
+        isolated_database_url,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=1,
+    )
     run_id = uuid4()
     event_id = uuid4()
     now = datetime(2026, 8, 21, 21, tzinfo=UTC)
@@ -177,9 +182,92 @@ def test_sse_polls_postgres_until_a_running_run_becomes_terminal(
                 update(agent_run).where(agent_run.c.id == run_id).values(status="COMPLETED")
             )
 
-    with engine.connect() as reader:
-        chunks = list(stream_events(reader, run_id, sleeper=finish))
+    chunks = list(stream_events(engine.connect, run_id, sleeper=finish))
     engine.dispose()
 
     assert len(chunks) == 1
     assert f"id: {event_id}" in chunks[0]
+
+
+def test_sse_event_loading_is_bounded(isolated_database_url: str) -> None:
+    config = Config("backend/alembic.ini")
+    config.set_main_option("sqlalchemy.url", isolated_database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(isolated_database_url)
+    run_id = uuid4()
+    now = datetime(2026, 8, 21, 21, tzinfo=UTC)
+    with engine.begin() as connection:
+        connection.execute(
+            insert(agent_run).values(
+                id=run_id,
+                run_type="RESEARCH",
+                idempotency_key=f"sse-{run_id}",
+                request_hash="d" * 64,
+                request_payload={},
+                symbol="NVDA",
+                decision_time=now,
+                data_cutoff=now,
+                status="COMPLETED",
+            )
+        )
+        connection.execute(
+            insert(agent_event),
+            [
+                {
+                    "id": uuid4(),
+                    "run_id": run_id,
+                    "sequence": sequence,
+                    "event_type": "tool.completed",
+                }
+                for sequence in range(1, 4)
+            ],
+        )
+    with engine.connect() as connection:
+        events = load_events(connection, run_id, limit=2)
+    engine.dispose()
+
+    assert [event["sequence"] for event in events] == [1, 2]
+
+
+def test_idle_sse_emits_keepalive_without_holding_the_pool_slot(
+    isolated_database_url: str,
+) -> None:
+    config = Config("backend/alembic.ini")
+    config.set_main_option("sqlalchemy.url", isolated_database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(
+        isolated_database_url,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=1,
+    )
+    run_id = uuid4()
+    now = datetime(2026, 8, 21, 21, tzinfo=UTC)
+    with engine.begin() as connection:
+        connection.execute(
+            insert(agent_run).values(
+                id=run_id,
+                run_type="RESEARCH",
+                idempotency_key=f"sse-{run_id}",
+                request_hash="e" * 64,
+                request_payload={},
+                symbol="NVDA",
+                decision_time=now,
+                data_cutoff=now,
+                status="RUNNING",
+            )
+        )
+    times = iter((0.0, 16.0))
+    chunks = stream_events(
+        engine.connect,
+        run_id,
+        sleeper=lambda _seconds: None,
+        clock=lambda: next(times),
+        heartbeat_interval=15.0,
+    )
+
+    assert next(chunks) == ": keepalive\n\n"
+    with engine.connect() as connection:
+        assert connection.execute(select(agent_run.c.status)).scalar_one() == "RUNNING"
+    chunks.close()
+    engine.dispose()

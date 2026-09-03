@@ -72,8 +72,21 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
                     "ON CONFLICT (version) DO NOTHING"
                 )
             )
-        connection.execute(text("INSERT INTO investment_thesis DEFAULT VALUES"))
-        connection.execute(
+        thesis_id = connection.execute(
+            text("INSERT INTO investment_thesis DEFAULT VALUES RETURNING id")
+        ).scalar_one()
+        policy_ids = {
+            policy_table: connection.execute(
+                text(f"SELECT id FROM {policy_table} WHERE version = 'fixture-v1'")
+            ).scalar_one()
+            for policy_table in (
+                "research_scoring_policy_version",
+                "risk_policy_version",
+                "execution_policy_version",
+                "confidence_policy_version",
+            )
+        }
+        research_decision_id = connection.execute(
             text(
                 """
                 INSERT INTO decision_snapshot (
@@ -86,18 +99,22 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
                     model_version,
                     data_cutoff
                 )
-                SELECT
-                    (SELECT id FROM investment_thesis LIMIT 1),
-                    (SELECT id FROM research_scoring_policy_version LIMIT 1),
-                    (SELECT id FROM risk_policy_version LIMIT 1),
-                    (SELECT id FROM execution_policy_version LIMIT 1),
-                    (SELECT id FROM confidence_policy_version LIMIT 1),
-                    'test-prompt',
-                    'test-model',
-                    now()
+                VALUES (
+                    :thesis_id, :research_policy_id, :risk_policy_id,
+                    :execution_policy_id, :confidence_policy_id,
+                    'test-prompt', 'test-model', now()
+                )
+                RETURNING id
                 """
-            )
-        )
+            ),
+            {
+                "thesis_id": thesis_id,
+                "research_policy_id": policy_ids["research_scoring_policy_version"],
+                "risk_policy_id": policy_ids["risk_policy_version"],
+                "execution_policy_id": policy_ids["execution_policy_version"],
+                "confidence_policy_id": policy_ids["confidence_policy_version"],
+            },
+        ).scalar_one()
         portfolio_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         order_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
         risk_decision_id = connection.execute(text("SELECT gen_random_uuid()")).scalar_one()
@@ -316,9 +333,9 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
                     risk_policy_version_id, decided_at, market_context_snapshot_id
                 ) VALUES (
                     :risk_decision_id, :risk_decision_id,
-                    (SELECT id FROM decision_snapshot LIMIT 1),
+                    :research_decision_id,
                     :portfolio_id, 'FIXTURE', 'APPROVED', 1, 1, 0, 1, 1, 1, 1,
-                    (SELECT id FROM risk_policy_version LIMIT 1),
+                    :risk_policy_id,
                     now() - interval '1 minute', :market_context_id
                 )
                 """
@@ -326,6 +343,8 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
             {
                 "portfolio_id": portfolio_id,
                 "risk_decision_id": risk_decision_id,
+                "research_decision_id": research_decision_id,
+                "risk_policy_id": policy_ids["risk_policy_version"],
                 "market_context_id": market_context_id,
             },
         )
@@ -335,18 +354,19 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
                 INSERT INTO order_intent (
                     id, portfolio_id, symbol, side, quantity, decision_time,
                     execution_policy_version_id, risk_approved, risk_decision_id
-                ) VALUES (
-                    :order_id, :portfolio_id, 'FIXTURE', 'BUY', 1,
-                    (SELECT decided_at FROM risk_decision WHERE id = :risk_decision_id),
-                    (SELECT id FROM execution_policy_version LIMIT 1), true,
-                    :risk_decision_id
-                )
+                    ) VALUES (
+                        :order_id, :portfolio_id, 'FIXTURE', 'BUY', 1,
+                        (SELECT decided_at FROM risk_decision WHERE id = :risk_decision_id),
+                        :execution_policy_id, true,
+                        :risk_decision_id
+                    )
                 """
             ),
             {
                 "portfolio_id": portfolio_id,
                 "order_id": order_id,
                 "risk_decision_id": risk_decision_id,
+                "execution_policy_id": policy_ids["execution_policy_version"],
             },
         )
         connection.execute(
@@ -369,14 +389,18 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
                 INSERT INTO paper_fill (
                     order_id, portfolio_id, symbol, side, quantity, price, fee, currency,
                     filled_at, source_bar_time, execution_policy_version_id, idempotency_key
-                ) VALUES (
-                    :order_id, :portfolio_id, 'FIXTURE', 'BUY', 1, 1, 0, 'USD', now(), now(),
-                    (SELECT id FROM execution_policy_version LIMIT 1),
-                    'append-only-fill:' || :order_id
-                )
+                    ) VALUES (
+                        :order_id, :portfolio_id, 'FIXTURE', 'BUY', 1, 1, 0, 'USD', now(), now(),
+                        :execution_policy_id,
+                        'append-only-fill:' || :order_id
+                    )
                 """
             ),
-            {"portfolio_id": portfolio_id, "order_id": order_id},
+            {
+                "portfolio_id": portfolio_id,
+                "order_id": order_id,
+                "execution_policy_id": policy_ids["execution_policy_version"],
+            },
         )
         connection.execute(
             text(

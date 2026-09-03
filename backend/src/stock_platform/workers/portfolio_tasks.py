@@ -17,6 +17,7 @@ from stock_platform.application.portfolio.accounting import (
 from stock_platform.application.portfolio.allocation import MarketContextSnapshot, MarketRegime
 from stock_platform.application.portfolio.execution import ExecutionPolicy
 from stock_platform.application.portfolio.risk import RiskPolicy
+from stock_platform.application.research.supersession import decision_is_active_at
 from stock_platform.application.runs import RunControl, RunInputUnavailable, execute_run
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
@@ -209,6 +210,8 @@ def execute_portfolio_run(
                 investment_thesis.c.as_of <= row["decision_time"],
                 decision_snapshot.c.data_cutoff <= row["data_cutoff"],
                 decision_snapshot.c.available_at <= row["data_cutoff"],
+                decision_is_active_at(decision_snapshot.c.id, row["data_cutoff"]),
+                research_opinion.c.created_at <= row["data_cutoff"],
                 research_scoring_policy_version.c.version == row["research_scoring_policy_version"],
                 risk_policy_version.c.version == row["risk_policy_version"],
                 execution_policy_version.c.version == row["execution_policy_version"],
@@ -246,7 +249,11 @@ def execute_portfolio_run(
                         thesis_evidence_link.c.evidence_id == evidence_item.c.id,
                     )
                 )
-                .where(thesis_evidence_link.c.thesis_id == frozen_row["thesis_id"])
+                .where(
+                    thesis_evidence_link.c.thesis_id == frozen_row["thesis_id"],
+                    thesis_evidence_link.c.created_at <= row["data_cutoff"],
+                    evidence_item.c.created_at <= row["data_cutoff"],
+                )
             ).one()
             opinion = ResearchOpinionValue(frozen_row["opinion"])
             proposed_weight = (

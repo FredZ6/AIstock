@@ -229,6 +229,6 @@ class AlpacaStreamSupervisor:
                         self.publish_reconnect_recovery(reconnected_at=datetime.now(UTC))
                     await self.consume(connection)  # type: ignore[arg-type]
                     delay = 1.0
-            except (OSError, TimeoutError, ConnectionClosed):
+            except (OSError, TimeoutError, ConnectionClosed, ValueError):
                 await sleep(delay)
                 delay = min(delay * 2, 30.0)
