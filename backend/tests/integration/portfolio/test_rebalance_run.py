@@ -561,6 +561,20 @@ def test_accepted_order_persists_immutable_risk_decision_link(engine: Engine) ->
     next_bar_time = DECISION_TIME + timedelta(minutes=1)
     with engine.connect() as connection:
         transaction = connection.begin()
+        policies = {
+            "research_scoring_policy_version": (UUID(int=301), "research-v1"),
+            "risk_policy_version": (UUID(int=302), "risk-v1"),
+            "execution_policy_version": (UUID(int=303), "execution-v1"),
+            "confidence_policy_version": (UUID(int=304), "confidence-v1"),
+        }
+        for table_name, (policy_id, version) in policies.items():
+            connection.execute(
+                text(
+                    f"INSERT INTO {table_name} (id, version) VALUES (:id, :version) "
+                    "ON CONFLICT (version) DO NOTHING"
+                ),
+                {"id": policy_id, "version": version},
+            )
         research_policy_id = connection.execute(
             text("SELECT id FROM research_scoring_policy_version WHERE version = 'research-v1'")
         ).scalar_one()

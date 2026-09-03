@@ -2894,3 +2894,35 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   source files; Alembic reported no drift; backend 718 passed / 4 skipped; frontend TypeScript and
   ESLint clean; Vitest 22 files / 125 tests passed; and the Next.js production build completed.
   The post-gate MinIO reporter returned zero actionable orphans.
+
+### PR #19 second-review blocker closure (2026-09-03)
+
+- The first remote PR run exposed a clean-database test dependency: CI upgraded an empty database
+  but did not seed demo policies, while the immutable risk-decision integration test assumed four
+  `*-v1` PolicyVersion rows already existed. The failed run reported 717 passed / 1 failed / 4
+  skipped. The test now creates its exact policy prerequisites transactionally and remains safe when
+  those versions already exist.
+- TDD PIT regressions proved three product leaks before implementation: a late Alpaca revision
+  changed a historical reference price and turned a positive return into `-81.68%`; an Opinion
+  appended after the weekly cutoff produced conflicting immutable Outcomes; and future Opinion or
+  conflicting Evidence facts suppressed an otherwise eligible paper order. Portfolio and Weekly
+  selection now require `research_opinion.created_at <= data_cutoff`; Portfolio evidence completeness
+  also requires both EvidenceItem and ThesisEvidenceLink creation times to be visible. Historical
+  reference prices are resolved by a database query bounded at each decision time, while outcome
+  prices retain the later weekly cutoff.
+- Research persistence now applies one explicit aware availability timestamp to DecisionSnapshot,
+  ResearchOpinion, generated EvidenceItem, and ThesisEvidenceLink. This keeps facts written by the
+  same completed research operation temporally coherent without weakening append-only protection.
+- Today now uses one canonical `Provider health` degradation key. When that endpoint is unavailable,
+  progressive disclosure contains one provider-health fact instead of both `Provider health API`
+  and `Provider health`; persisted quotes and Portfolio facts remain visible and Fixture fallback is
+  still forbidden.
+- RED evidence: the late-revision return assertion failed with `-0.816816...`; the future Opinion run
+  failed with `semantic outcome retry changed immutable facts`; both Portfolio future-fact cases
+  produced zero orders; and Vitest rendered six unavailable facts with duplicate provider-health
+  labels. GREEN focused verification passed 5/5 backend cases and the complete Web suite passed
+  22 files / 126 tests. Related Research, Portfolio, and Weekly integration files passed 62/62.
+- Final fresh `make verify` exited 0: 321 files format clean; Ruff clean; strict Mypy clean over 279
+  source files; Alembic reported no drift; backend 721 passed / 4 skipped; frontend TypeScript and
+  ESLint clean; Vitest 22 files / 126 tests passed; and the Next.js production build completed. The
+  post-gate MinIO orphan reporter returned 0.

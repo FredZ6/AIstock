@@ -135,6 +135,7 @@ def execute_weekly_review_run(
                 decision_snapshot.c.available_at <= specification.data_cutoff,
                 decision_is_active_at(decision_snapshot.c.id, specification.data_cutoff),
                 investment_thesis.c.as_of <= specification.decision_time,
+                research_opinion.c.created_at <= specification.data_cutoff,
             )
             .order_by(investment_thesis.c.as_of, decision_snapshot.c.id)
         ).all()
@@ -166,7 +167,20 @@ def execute_weekly_review_run(
                 )
             else:
                 observations = paper_prices.get(str(symbol), ())
-            reference = [item for item in observations if item.event_time <= decision_time]
+            reference_observations = (
+                observations
+                if catalog is not None
+                else _paper_prices(
+                    connection,
+                    symbols=(str(symbol),),
+                    cutoff=decision_time,
+                ).get(str(symbol), ())
+            )
+            reference = [
+                item
+                for item in reference_observations
+                if item.event_time <= decision_time and item.available_at <= decision_time
+            ]
             if not reference:
                 continue
             reference_bar = max(reference, key=lambda item: (item.event_time, item.available_at))

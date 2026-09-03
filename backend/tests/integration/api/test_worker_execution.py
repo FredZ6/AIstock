@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, func, insert, select, update
+from sqlalchemy import Table, create_engine, func, insert, select, update
 from sqlalchemy.engine import Connection, Engine, RowMapping
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from stock_platform.application.events.sse import load_events
@@ -16,19 +16,26 @@ from stock_platform.infrastructure.db.models.tables import (
     agent_event,
     agent_run,
     cash_ledger,
+    confidence_policy_version,
     decision_diff,
     decision_outcome,
     decision_snapshot,
+    derived_metric,
     evidence_gap,
+    evidence_item,
     execution_policy_version,
     investment_thesis,
     market_bar,
     market_context_snapshot,
     normalized_record,
+    order_intent,
     paper_portfolio_config,
     raw_data_object,
+    research_opinion,
+    research_scoring_policy_version,
     risk_decision,
     risk_policy_version,
+    thesis_evidence_link,
     tool_call,
     weekly_review_run,
 )
@@ -743,17 +750,33 @@ def test_paper_weekly_worker_uses_only_persisted_alpaca_prices(
         decision_id = connection.execute(
             select(decision_snapshot.c.id).where(decision_snapshot.c.thesis_id.is_not(None))
         ).scalar_one()
-        for index, (event_time, close) in enumerate(
+        for index, (event_time, available_at, close) in enumerate(
             (
-                (datetime(2026, 8, 15, 20, tzinfo=UTC), Decimal("180")),
-                (datetime(2026, 8, 17, 20, tzinfo=UTC), Decimal("183")),
-                (datetime(2026, 8, 20, 20, tzinfo=UTC), Decimal("186")),
+                (
+                    datetime(2026, 8, 15, 20, tzinfo=UTC),
+                    datetime(2026, 8, 15, 20, 1, tzinfo=UTC),
+                    Decimal("180"),
+                ),
+                (
+                    datetime(2026, 8, 15, 20, tzinfo=UTC),
+                    datetime(2026, 8, 17, 19, tzinfo=UTC),
+                    Decimal("999"),
+                ),
+                (
+                    datetime(2026, 8, 17, 20, tzinfo=UTC),
+                    datetime(2026, 8, 17, 20, 1, tzinfo=UTC),
+                    Decimal("183"),
+                ),
+                (
+                    datetime(2026, 8, 20, 20, tzinfo=UTC),
+                    datetime(2026, 8, 20, 20, 1, tzinfo=UTC),
+                    Decimal("186"),
+                ),
             ),
             start=1,
         ):
             raw_id = uuid4()
             normalized_id = uuid4()
-            available_at = event_time + timedelta(minutes=1)
             content_hash = f"{index:064x}"
             raw_object_key = f"test/alpaca/NVDA/{event_time.isoformat()}"
             connection.execute(
@@ -828,6 +851,71 @@ def test_paper_weekly_worker_uses_only_persisted_alpaca_prices(
             select(func.count()).select_from(decision_outcome)
         ).scalar_one()
         assert outcome_count == 1
+        returns = connection.execute(select(decision_outcome.c.returns)).scalar_one()
+        assert Decimal(returns["1"]) > 0
+    engine.dispose()
+
+
+def test_weekly_worker_ignores_opinion_appended_after_cutoff(
+    isolated_database_url: str,
+) -> None:
+    _migrate(isolated_database_url)
+    engine = create_engine(isolated_database_url)
+    research_id = uuid4()
+    weekly_id = uuid4()
+    research_time = datetime(2026, 8, 16, tzinfo=UTC)
+    weekly_time = datetime(2026, 8, 21, tzinfo=UTC)
+    with engine.begin() as connection:
+        connection.execute(
+            insert(agent_run),
+            [
+                {
+                    "id": research_id,
+                    "run_type": "RESEARCH",
+                    "idempotency_key": f"opinion-source-{research_id}",
+                    "request_hash": "7" * 64,
+                    "request_payload": {"symbol": "NVDA"},
+                    "symbol": "NVDA",
+                    "decision_time": research_time,
+                    "data_cutoff": research_time,
+                    "created_at": research_time,
+                    "status": "QUEUED",
+                },
+                {
+                    "id": weekly_id,
+                    "run_type": "WEEKLY_REVIEW",
+                    "idempotency_key": f"opinion-weekly-{weekly_id}",
+                    "request_hash": "8" * 64,
+                    "request_payload": {"scheduled": True},
+                    "symbol": None,
+                    "decision_time": weekly_time,
+                    "data_cutoff": weekly_time,
+                    "created_at": weekly_time,
+                    "status": "QUEUED",
+                },
+            ],
+        )
+    assert execute_research_run(isolated_database_url, str(research_id), completed_at=research_time)
+    with engine.begin() as connection:
+        thesis_id, value = connection.execute(
+            select(research_opinion.c.thesis_id, research_opinion.c.value)
+        ).one()
+        future_value = "BEARISH" if value != "BEARISH" else "BULLISH"
+        connection.execute(
+            insert(research_opinion).values(
+                thesis_id=thesis_id,
+                value=future_value,
+                created_at=weekly_time + timedelta(seconds=1),
+            )
+        )
+
+    assert execute_weekly_review_run(isolated_database_url, str(weekly_id))
+    with engine.connect() as connection:
+        assert connection.execute(
+            select(weekly_review_run.c.decision_ids).where(
+                weekly_review_run.c.run_key == str(weekly_id)
+            )
+        ).scalar_one() == [str(connection.execute(select(decision_snapshot.c.id)).scalar_one())]
     engine.dispose()
 
 
@@ -922,6 +1010,220 @@ def test_portfolio_worker_uses_singleton_capital_without_forcing_abstain_order(
             *(["node.completed"] * 7),
             "run.completed",
         ]
+    engine.dispose()
+
+
+def _seed_cutoff_sensitive_portfolio_run(
+    connection: Connection,
+    *,
+    portfolio_run_id: UUID,
+    cutoff: datetime,
+    future_opinion: bool = False,
+    future_conflicting_evidence: bool = False,
+) -> None:
+    research_time = cutoff - timedelta(days=1)
+    policy_rows: tuple[tuple[Table, UUID, str, dict[str, str]], ...] = (
+        (research_scoring_policy_version, uuid4(), "research-v1", {}),
+        (
+            risk_policy_version,
+            uuid4(),
+            "risk-v1",
+            {
+                "max_position_weight": "0.178",
+                "max_gross_exposure": "1",
+                "min_cash_reserve": "0.05",
+                "max_daily_turnover": "0.25",
+                "max_drawdown": "0.20",
+                "max_research_age_days": "2",
+                "earnings_blackout_days": "1",
+            },
+        ),
+        (
+            execution_policy_version,
+            uuid4(),
+            "execution-v1",
+            {
+                "spread_bps": "0",
+                "slippage_bps": "0",
+                "fee_per_share": "0",
+                "minimum_fee": "0",
+                "volume_participation": "1",
+            },
+        ),
+        (confidence_policy_version, uuid4(), "confidence-v1", {}),
+    )
+    for table, policy_id, version, policy in policy_rows:
+        connection.execute(insert(table).values(id=policy_id, version=version, policy=policy))
+    research_policy_id, risk_policy_id, execution_policy_id, confidence_policy_id = (
+        row[1] for row in policy_rows
+    )
+    thesis_id = uuid4()
+    decision_id = uuid4()
+    connection.execute(
+        insert(agent_run).values(
+            id=portfolio_run_id,
+            run_type="PORTFOLIO",
+            idempotency_key=f"cutoff-portfolio-{portfolio_run_id}",
+            request_hash="9" * 64,
+            request_payload={"scheduled": True},
+            decision_time=cutoff,
+            data_cutoff=cutoff,
+            research_scoring_policy_version="research-v1",
+            risk_policy_version="risk-v1",
+            execution_policy_version="execution-v1",
+            confidence_policy_version="confidence-v1",
+            prompt_version="portfolio-prompt-v1",
+            model_version="fixture-proposer-v1",
+            created_at=cutoff,
+            status="QUEUED",
+        )
+    )
+    connection.execute(
+        insert(investment_thesis).values(
+            id=thesis_id,
+            symbol="NVDA",
+            as_of=research_time,
+            direction="BULLISH",
+            summary="cutoff-safe thesis",
+            confidence=Decimal("0.8"),
+            confidence_policy_version_id=confidence_policy_id,
+            created_at=research_time,
+        )
+    )
+    if future_opinion:
+        connection.execute(
+            insert(research_opinion).values(
+                thesis_id=thesis_id,
+                value="BEARISH",
+                created_at=cutoff + timedelta(seconds=1),
+            )
+        )
+    connection.execute(
+        insert(research_opinion).values(
+            thesis_id=thesis_id,
+            value="BULLISH",
+            created_at=research_time,
+        )
+    )
+    connection.execute(
+        insert(decision_snapshot).values(
+            id=decision_id,
+            thesis_id=thesis_id,
+            research_scoring_policy_version_id=research_policy_id,
+            risk_policy_version_id=risk_policy_id,
+            execution_policy_version_id=execution_policy_id,
+            confidence_policy_version_id=confidence_policy_id,
+            prompt_version="portfolio-prompt-v1",
+            model_version="fixture-proposer-v1",
+            data_cutoff=research_time,
+            available_at=research_time,
+            created_at=research_time,
+        )
+    )
+    for index, (conflict, created_at) in enumerate(
+        (
+            (False, research_time),
+            *(((True, cutoff + timedelta(seconds=1)),) if future_conflicting_evidence else ()),
+        ),
+        start=1,
+    ):
+        raw_id = uuid4()
+        normalized_id = uuid4()
+        metric_id = uuid4()
+        evidence_id = uuid4()
+        connection.execute(
+            insert(raw_data_object).values(
+                id=raw_id,
+                provider="FIXTURE",
+                feed_type="COMPANY_FACTS",
+                event_time=research_time,
+                available_at=research_time,
+                ingested_at=research_time,
+                content_hash=f"{index + 100:064x}",
+                raw_object_key=f"test/portfolio/evidence-{index}.json",
+                created_at=created_at,
+            )
+        )
+        connection.execute(
+            insert(normalized_record).values(
+                id=normalized_id,
+                raw_data_object_id=raw_id,
+                record_type="company_fact",
+                record_key=f"NVDA:cutoff:{index}",
+                normalization_version="test-v1",
+                created_at=created_at,
+            )
+        )
+        connection.execute(
+            insert(derived_metric).values(
+                id=metric_id,
+                normalized_record_id=normalized_id,
+                metric_name="cutoff_metric",
+                metric_value=Decimal("1"),
+                algorithm_version="test-v1",
+                created_at=created_at,
+            )
+        )
+        connection.execute(
+            insert(evidence_item).values(
+                id=evidence_id,
+                derived_metric_id=metric_id,
+                provider="FIXTURE",
+                conflict=conflict,
+                created_at=created_at,
+            )
+        )
+        connection.execute(
+            insert(thesis_evidence_link).values(
+                thesis_id=thesis_id,
+                evidence_id=evidence_id,
+                relation="SUPPORTS",
+                weight=Decimal("1"),
+                rationale="cutoff evidence",
+                created_at=created_at,
+            )
+        )
+    connection.execute(
+        insert(market_context_snapshot).values(
+            as_of=cutoff,
+            available_at=cutoff,
+            qqq_trend=Decimal("0.01"),
+            qqq_volatility=Decimal("0.18"),
+            soxx_relative_strength=Decimal("0.01"),
+            vix=Decimal("18"),
+            regime_label="RISK_ON",
+            algorithm_version="fixture-context-v1",
+            source_lineage=[str(uuid4())],
+            created_at=cutoff,
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    ("future_opinion", "future_conflicting_evidence"),
+    ((True, False), (False, True)),
+)
+def test_portfolio_worker_ignores_research_facts_appended_after_cutoff(
+    isolated_database_url: str,
+    future_opinion: bool,
+    future_conflicting_evidence: bool,
+) -> None:
+    _migrate(isolated_database_url)
+    engine = create_engine(isolated_database_url)
+    portfolio_run_id = uuid4()
+    cutoff = datetime(2026, 8, 21, 20, 30, tzinfo=UTC)
+    with engine.begin() as connection:
+        _seed_cutoff_sensitive_portfolio_run(
+            connection,
+            portfolio_run_id=portfolio_run_id,
+            cutoff=cutoff,
+            future_opinion=future_opinion,
+            future_conflicting_evidence=future_conflicting_evidence,
+        )
+
+    assert execute_portfolio_run(isolated_database_url, str(portfolio_run_id))
+    with engine.connect() as connection:
+        assert connection.execute(select(func.count()).select_from(order_intent)).scalar_one() == 1
     engine.dispose()
 
 

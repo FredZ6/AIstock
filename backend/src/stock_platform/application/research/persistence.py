@@ -109,6 +109,7 @@ class PostgresResearchStore:
             return
         if result.thesis is None or result.opinion is None or result.decision_id is None:
             raise ValueError("cannot persist an incomplete research decision")
+        persistence_time = self.available_at or datetime.now(UTC)
 
         evidence_ids: set[UUID] = set()
         for evidence in result.evidence:
@@ -160,6 +161,7 @@ class PostgresResearchStore:
                         "raw_object_key": evidence.raw_object_key,
                         "payload": dict(evidence.payload),
                     },
+                    created_at=persistence_time,
                 )
             )
             evidence_ids.add(evidence.id)
@@ -223,6 +225,7 @@ class PostgresResearchStore:
                     relation=link.relation.value,
                     weight=link.weight,
                     rationale=link.rationale,
+                    created_at=persistence_time,
                 )
             )
         self.connection.execute(
@@ -230,6 +233,7 @@ class PostgresResearchStore:
                 id=result.opinion.id,
                 thesis_id=result.opinion.thesis_id,
                 value=result.opinion.value.value,
+                created_at=persistence_time,
             )
         )
         self.connection.execute(
@@ -243,7 +247,7 @@ class PostgresResearchStore:
                 prompt_version=versions.prompt,
                 model_version=versions.model,
                 data_cutoff=result.specification.data_cutoff,
-                available_at=self.available_at or datetime.now(UTC),
+                available_at=persistence_time,
             )
         )
         self.connection.execute(

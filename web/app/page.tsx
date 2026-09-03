@@ -39,7 +39,7 @@ export default async function Home() {
     if (!availableFacts) return <ApiFailurePage currentPath="/" title="Today" />
     const unavailableDomains = [
       ...(watchlistResult.status === 'rejected' ? ['Watchlist API'] : []),
-      ...(healthResult.status === 'rejected' ? ['Provider health API'] : []),
+      ...(healthResult.status === 'rejected' ? ['Provider health'] : []),
       ...(portfolioResult.status === 'rejected' ? ['Portfolio API'] : []),
       ...(quotesResult.status === 'rejected' ? ['Market quotes API'] : []),
       ...(quotesResult.status === 'fulfilled' && quotesResult.value.status !== 'SUCCESS' ? ['Market quote quality'] : []),
