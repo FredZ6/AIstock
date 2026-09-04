@@ -587,13 +587,19 @@ def assert_live_result(result: ProviderResponse, store: RecordingStore) -> None:
 @pytest.mark.live
 def test_sec_live_contract() -> None:
     require_live()
-    store = RecordingStore()
-    result = SecProvider(
+    requested_at = datetime.now(UTC)
+    batch = SecProvider(
         user_agent=required_env("SEC_USER_AGENT"),
-        raw_store=store,
-        record_store=RecordingRecordStore(),
-    ).fetch(FeedType.COMPANY_FACTS, "NVDA", datetime.now(UTC))
-    assert_live_result(result, store)
+    ).fetch_batch(FeedType.COMPANY_FACTS, "NVDA", requested_at)
+    # Live transport receives facts after the request cutoff. This is not evidence
+    # that the new response was available to a historical decision at that cutoff.
+    assert batch.provider == "SEC"
+    assert batch.query_as_of == requested_at
+    assert batch.observed_at >= requested_at
+    document = json.loads(batch.body)
+    assert str(document["cik"]).zfill(10) == "0001045810"
+    assert isinstance(document["entityName"], str) and document["entityName"]
+    assert isinstance(document["facts"], dict) and document["facts"]
 
 
 @pytest.mark.live

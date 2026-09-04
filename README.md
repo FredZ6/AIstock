@@ -49,6 +49,29 @@ report, and fallback screenshots under `evals/reports/latest/`.
 
 ## Provider modes and data licensing
 
+### SEC read-only setup
+
+In your private root `.env`, set `SEC_USER_AGENT="AIstock/0.2 YOUR_REAL_EMAIL"`.
+Replace the placeholder with your reachable contact email. The adapter requires
+`application/version email` (not `Name App contact=email`). This is an HTTP identity,
+not a SEC API key. Do not commit personal configuration. Restart API/ingestion workers
+after changing it, since settings are loaded/cached by the running processes.
+
+To validate only SEC transport, without writing new production facts:
+
+```bash
+set -a
+source .env
+set +a
+LIVE_PROVIDER_TESTS=1 UV_CACHE_DIR=.uv-cache uv run pytest \
+  backend/tests/contract/providers/test_live_adapter_contracts.py \
+  -q -k sec_live_contract
+```
+
+This checks the real company-facts response identity and structure. It does not prove
+MinIO/PostgreSQL ingestion or make a newly fetched response eligible for an earlier
+decision cutoff. Keep IEX coverage declared unless SIP entitlement has actually been verified.
+
 The Next.js frontend requires an explicit server-side `WEB_DATA_MODE`:
 
 - `WEB_DATA_MODE=fixture` renders only the frozen synthetic demonstration data.

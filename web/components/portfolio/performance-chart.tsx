@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import Link from 'next/link'
 
 import type { PortfolioSnapshot } from '../../lib/product-types'
@@ -43,6 +43,8 @@ export function PerformanceChart({
   snapshot: PerformanceSnapshot
 }) {
   const [metric, setMetric] = useState<Metric>('nav')
+  const chartId = useId()
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
   const [range, setRange] = useState<Range>(30)
   const lastTime = parseAwareInstant(snapshot.performanceHistory.at(-1)?.time ?? snapshot.asOf).getTime()
   const visible = range === 'all'
@@ -85,13 +87,32 @@ export function PerformanceChart({
 
       {!compact && (
         <div aria-label="Performance metric" className="metric-tabs" role="tablist">
-          {metrics.map((item) => (
-            <button aria-selected={metric === item.key} key={item.key} onClick={() => setMetric(item.key)} role="tab" type="button">{item.label}</button>
+          {metrics.map((item, index) => (
+            <button
+              aria-controls={`${chartId}-panel`}
+              aria-selected={metric === item.key}
+              id={`${chartId}-${item.key}`}
+              key={item.key}
+              onClick={() => setMetric(item.key)}
+              onKeyDown={(event) => {
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? metrics.length - 1
+                  : event.key === 'ArrowRight' ? (index + 1) % metrics.length
+                    : event.key === 'ArrowLeft' ? (index + metrics.length - 1) % metrics.length : null
+                if (next === null) return
+                event.preventDefault()
+                setMetric(metrics[next].key)
+                tabRefs.current[next]?.focus()
+              }}
+              ref={(node) => { tabRefs.current[index] = node }}
+              role="tab"
+              tabIndex={metric === item.key ? 0 : -1}
+              type="button"
+            >{item.label}</button>
           ))}
         </div>
       )}
 
-      <div className="performance-plot" data-metric={metric}>
+      <div aria-labelledby={compact ? undefined : `${chartId}-${metric}`} className="performance-plot" data-metric={metric} id={`${chartId}-panel`} role={compact ? undefined : 'tabpanel'} tabIndex={compact ? undefined : 0}>
         <svg aria-label={`${selectedLabel} history`} preserveAspectRatio="none" role="img" viewBox="0 0 1000 260">
           <defs><linearGradient id="portfolio-performance-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopOpacity="0.32" /><stop offset="100%" stopOpacity="0" /></linearGradient></defs>
           <line className="chart-baseline" x1="0" x2="1000" y1="240" y2="240" />

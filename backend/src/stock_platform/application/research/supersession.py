@@ -3,7 +3,8 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import ColumnElement, Connection, and_, exists, insert, select
+from sqlalchemy import ColumnElement, Connection, and_, exists, select
+from sqlalchemy.dialects.postgresql import insert
 
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.research.decision_diff import build_decision_diff
@@ -121,8 +122,9 @@ def record_decision_supersession(
         raise ValueError("replacement decision is not visible at the supersession time")
     replacement["correction_reason"] = normalized_reason
 
-    connection.execute(
-        insert(decision_diff).values(
+    inserted = connection.execute(
+        insert(decision_diff)
+        .values(
             id=uuid4(),
             decision_id=replacement_decision_id,
             previous_decision_id=previous_decision_id,
@@ -130,5 +132,17 @@ def record_decision_supersession(
             changes=build_decision_diff(previous, replacement),
             created_at=timestamp,
         )
-    )
-    return True
+        .on_conflict_do_nothing(index_elements=[decision_diff.c.previous_decision_id])
+        .returning(decision_diff.c.id)
+    ).scalar_one_or_none()
+    if inserted is not None:
+        return True
+    # Under READ COMMITTED, a new statement sees the committed concurrent winner.
+    winner = connection.execute(
+        select(decision_diff.c.decision_id).where(
+            decision_diff.c.previous_decision_id == previous_decision_id
+        )
+    ).scalar_one()
+    if winner != replacement_decision_id:
+        raise ValueError("decision already has a different replacement")
+    return False
