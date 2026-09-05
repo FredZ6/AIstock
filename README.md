@@ -86,8 +86,11 @@ FastAPI and PostgreSQL, then start Next.js with:
 WEB_DATA_MODE=api API_BASE_URL=http://127.0.0.1:8000 pnpm --dir web dev
 ```
 
-The API-mode Today, Watchlist, Stock Research, and Portfolio routes read only persisted FastAPI
-facts. Market reads require an aware `decision_time` and enforce `available_at <= decision_time`.
+The API-mode Today, Watchlist, Stock Research, and Portfolio routes use persisted FastAPI facts for
+all research, portfolio, alert, and paper-trading decisions. Today also embeds an isolated,
+read-only TradingView current-market reference; it is visibly labelled as external context, is not
+persisted evidence, and never enters decision-time calculations. Market evidence reads require an
+aware `decision_time` and enforce `available_at <= decision_time`.
 The read surface includes `/api/v1/market-data/quotes`, `/api/v1/market-data/bars/{symbol}`,
 `/api/v1/data-quality`, and evidence-backed `/api/v1/providers/health`. If a provider, contract, or
 database read fails, the affected route renders an explicit Failure or Degraded state; it never

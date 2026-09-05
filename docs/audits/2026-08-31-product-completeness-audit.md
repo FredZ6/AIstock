@@ -215,6 +215,23 @@ Severity summary: **0 P0, 12 P1, 12 P2, 0 P3**.
   absent. Do not close the research-completeness finding based on ingestion alone.
 - Detailed execution evidence and exact outcomes are recorded in `docs/progress.md`.
 
+### 2026-09-05 SEC blocker resolution
+
+The September 4 bullets above remain as the append-only incident snapshot. PR #20 supersedes their
+current blocker status with the following verified evidence:
+
+- The blocked historical filing now falls back to the official SEC complete-submission document
+  when the primary document is missing, invalid, or absent. Its raw `.txt` object was read back
+  from MinIO with a matching SHA-256 hash.
+- The corrected production ingestion path persisted 412 SEC filings and 15,642 financial facts;
+  all 426 SEC raw-object rows had present, hash-matching MinIO objects, and no fact violated filing
+  or availability ordering.
+- `/api/v1/stocks/{symbol}/research` now returns PIT-filtered SEC filings and financial facts, and
+  API-mode Stock Research renders those facts plus their raw quality dimensions. Desktop/mobile
+  live-browser checks passed without Fixture substitution or horizontal overflow.
+- Alpha Vantage remains unconfigured and SIP remains unavailable. These are explicit provider
+  prerequisites, not silently substituted data and not resolved by this SEC repair.
+
 The following areas still require targeted verification before remediation begins:
 
 1. Reproduce the SSE connection-pool failure with concurrent running streams and prove bounded

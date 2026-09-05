@@ -185,7 +185,7 @@ function enumeration<T extends string>(value: unknown, allowed: readonly T[], pa
   return value as T
 }
 
-function configured(value: unknown, path: string): boolean {
+function booleanValue(value: unknown, path: string): boolean {
   if (typeof value !== 'boolean') throw new TypeError(`${path} must be boolean`)
   return value
 }
@@ -322,7 +322,7 @@ export async function getWeeklyReviewDetail(
         outcomeId: text(item.outcome_id, 'weekly_review.attribution.outcome_id'),
         category: text(item.category, 'weekly_review.attribution.category'),
         rationale: text(item.rationale, 'weekly_review.attribution.rationale'),
-        controllable: configured(item.controllable, 'weekly_review.attribution.controllable'),
+        controllable: booleanValue(item.controllable, 'weekly_review.attribution.controllable'),
       })),
       lessons: rows('lessons').map((item) => ({
         id: text(item.id, 'weekly_review.lesson.id'),
@@ -429,7 +429,7 @@ export async function getProviderHealth(options: LiveDataClientOptions): Promise
     for (const [name, value] of Object.entries(rows)) {
       const row = record(value, `health.providers.${name}`)
       providers[name] = {
-        configured: configured(row.configured, `${name}.configured`),
+        configured: booleanValue(row.configured, `${name}.configured`),
         mode: enumeration(row.mode, ['fixture', 'read_only', 'unavailable'] as const, `${name}.mode`),
         coverage: row.coverage === undefined || row.coverage === null ? null : text(row.coverage, `${name}.coverage`),
         status: row.status === undefined || row.status === null
@@ -563,7 +563,7 @@ export async function getDataQuality(
     const parsed = page.items.map((item, index) => {
       const row = record(item, `data_quality[${index}]`)
       return {
-        conflict: configured(row.conflict, 'data_quality.conflict'),
+        conflict: booleanValue(row.conflict, 'data_quality.conflict'),
         coverage: row.coverage === null ? null : enumeration(row.coverage, ['IEX', 'SIP'] as const, 'data_quality.coverage'),
         dataset: text(row.dataset, 'data_quality.dataset'),
         delay: row.delay === null ? null : text(row.delay, 'data_quality.delay'),

@@ -3197,3 +3197,25 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   network, blocking or provider policy. The explicit placeholder and separate persisted evidence
   remain visible; the application never substitutes Fixture data or treats widget values as
   research, portfolio or execution inputs.
+
+## 2026-09-05 — PR #20 review remediation
+
+- GitHub PR #20 checks completed successfully: `evaluation` passed in 14 seconds and `Verify`
+  passed in 4 minutes 27 seconds. The PR is mergeable and has no remote review comments.
+- Standards review found README's API-mode wording was narrower than the implemented, approved
+  TradingView boundary. Updated it to state that authoritative decision inputs remain persisted
+  FastAPI facts while the isolated widget is external current-market context only.
+- Spec review found the audit preserved the September 4 SEC incident without a colocated resolution;
+  added a September 5 reconciliation that keeps the historical evidence while identifying the
+  verified document fallback, persisted counts/lineage, PIT API/UI closure, and remaining external
+  Alpha/SIP prerequisites.
+- Renamed the generic runtime Boolean validator from `configured` to `booleanValue`; this removes
+  misleading terminology at the new data-quality conflict call site without changing behavior.
+- Dependency recovery: an initial focused `pnpm` invocation detected a stale dependency metadata
+  link and began rebuilding `node_modules`; sandbox DNS was unavailable, so it was stopped. A
+  locked `pnpm install --frozen-lockfile` then restored 468 packages entirely from the local
+  content-addressable store (`reused 468`, `downloaded 0`); no manifest or lockfile changed.
+- Frontend regression command `pnpm --dir web test -- --run tests/live-data-api.test.ts
+  tests/tradingview-ticker-list.test.tsx tests/api-pages.test.tsx && pnpm --dir web typecheck &&
+  pnpm --dir web lint`: exit 0; Vitest ran the configured complete suite, 25 files / 136 tests
+  passed, followed by successful TypeScript and ESLint checks.
