@@ -140,7 +140,7 @@ a:active, button:active { transform: scale(0.98); transition: transform 100ms ea
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 2rem; margin-bottom: 1.25rem; }
 .section-heading h2, .operations-rail h2 { margin: 0.35rem 0 0; font-size: clamp(1.25rem, 2vw, 1.75rem); font-weight: 650; letter-spacing: -0.025em; line-height: 1.1; }
 .section-heading > a { min-height: 2.75rem; padding: 0.75rem 0; color: var(--text-secondary); font-size: 0.78rem; font-weight: 650; }
-.table-scroll { overflow-x: auto; }
+.table-scroll { width: 100%; max-width: 100%; overflow-x: auto; }
 table { width: 100%; min-width: 58rem; border-collapse: collapse; }
 th, td { padding: 1rem 0.75rem; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: top; }
 thead th { color: var(--text-tertiary); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; }
@@ -312,7 +312,7 @@ button:disabled { cursor: not-allowed; opacity: 0.48; }
   background: var(--ink-raised);
   box-shadow: 0 1.25rem 3.5rem -2.65rem oklch(34% 0.065 255 / 0.34), inset 0 1px 0 oklch(100% 0 0 / 0.92);
 }
-.terminal-section { margin-top: clamp(1.25rem, 3vw, 2.25rem); padding: clamp(1.35rem, 3vw, 2.25rem); }
+.terminal-section { min-width: 0; max-width: 100%; margin-top: clamp(1.25rem, 3vw, 2.25rem); padding: clamp(1.35rem, 3vw, 2.25rem); overflow: hidden; }
 .terminal-section.first-section { margin-top: clamp(1.25rem, 3vw, 2.25rem); }
 .attention-grid { gap: clamp(1.25rem, 3vw, 2.25rem); }
 .operations-rail { margin-top: clamp(1.25rem, 3vw, 2.25rem); padding: clamp(1.35rem, 3vw, 2.25rem); }
@@ -349,6 +349,18 @@ button:hover { box-shadow: 0 0.65rem 1.5rem -0.85rem oklch(34% 0.08 255 / 0.4); 
 .tradingview-widget-copyright { padding: 0.2rem 0.75rem; color: var(--text-tertiary); font-size: 0.58rem; text-align: right; }
 .tradingview-widget-copyright a { color: var(--signal); }
 .mini-chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+.market-reference-list { overflow: hidden; margin-top: 1.25rem; border: 1px solid var(--line-soft); border-radius: 1.5rem; background: var(--ink-raised); box-shadow: 0 1.2rem 3rem -2.25rem oklch(36% 0.07 255 / 0.32), inset 0 1px 0 color-mix(in oklch, white 75%, transparent); }
+.market-reference-widget { width: 100%; background: var(--ink-raised); }
+.market-reference-widget .tradingview-widget-container__widget { height: calc(100% - 1.35rem); }
+.market-widget-placeholder { display: grid; min-height: 12rem; place-items: center; margin: 0; padding: 2rem; color: var(--text-tertiary); font-size: 0.76rem; text-align: center; }
+.persisted-quote-evidence { margin-top: 0.85rem; border-top: 1px solid var(--line-soft); }
+.persisted-quote-evidence summary { display: flex; min-height: 2.75rem; align-items: center; width: fit-content; cursor: pointer; color: var(--text-secondary); font-size: 0.76rem; font-weight: 680; }
+.persisted-quote-evidence > p { margin: 0.35rem 0 0.75rem; color: var(--text-tertiary); font-size: 0.7rem; }
+.persisted-quote-evidence ul { padding: 0; margin: 0; border-top: 1px solid var(--line-soft); list-style: none; }
+.persisted-quote-evidence li { display: grid; grid-template-columns: minmax(4rem, 0.55fr) minmax(7.5rem, 0.7fr) minmax(6rem, 0.6fr) minmax(12rem, 1fr); gap: 1rem; align-items: center; min-height: 3.5rem; padding: 0.65rem 0; border-bottom: 1px solid var(--line-soft); font-size: 0.72rem; }
+.persisted-quote-evidence li a { font-weight: 760; }
+.persisted-quote-evidence li strong { font-variant-numeric: tabular-nums; }
+.persisted-quote-evidence li span, .persisted-quote-evidence li time { color: var(--text-tertiary); }
 .watchlist-controls { display: flex; align-items: end; justify-content: space-between; gap: 1.5rem; margin: 1rem 0; padding: 1rem; border: 1px solid var(--line-soft); border-radius: 1rem; }
 .watchlist-controls h3 { margin: 0; font-size: 0.9rem; }
 .watchlist-controls p { margin: 0.35rem 0 0; color: var(--text-tertiary); font-size: 0.7rem; }
@@ -505,6 +517,10 @@ input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--l
   .watchlist-controls form { grid-template-columns: 1fr; }
   .watchlist-controls form label { grid-column: auto; }
   .research-domain-grid { grid-template-columns: 1fr; }
+  .market-reference-list { border-radius: 1.15rem; }
+  .market-reference-list .market-widget-heading { align-items: flex-start; flex-direction: column; gap: 0.15rem; }
+  .persisted-quote-evidence li { grid-template-columns: 1fr auto; gap: 0.2rem 1rem; }
+  .persisted-quote-evidence li span, .persisted-quote-evidence li time { grid-column: 1 / -1; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -515,4 +531,5 @@ input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--l
 @media (prefers-contrast: more) {
   :root { --line: oklch(78% 0.02 78); --line-soft: oklch(58% 0.02 78); --text-secondary: oklch(88% 0.01 78); --text-tertiary: oklch(78% 0.01 78); }
   .app-chrome { background: var(--ink-heavy); box-shadow: 0 0 0 1px var(--line); }
+  .market-reference-list { border-width: 2px; box-shadow: none; }
 }

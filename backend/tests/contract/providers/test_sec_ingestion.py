@@ -10,6 +10,7 @@ from stock_platform.infrastructure.providers.base import (
     HttpResponse,
     ProviderBatch,
     ProviderRateLimit,
+    ProviderTransportError,
 )
 from stock_platform.infrastructure.providers.sec import (
     SecFilingRegime,
@@ -22,6 +23,112 @@ from stock_platform.infrastructure.providers.sec import (
 
 AS_OF = datetime(2026, 8, 25, tzinfo=UTC)
 FIXTURES = Path(__file__).parent / "fixtures" / "sec"
+
+
+def test_missing_primary_document_reads_verified_complete_submission() -> None:
+    requests: list[str] = []
+    # Synthetic SGML transport response, not a recorded live filing.
+    body = (
+        b"<SEC-DOCUMENT>0001012870-00-006127.txt\n<SEC-HEADER>\n"
+        b"ACCESSION NUMBER: 0001012870-00-006127\nCENTRAL INDEX KEY: 0001045810\n"
+        b"</SEC-HEADER>\n<DOCUMENT>\n<FILENAME>0001.txt\n<TEXT>Test only</TEXT>\n"
+        b"</DOCUMENT>\n</SEC-DOCUMENT>"
+    )
+
+    def transport(request: HttpRequest) -> HttpResponse:
+        requests.append(request.url)
+        return HttpResponse(
+            status_code=404 if len(requests) == 1 else 200,
+            headers={"Content-Type": "text/plain"},
+            body=b"missing" if len(requests) == 1 else body,
+        )
+
+    batch = SecProvider(
+        user_agent="AIStock/0.2 research@example.com", transport=transport, clock=lambda: AS_OF
+    ).fetch_filing_document(
+        "NVDA", accession_number="0001012870-00-006127", primary_document="0001.txt", as_of=AS_OF
+    )
+    assert batch.body == body
+    assert requests == [
+        "https://www.sec.gov/Archives/edgar/data/1045810/000101287000006127/0001.txt",
+        "https://www.sec.gov/Archives/edgar/data/1045810/0001012870-00-006127.txt",
+    ]
+
+
+def test_empty_historical_primary_document_reads_complete_submission_directly() -> None:
+    requests: list[str] = []
+    body = (
+        b"<SEC-DOCUMENT>0001012870-00-003122.txt\n<SEC-HEADER>\n"
+        b"ACCESSION NUMBER: 0001012870-00-003122\nCENTRAL INDEX KEY: 0001045810\n"
+        b"</SEC-HEADER>\n</SEC-DOCUMENT>"
+    )
+
+    def transport(request: HttpRequest) -> HttpResponse:
+        requests.append(request.url)
+        return HttpResponse(status_code=200, headers={"content-type": "text/plain"}, body=body)
+
+    batch = SecProvider(
+        user_agent="AIStock/0.2 research@example.com", transport=transport, clock=lambda: AS_OF
+    ).fetch_filing_document(
+        "NVDA", accession_number="0001012870-00-003122", primary_document="", as_of=AS_OF
+    )
+    assert batch.body == body
+    assert requests == ["https://www.sec.gov/Archives/edgar/data/1045810/0001012870-00-003122.txt"]
+
+
+@pytest.mark.parametrize("status", [401, 403, 429, 503])
+def test_primary_document_errors_do_not_trigger_alternate_fetch(status: int) -> None:
+    requests: list[str] = []
+
+    def transport(request: HttpRequest) -> HttpResponse:
+        requests.append(request.url)
+        return HttpResponse(status_code=status, headers={}, body=b"error")
+
+    with pytest.raises(ProviderTransportError) as caught:
+        SecProvider(
+            user_agent="AIStock/0.2 research@example.com", transport=transport
+        ).fetch_filing_document(
+            "NVDA",
+            accession_number="0001012870-00-006127",
+            primary_document="0001.txt",
+            as_of=AS_OF,
+        )
+    assert caught.value.status_code == status
+    assert len(requests) == 1
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"<html>Temporarily unavailable</html>",
+        (
+            b"<SEC-DOCUMENT>other.txt\n<SEC-HEADER>\nACCESSION NUMBER: 0001012870-00-006128\n"
+            b"CENTRAL INDEX KEY: 0001045810\n</SEC-HEADER>\n</SEC-DOCUMENT>"
+        ),
+        (
+            b"<SEC-DOCUMENT>0001012870-00-006127.txt\n<SEC-HEADER>\n"
+            b"ACCESSION NUMBER: 0001012870-00-006127\nCENTRAL INDEX KEY: 0000320193\n"
+            b"</SEC-HEADER>\n</SEC-DOCUMENT>"
+        ),
+    ],
+)
+def test_complete_submission_rejects_wrong_identity_or_error_page(body: bytes) -> None:
+    calls = 0
+
+    def transport(request: HttpRequest) -> HttpResponse:
+        nonlocal calls
+        calls += 1
+        return HttpResponse(status_code=404 if calls == 1 else 200, headers={}, body=body)
+
+    with pytest.raises(ProviderTransportError, match="SCHEMA_DRIFT"):
+        SecProvider(
+            user_agent="AIStock/0.2 research@example.com", transport=transport
+        ).fetch_filing_document(
+            "NVDA",
+            accession_number="0001012870-00-006127",
+            primary_document="0001.txt",
+            as_of=AS_OF,
+        )
 
 
 @pytest.mark.parametrize(

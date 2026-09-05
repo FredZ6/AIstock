@@ -40,17 +40,56 @@ describe('API mode pages', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument()
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
     expect(screen.getByText(/ALPACA · IEX/)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Current market reference' })).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Latest persisted quotes' })).not.toBeInTheDocument()
+    const evidence = screen.getByText('Persisted quote evidence · 1 symbol').closest('details')
+    expect(evidence).not.toHaveAttribute('open')
+    expect(screen.getByText(/TradingView data is external current-market context/)).toBeInTheDocument()
     expect(screen.getByRole('status', { name: 'Some decision facts are unavailable' })).toHaveTextContent('No Fixture data was substituted')
     expect(screen.queryByText('Fixture Mode')).not.toBeInTheDocument()
   })
 
   it('keeps current quote visible when persisted research is empty', () => {
-    render(<ApiResearchPage asOf="2026-08-29T09:30:00Z" quote={quote} records={[]} symbol="NVDA" />)
+    render(<ApiResearchPage asOf="2026-08-29T09:30:00Z" dataQuality={[]} financialFacts={[]} quote={quote} records={[]} secFilings={[]} symbol="NVDA" />)
 
     expect(screen.getByRole('heading', { name: 'NVDA research' })).toBeInTheDocument()
     expect(screen.getByRole('status', { name: 'Research evidence unavailable' })).toBeInTheDocument()
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
     expect(screen.queryByText(/frozen fixture/i)).not.toBeInTheDocument()
+  })
+
+  it('renders persisted SEC filings and financial facts with source and availability', () => {
+    render(<ApiResearchPage
+      asOf="2026-08-29T09:30:00Z"
+      dataQuality={[{
+        conflict: false, coverage: null, dataset: 'company_facts', delay: null,
+        dimension: 'FRESHNESS', freshness: 'PT0S', id: 'quality-1',
+        observedAt: '2026-08-29T09:20:00Z', provider: 'SEC', status: 'PASS',
+      }]}
+      financialFacts={[{
+        accessionNumber: '0001045810-26-000001', availableAt: '2026-08-28T20:05:00Z',
+        canonicalConcept: 'REVENUE', currency: 'USD', id: 'fact-1', mappingStatus: 'EXACT',
+        periodEnd: '2026-07-31', periodStart: '2026-05-01', provider: 'SEC',
+        sourceConcept: 'Revenues', taxonomy: 'us-gaap', unit: 'USD', value: '9007199254740993',
+      }]}
+      quote={quote}
+      records={[]}
+      secFilings={[{
+        acceptedAt: '2026-08-28T20:05:00Z', accessionNumber: '0001045810-26-000001',
+        availableAt: '2026-08-28T20:05:00Z', description: 'Quarterly report',
+        documentRawObjectKey: 'live/SEC/filing_sections/hash.txt', filingDate: '2026-08-28',
+        form: '10-Q', id: 'filing-1', provider: 'SEC', reportDate: '2026-07-31',
+      }]}
+      symbol="NVDA"
+    />)
+    expect(screen.getByRole('heading', { name: 'SEC filings' })).toBeInTheDocument()
+    expect(screen.getAllByText('0001045810-26-000001')).toHaveLength(2)
+    expect(screen.getByText('REVENUE')).toBeInTheDocument()
+    expect(screen.getByText('9,007,199,254,740,993 USD')).toBeInTheDocument()
+    expect(screen.getByText('live/SEC/filing_sections/hash.txt')).toBeInTheDocument()
+    expect(screen.getByText('FRESHNESS')).toBeInTheDocument()
+    expect(screen.getByText('PASS')).toBeInTheDocument()
+    expect(screen.queryByText('Fixture Mode')).not.toBeInTheDocument()
   })
 
   it('shows an empty persisted paper portfolio without inventing NAV or ledger facts', () => {

@@ -1,48 +1,32 @@
-# Market Quote Rank List Design
+# TradingView Market Reference List Design
 
 ## Goal
 
-Replace the Today page's large quote-card grid with a compact, scannable market rank list modeled on the approved reference: symbol and company name on the left, a point-in-time sparkline in the middle, and latest price plus daily return on the right.
+Replace the Today page's large persisted-quote card grid with the approved TradingView-powered compact market list: symbol identity, current price, daily movement, and inline chart context in a vertically scannable presentation.
 
-## Source of truth and data integrity
+## Data boundary
 
-- The list uses only persisted backend facts visible at the page `decision_time`.
-- Every bar used by the sparkline and return calculation must satisfy `available_at <= decision_time` and `event_time <= decision_time`.
-- Company names come from persisted security-master records, not a frontend lookup table.
-- Daily return is deterministic code derived from persisted decimal closes. It is absent when a valid previous close is unavailable.
-- Sparkline points are decimal strings in the API and are converted only for SVG coordinates at the presentation boundary; money remains decimal strings everywhere else.
-- Missing enrichment is rendered as `Unavailable`. Fixture data and TradingView data are never substituted in API mode.
+- TradingView is a read-only **current market reference** and is never decision-time evidence.
+- The widget does not feed research, portfolio decisions, alerts, or paper execution.
+- Persisted Alpaca quotes remain available in a collapsed audit disclosure with the page PIT cutoff, provider coverage, price, and `available_at`.
+- If the third-party widget is blocked or slow, an explicit loading/unavailable placeholder remains. Fixture data is never substituted.
 
-## Presentation
+## Technical approach
 
-Each row is one link to `/research/{symbol}` and contains:
+Use TradingView's isolated Market Data iframe widget for one compact multi-symbol list. The initially evaluated Web Component bundle was rejected after real-browser verification showed its module response lacked the cross-origin header required by browsers. One supported iframe still replaces eleven independent chart documents. Symbols are derived only from the successfully returned persisted quote list, normalized and allowlisted before being passed to the widget.
 
-1. Symbol and company name.
-2. A lightweight inline SVG sparkline with a non-color direction label for accessibility.
-3. Latest USD close and signed daily percentage return.
-4. Provider, entitlement coverage, and availability time as compact provenance text.
-
-Rows use separators rather than independent cards. Positive, negative, and neutral movement use semantic colors, while text and accessible labels preserve meaning without relying on color. Desktop uses three columns; narrow screens retain the same reading order and reduce the chart width.
+The widget is reinitialized with its supported `colorTheme` option when the page theme changes, so the existing light/dark toggle remains authoritative. The wrapper owns sizing, loading copy, provenance disclosure, and the visual separation between external current data and internal persisted facts.
 
 ## Apple design constraints
 
-- **Purpose and simplicity:** make symbol, current price, and movement the dominant scan path; demote provenance without hiding it.
-- **Familiarity:** the whole row behaves as one predictable navigation target and retains a visible keyboard focus ring.
-- **Craft:** use tabular numerals, optical heading tracking, consistent baselines, system typography, and deliberate `rem`-based spacing.
-- **Response:** apply immediate pointer-down feedback with a restrained scale/color change; do not add decorative or looping animation.
-- **Flexibility:** preserve a minimum 44px row target, readable order under text scaling, light/dark theme contrast, and a narrow-screen layout without horizontal scrolling.
-- **Accessibility:** the sparkline has an accessible movement description, visual meaning never relies on color alone, and reduced-motion/high-contrast preferences are respected.
-
-## Failure and degraded behavior
-
-- No latest quote: the existing missing-symbol and degraded-state behavior remains authoritative.
-- No security-master name: show `Company unavailable`.
-- Fewer than two daily closes: show `Return unavailable` and a neutral chart state.
-- No history: show `Chart unavailable` without fabricated points.
+- **Purpose and simplicity:** the TradingView list is the primary scan surface; provider evidence is one level deeper in a disclosure.
+- **Safety and understanding:** “Current market reference” and “Not decision-time evidence” remain visible above the widget.
+- **Craft:** use one rounded material, deliberate spacing, stable reserved height, and system typography around the external surface.
+- **Response:** keep widget loading non-blocking and use an immediate, restrained disclosure press state.
+- **Flexibility:** no horizontal page overflow, usable narrow-screen sizing, high-contrast boundary, reduced-motion support, and light/dark theme inheritance.
 
 ## Verification
 
-- Backend integration tests prove PIT filtering, deterministic return calculation, company-name enrichment, and unavailable history behavior.
-- Web contract tests reject malformed enrichment fields.
-- Component tests prove row semantics, links, provenance, signed return, and accessible chart fallback.
-- Existing API degradation and full web verification suites remain green.
+- Component tests lock the external-data warning, normalized exchange-qualified TradingView symbols, isolated widget configuration, placeholder, compact height, theme, and collapsed PIT evidence.
+- Existing API tests prove the underlying persisted quote contract remains unchanged.
+- Route-degradation tests prove no Fixture substitution when backend data is missing.

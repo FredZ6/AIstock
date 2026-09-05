@@ -1,17 +1,21 @@
 import Link from 'next/link'
 
 import { initializePortfolioAction } from '../../app/portfolio/actions'
-import { formatMoney, formatPercent } from '../../lib/format'
+import { formatDecimal, formatMoney, formatPercent } from '../../lib/format'
 import type {
+  DataQuality,
+  FinancialFact,
   MarketQuote,
   PortfolioSummary,
   ProviderHealth,
   ResearchRecord,
+  SecFiling,
   WeeklyReviewDetail,
 } from '../../lib/server/live-data-api'
 import { formatDualTime } from '../../lib/time'
 import { AppShell } from '../layout/app-shell'
 import { TradingViewWidget } from '../market/tradingview-widget'
+import { TradingViewTickerList } from '../market/tradingview-ticker-list'
 import { StateBoundary } from '../states/state-boundary'
 import { PageHeading, Signal } from '../ui/product-ui'
 
@@ -97,16 +101,22 @@ export function ApiTodayPage({
       }}>
         <section className="terminal-section first-section" aria-labelledby="live-market-title">
           <div className="section-heading">
-            <div><p className="section-kicker">Read-only market data</p><h2 id="live-market-title">Latest persisted quotes</h2></div>
-            <span className="muted-copy">PIT cutoff · {formatDualTime(asOf).newYork}</span>
+            <div><p className="section-kicker">External current market</p><h2 id="live-market-title">Market watchlist</h2></div>
+            <span className="muted-copy">TradingView data is external current-market context · Not decision-time evidence</span>
           </div>
-          <ul className="watchlist-heatmap" aria-label="Latest persisted quotes">
-            {quotes.map((quote) => <li key={quote.symbol}>
-              <div className="heatmap-primary"><Link href={`/research/${quote.symbol}`}>{quote.symbol}</Link><strong>{formatMoney(quote.close, 'USD')}</strong></div>
-              <span>{quote.provider} · {quote.coverage}</span>
-              <small>Available {formatDualTime(quote.availableAt).newYork}</small>
-            </li>)}
-          </ul>
+          <TradingViewTickerList symbols={quotes.map((quote) => quote.symbol)} />
+          <details className="persisted-quote-evidence">
+            <summary>Persisted quote evidence · {quotes.length} {quotes.length === 1 ? 'symbol' : 'symbols'}</summary>
+            <p>PIT cutoff · {formatDualTime(asOf).newYork}</p>
+            <ul aria-label="Persisted quote evidence">
+              {quotes.map((quote) => <li key={quote.symbol}>
+                <Link href={`/research/${quote.symbol}`}>{quote.symbol}</Link>
+                <strong>{formatMoney(quote.close, 'USD')}</strong>
+                <span>{quote.provider} · {quote.coverage}</span>
+                <time dateTime={quote.availableAt}>Available {formatDualTime(quote.availableAt).newYork}</time>
+              </li>)}
+            </ul>
+          </details>
         </section>
         <section className="terminal-section" aria-labelledby="paper-portfolio-title">
           <p className="section-kicker">Paper only</p><h2 id="paper-portfolio-title">Paper portfolio</h2>
@@ -121,21 +131,30 @@ export function ApiTodayPage({
 
 export function ApiResearchPage({
   asOf,
+  dataQuality,
+  financialFacts,
   quote,
   records,
+  secFilings,
   symbol,
   unavailableDomains = [],
 }: {
   asOf: string
+  dataQuality: DataQuality[]
+  financialFacts: FinancialFact[]
   quote: MarketQuote | null
   records: ResearchRecord[]
+  secFilings: SecFiling[]
   symbol: string
   unavailableDomains?: string[]
 }) {
   const missing = [
     ...unavailableDomains,
     ...(!quote ? ['Current market reference'] : []),
-    ...(!records.length ? ['Research', 'Fundamentals', 'Earnings', 'News', 'Options', 'Analyst targets'] : []),
+    ...(!records.length ? ['Research'] : []),
+    ...(!secFilings.length ? ['SEC filings'] : []),
+    ...(!financialFacts.length ? ['Fundamentals'] : []),
+    'Earnings', 'News', 'Options', 'Analyst targets',
   ]
   const state = missing.length ? {
     kind: 'degraded' as const,
@@ -157,6 +176,24 @@ export function ApiResearchPage({
           <p className="section-kicker">Persisted thesis</p><h2>{record.direction}</h2><p>{record.summary}</p>
           <dl className="decision-facts"><div><dt>Opinion</dt><dd>{record.opinion ? <Signal tone={record.opinion}>{record.opinion}</Signal> : 'Unavailable'}</dd></div><div><dt>Confidence</dt><dd>{formatPercent(record.confidence, { signed: false })}</dd></div><div><dt>Horizon</dt><dd>{record.horizon}</dd></div></dl>
         </article>)}
+        {secFilings.length ? <section className="terminal-section" aria-labelledby="sec-filings-heading">
+          <p className="section-kicker">Persisted evidence</p><h2 id="sec-filings-heading">SEC filings</h2>
+          <div className="table-scroll"><table><thead><tr><th>Form</th><th>Filed</th><th>Report period</th><th>Accession</th><th>Available</th><th>Raw source</th></tr></thead><tbody>
+            {secFilings.map((filing) => <tr key={filing.id}><td>{filing.form}</td><td>{filing.filingDate}</td><td>{filing.reportDate ?? 'Unavailable'}</td><td>{filing.accessionNumber}</td><td>{formatDualTime(filing.availableAt).newYork}</td><td><code>{filing.documentRawObjectKey}</code></td></tr>)}
+          </tbody></table></div>
+        </section> : null}
+        {financialFacts.length ? <section className="terminal-section" aria-labelledby="financial-facts-heading">
+          <p className="section-kicker">Point-in-time fundamentals</p><h2 id="financial-facts-heading">Financial facts</h2>
+          <div className="table-scroll"><table><thead><tr><th>Concept</th><th>Value</th><th>Period</th><th>Mapping</th><th>Accession</th><th>Available</th></tr></thead><tbody>
+            {financialFacts.map((fact) => <tr key={fact.id}><td>{fact.canonicalConcept ?? fact.sourceConcept}</td><td>{formatDecimal(fact.value)} {fact.currency ?? fact.unit}</td><td>{fact.periodStart} — {fact.periodEnd}</td><td>{fact.mappingStatus}</td><td>{fact.accessionNumber}</td><td>{formatDualTime(fact.availableAt).newYork}</td></tr>)}
+          </tbody></table></div>
+        </section> : null}
+        {dataQuality.length ? <section className="terminal-section" aria-labelledby="sec-quality-heading">
+          <p className="section-kicker">Raw quality dimensions</p><h2 id="sec-quality-heading">SEC data quality</h2>
+          <div className="table-scroll"><table><thead><tr><th>Dataset</th><th>Dimension</th><th>Status</th><th>Freshness</th><th>Delay</th><th>Conflict</th><th>Observed</th></tr></thead><tbody>
+            {dataQuality.map((quality) => <tr key={quality.id}><td>{quality.dataset}</td><td>{quality.dimension}</td><td>{quality.status}</td><td>{quality.freshness ?? 'Unavailable'}</td><td>{quality.delay ?? 'Unavailable'}</td><td>{quality.conflict ? 'Yes' : 'No'}</td><td>{formatDualTime(quality.observedAt).newYork}</td></tr>)}
+          </tbody></table></div>
+        </section> : null}
       </StateBoundary>
     </AppShell>
   )

@@ -34,6 +34,13 @@ export function formatMoney(value: string, currency: 'USD'): string {
   return `${currency} ${scaled.negative ? '-' : ''}${grouped}.${fraction}`
 }
 
+export function formatDecimal(value: string): string {
+  const negative = value.startsWith('-')
+  const [whole, fraction] = (negative ? value.slice(1) : value).split('.')
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return `${negative ? '-' : ''}${grouped}${fraction ? `.${fraction}` : ''}`
+}
+
 export function formatPercent(value: string, options: PercentOptions = {}): string {
   const fractionDigits = options.fractionDigits ?? 2
   const signed = options.signed ?? true

@@ -15,6 +15,7 @@ from stock_platform.infrastructure.db.models.tables import (
     decision_diff,
     decision_snapshot,
     execution_policy_version,
+    financial_fact,
     ingestion_job,
     investment_thesis,
     market_bar,
@@ -23,6 +24,9 @@ from stock_platform.infrastructure.db.models.tables import (
     research_opinion,
     research_scoring_policy_version,
     risk_policy_version,
+    sec_filing,
+    security,
+    security_identifier_version,
 )
 from stock_platform.settings import Settings
 
@@ -516,6 +520,190 @@ def test_research_read_enforces_decision_time(
     assert response.status_code == 200
     assert [item["id"] for item in response.json()["items"]] == [str(past_id)]
     assert response.json()["items"][0]["opinion"] is None
+
+
+def test_research_read_includes_only_point_in_time_sec_facts(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    cutoff = datetime(2026, 8, 21, 20, tzinfo=UTC)
+    security_id = uuid4()
+    raw_id = uuid4()
+    document_id = uuid4()
+    normalized_id = uuid4()
+    filing_id = uuid4()
+    connection.execute(security.insert().values(id=security_id, instrument_type="COMMON_STOCK"))
+    connection.execute(
+        security_identifier_version.insert().values(
+            security_id=security_id,
+            identifier_type="PRIMARY_SYMBOL",
+            identifier_value="NVDA",
+            provider_identifiers={},
+            effective_from=cutoff - timedelta(days=10),
+            available_at=cutoff - timedelta(days=10),
+        )
+    )
+    for identifier, key in ((raw_id, "submissions.json"), (document_id, "filing.txt")):
+        connection.execute(
+            raw_data_object.insert().values(
+                id=identifier,
+                provider="SEC",
+                feed_type="filings",
+                event_time=cutoff - timedelta(days=2),
+                available_at=cutoff - timedelta(days=1),
+                ingested_at=cutoff - timedelta(days=1),
+                content_hash=("a" if identifier == raw_id else "b") * 64,
+                raw_object_key=f"live/SEC/{key}",
+            )
+        )
+    connection.execute(
+        normalized_record.insert().values(
+            id=normalized_id,
+            raw_data_object_id=raw_id,
+            record_type="sec_filing",
+            record_key="0001045810-26-000001",
+            normalization_version="sec-filings-v1",
+            payload={},
+        )
+    )
+    connection.execute(
+        sec_filing.insert().values(
+            id=filing_id,
+            security_id=security_id,
+            raw_data_object_id=raw_id,
+            normalized_record_id=normalized_id,
+            document_raw_data_object_id=document_id,
+            provider="SEC",
+            cik="0001045810",
+            accession_number="0001045810-26-000001",
+            form="10-Q",
+            base_form="10-Q",
+            filing_date=(cutoff - timedelta(days=2)).date(),
+            report_date=(cutoff - timedelta(days=30)).date(),
+            accepted_at=cutoff - timedelta(days=1),
+            available_at=cutoff - timedelta(days=1),
+            primary_document="nvda.htm",
+            description="Quarterly report",
+            is_amendment=False,
+            payload={},
+        )
+    )
+    fact_normalized_id = uuid4()
+    connection.execute(
+        normalized_record.insert().values(
+            id=fact_normalized_id,
+            raw_data_object_id=raw_id,
+            record_type="financial_fact",
+            record_key="revenue",
+            normalization_version="sec-company-facts-v1",
+            payload={},
+        )
+    )
+    connection.execute(
+        financial_fact.insert().values(
+            security_id=security_id,
+            sec_filing_id=filing_id,
+            raw_data_object_id=raw_id,
+            normalized_record_id=fact_normalized_id,
+            provider="SEC",
+            taxonomy="us-gaap",
+            source_concept="Revenues",
+            canonical_concept="REVENUE",
+            value=Decimal("30000"),
+            unit="USD",
+            currency="USD",
+            period_start=(cutoff - timedelta(days=90)).date(),
+            period_end=(cutoff - timedelta(days=30)).date(),
+            accession_number="0001045810-26-000001",
+            available_at=cutoff - timedelta(days=1),
+            mapping_status="EXACT",
+            mapping_version="v1",
+            input_provenance={},
+        )
+    )
+    future_filing_id = uuid4()
+    future_filing_record_id = uuid4()
+    future_fact_record_id = uuid4()
+    connection.execute(
+        normalized_record.insert(),
+        [
+            {
+                "id": future_filing_record_id,
+                "raw_data_object_id": raw_id,
+                "record_type": "sec_filing",
+                "record_key": "0001045810-26-000002",
+                "normalization_version": "sec-filings-v1",
+                "payload": {},
+            },
+            {
+                "id": future_fact_record_id,
+                "raw_data_object_id": raw_id,
+                "record_type": "financial_fact",
+                "record_key": "future-revenue",
+                "normalization_version": "sec-company-facts-v1",
+                "payload": {},
+            },
+        ],
+    )
+    connection.execute(
+        sec_filing.insert().values(
+            id=future_filing_id,
+            security_id=security_id,
+            raw_data_object_id=raw_id,
+            normalized_record_id=future_filing_record_id,
+            document_raw_data_object_id=document_id,
+            provider="SEC",
+            cik="0001045810",
+            accession_number="0001045810-26-000002",
+            form="10-Q",
+            base_form="10-Q",
+            filing_date=(cutoff + timedelta(days=1)).date(),
+            report_date=(cutoff + timedelta(days=1)).date(),
+            accepted_at=cutoff + timedelta(days=1),
+            available_at=cutoff + timedelta(days=1),
+            primary_document="future.htm",
+            description="Future quarterly report",
+            is_amendment=False,
+            payload={},
+        )
+    )
+    connection.execute(
+        financial_fact.insert().values(
+            security_id=security_id,
+            sec_filing_id=future_filing_id,
+            raw_data_object_id=raw_id,
+            normalized_record_id=future_fact_record_id,
+            provider="SEC",
+            taxonomy="us-gaap",
+            source_concept="FutureRevenues",
+            canonical_concept="REVENUE",
+            value=Decimal("999999"),
+            unit="USD",
+            currency="USD",
+            period_start=cutoff.date(),
+            period_end=(cutoff + timedelta(days=1)).date(),
+            accession_number="0001045810-26-000002",
+            available_at=cutoff + timedelta(days=1),
+            mapping_status="EXACT",
+            mapping_version="v1",
+            input_provenance={},
+        )
+    )
+    response = client.get(
+        "/api/v1/stocks/NVDA/research", params={"decision_time": cutoff.isoformat()}
+    )
+    assert response.status_code == 200
+    assert len(response.json()["sec_filings"]) == 1
+    assert response.json()["sec_filings"][0]["accession_number"] == "0001045810-26-000001"
+    assert response.json()["sec_filings"][0]["document_raw_object_key"] == "live/SEC/filing.txt"
+    assert response.json()["financial_facts"][0]["canonical_concept"] == "REVENUE"
+    assert response.json()["financial_facts"][0]["value"] == "30000"
+    assert {item["accession_number"] for item in response.json()["sec_filings"]} == {
+        "0001045810-26-000001"
+    }
+    assert {item["accession_number"] for item in response.json()["financial_facts"]} == {
+        "0001045810-26-000001"
+    }
 
 
 def test_research_read_excludes_a_decision_superseded_by_append_only_diff(

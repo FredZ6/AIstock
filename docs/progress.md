@@ -3087,3 +3087,113 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
 - `git diff --check`: exit 0. This is a local checkpoint only, not SEC completion or release
   acceptance. SEC document 404/Company Facts dependency and missing SEC API/UI remain open.
 - No push, merge, or Notion/Linear Done transition is authorized for this checkpoint.
+
+## 2026-09-04 — SEC repair slice 1 (TDD, not final acceptance)
+
+- Branch: `codex/sec-repair`, base `aebbfd6`. Preserved unrelated untracked `output/`.
+- SEC documents its complete-submission root path at
+  https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data
+  (Paths and directory structure). Only primary-document HTTP 404 triggers that official path;
+  401/403/429/5xx remain unchanged failures. No general URL fetch or Fixture fallback was added.
+- Validate the complete submission's accession and CIK in its SEC header, rejecting error pages
+  and mismatched identities. Preserve original bytes, use text/plain / .txt for text submissions,
+  and retain content-addressed MinIO and PostgreSQL lineage. No history was rewritten.
+- RED: `UV_CACHE_DIR=.uv-cache uv run pytest backend/tests/contract/providers/test_sec_ingestion.py
+  -q -k 'missing_primary_document or primary_document_errors'`: exit 1, 1 intended failure / 4
+  safety regressions passed. GREEN: same command exit 0, 5 passed.
+- RED: same file with `-q -k complete_submission_rejects --tb=short`: exit 1, 3 intended failures.
+  GREEN: entire contract file exit 0, 20 passed.
+- RED: `UV_CACHE_DIR=.uv-cache uv run pytest backend/tests/integration/ingestion/test_sec_jobs.py
+  -q -k idempotently --tb=short`: exit 1, 1 passed / 1 failed because text was stored as .html.
+  GREEN: SEC jobs + SEC facts integration files with `-q --tb=short`: exit 0, 11 passed against
+  isolated PostgreSQL/MinIO, covering financial lineage and repeat ingestion.
+- Ruff initially reported three overlong test literals (exit 1); split literals and formatted.
+  Fresh `make verify`: exit 0; 324 formatted files; Ruff/Mypy clean (282 source files); no Alembic
+  drift; contract checks passed; backend 732 passed / 5 skipped in 72.74s; Web 130 passed;
+  TypeScript, ESLint and production build passed. `git diff --check`: exit 0.
+- Real probes: direct official text request returned 503; first repaired-adapter probe timed out
+  (exit 1). One diagnostic attempted timeout=30 and was rejected locally by the existing 10-second
+  cap (exit 1, no request); cap was not changed. Default-timeout adapter probe then succeeded
+  (exit 0), returning 120,749 bytes for accession `0001012870-00-006127` with validated identity.
+- New bounded NVDA job `bb6452d9-011f-4c85-a77c-6183b36a6c6a` preserved the old dead letter;
+  worker process exit 0 but returned False after TIMEOUT. Current state RETRY_SCHEDULED.
+  Filings increased 387 -> 388. Readback of the formerly blocked filing proved a .txt MinIO
+  object, 120,749 bytes, matching SHA-256 (exit 0). Financial facts remain 0.
+- Remaining: resume the normal due-job queue, finish filings / Company Facts, then implement
+  PIT-aware SEC API/frontend display with its own RED/GREEN tests. No frontend change, full SEC
+  acceptance, commit, push, or external completion update is claimed in this slice.
+
+## 2026-09-05 — SEC repair slice 2 (implementation verified, delivery pending)
+
+- Resumed the normal SEC queue and completed NVDA filings and Company Facts through the production
+  ingestion code. Final persisted facts: 412 SEC filings and 15,642 financial facts. All 426 SEC
+  PostgreSQL raw-object rows were read back from MinIO with 0 missing objects and 0 SHA-256
+  mismatches; 0 financial facts violate filing/availability timestamp order.
+- Added the second historical-document case discovered by the real run: an empty SEC
+  `primaryDocument` now reads the official complete-submission document directly. Contract RED:
+  1 intended failure; GREEN: full SEC provider contract passed. The corrected real Company Facts
+  worker returned `True`; process exit alone was not treated as success.
+- Extended the existing PIT research endpoint with normalized SEC filing and financial-fact facts.
+  Investment evidence remains separate from current TradingView reference data. Added future
+  filing/fact rows to the integration regression and verified `available_at <= decision_time`.
+  Focused API/regression command: exit 0, 43 passed; dedicated PIT regression: exit 0, 1 passed.
+- Added strict frontend contracts and API-mode rendering for filings, source object keys,
+  availability times, financial values and raw quality dimensions. Decimal strings are formatted
+  without conversion to binary floating point; the regression includes a value above JavaScript's
+  safe integer range. Empty/non-PASS quality now explicitly degrades the page, while repeated
+  observations are reduced to the newest provider/dataset/dimension fact for display. Frontend
+  RED: missing `FRESHNESS`, then duplicate/empty-quality state failures; final GREEN: 3 files /
+  15 tests passed.
+- A real runtime probe found `SEC:company_facts` had no quality observations. TDD RED: 2 SEC
+  PostgreSQL/MinIO cases failed because the quality policy lacked that dataset. Added its versioned
+  freshness threshold and persisted one immutable observation per normalized Company Facts record.
+  GREEN: 2 passed, including next-day repeat ingestion. The bounded real repair job
+  `30d4bedb-6e87-4a7c-bbbc-d46de08d685b` returned `True`; 15,587 Company Facts quality rows now
+  exist and `/api/v1/data-quality` reports SUCCESS/PASS.
+- The first post-quality browser rerun exposed a mobile page-level overflow: a 393px viewport was
+  expanded to 1,207px by unbroken SEC raw-object keys. Constrained terminal cards and their inner
+  table scrollers to the parent width without truncating evidence. Mobile GREEN: 1 passed.
+- `RUN_SEC_LIVE_BROWSER=1 WEB_DATA_MODE=api API_BASE_URL=http://127.0.0.1:8000
+  PLAYWRIGHT_WEB_PORT=3000 ./node_modules/.bin/playwright test
+  e2e/sec-live-runtime.spec.ts --workers=1`: exit 0, 2 passed (desktop and mobile Chrome). It
+  verifies filings, financial facts, SEC data quality, no Fixture Mode, and no horizontal overflow.
+- Final fresh `make verify`: exit 0. 324 files formatted; Ruff/Mypy clean (282 source files);
+  Alembic has no drift; backend 734 passed / 5 skipped in 74.30s; Web 24 files / 132 passed; TypeScript, ESLint
+  and Next.js production build passed. Expected diagnostics in failure-path web tests are test
+  evidence, not live Provider failures.
+- The interrupted `pnpm` dependency relink was repaired from the content-addressable store; no
+  dependency versions or lockfile entries changed. Private `.env` files remain ignored and were
+  not read into logs. `output/` remains untracked and untouched.
+- No commit, push, PR, merge, Notion update, or Linear status transition is claimed in this slice.
+
+## 2026-09-05 — Today TradingView market list (scheme C)
+
+- Replaced the API Today page's large persisted-quote card grid with one isolated TradingView
+  Market Data list. TradingView is labeled as external current-market context and is never used as
+  decision-time evidence; the original Alpaca/IEX price, coverage and `available_at` facts remain
+  available in a collapsed PIT audit disclosure. No backend contract or Fixture fallback changed.
+- Preserved the locked watchlist exchange identity (`BE` and `TSM` on NYSE; remaining current
+  symbols on Nasdaq), normalized and rejected malformed inputs, and reinitialized the widget with
+  its supported light/dark theme configuration. The one-widget layout avoids eleven separate chart
+  documents and reserves a compact height without an empty tail.
+- The first official Web Component implementation passed jsdom but failed real-browser QA because
+  `https://www.tradingview-widget.com/w/en/tv-ticker-tape.js` was rejected by CORS. It was replaced
+  through TDD with TradingView's supported isolated iframe script. Browser rerun loaded all 11
+  symbols with 0 console errors; desktop light/dark and 390px narrow-screen screenshots showed the
+  component contained within the page.
+- TDD evidence: initial missing component and old Today grid failed as expected; the exchange test
+  then failed on `NASDAQ:BE,NASDAQ:TSM`, and the compact-height regression failed on `42.35rem`.
+  Final focused command `corepack pnpm --dir web exec vitest run
+  tests/tradingview-ticker-list.test.tsx tests/api-pages.test.tsx
+  tests/api-route-degradation.test.tsx`: exit 0, 3 files / 12 passed.
+- Web verification: `corepack pnpm --dir web test -- --run`: exit 0, 25 files / 136 passed;
+  `corepack pnpm --dir web typecheck`: exit 0; `corepack pnpm --dir web lint`: exit 0;
+  `corepack pnpm --dir web build`: exit 0.
+- Full gate: the first sandboxed `make verify` exited 1 because localhost PostgreSQL access was
+  denied with `Operation not permitted`; no test failed. The identical command rerun with local
+  service access exited 0: 324 formatted files, Ruff/Mypy clean (282 source files), no Alembic
+  drift, backend 734 passed / 5 skipped, web 136 passed, TypeScript/ESLint/build passed.
+- Remaining risk: TradingView is an external delayed-data surface and can be unavailable due to
+  network, blocking or provider policy. The explicit placeholder and separate persisted evidence
+  remain visible; the application never substitutes Fixture data or treats widget values as
+  research, portfolio or execution inputs.

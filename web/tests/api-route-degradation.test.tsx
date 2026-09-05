@@ -12,8 +12,9 @@ describe('API route partial degradation', () => {
     vi.stubEnv('WEB_DATA_MODE', 'api')
     vi.stubEnv('API_BASE_URL', 'http://api.test')
     vi.doMock('../lib/server/live-data-api', () => ({
+      getDataQuality: vi.fn(async () => []),
       getMarketQuotes: vi.fn(async () => { throw new Error('quote unavailable') }),
-      getStockResearch: vi.fn(async () => [{
+      getStockResearch: vi.fn(async () => ({ financialFacts: [], secFilings: [], records: [{
         asOf: '2026-08-20T20:00:00Z',
         confidence: '0.7',
         direction: 'BULLISH',
@@ -22,7 +23,7 @@ describe('API route partial degradation', () => {
         opinion: 'BULLISH',
         summary: 'Persisted thesis remains visible.',
         symbol: 'NVDA',
-      }]),
+      }]})),
     }))
     const { default: ResearchRoute } = await import('../app/research/[symbol]/page')
 
@@ -30,6 +31,8 @@ describe('API route partial degradation', () => {
 
     expect(screen.getByText('Persisted thesis remains visible.')).toBeInTheDocument()
     expect(screen.getByRole('status', { name: 'Current market reference unavailable' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('SEC filing quality')
+    expect(screen.getByRole('status')).toHaveTextContent('SEC facts quality')
     expect(screen.queryByRole('alert', { name: 'NVDA research unavailable' })).not.toBeInTheDocument()
   })
 
@@ -37,6 +40,7 @@ describe('API route partial degradation', () => {
     vi.stubEnv('WEB_DATA_MODE', 'api')
     vi.stubEnv('API_BASE_URL', 'http://api.test')
     vi.doMock('../lib/server/live-data-api', () => ({
+      getDataQuality: vi.fn(async () => []),
       getMarketQuotes: vi.fn(async () => ({
         decisionTime: '2026-08-29T09:30:00Z',
         items: [{
@@ -46,11 +50,11 @@ describe('API route partial degradation', () => {
         missingSymbols: [],
         status: 'DEGRADED',
       })),
-      getStockResearch: vi.fn(async () => [{
+      getStockResearch: vi.fn(async () => ({ financialFacts: [], secFilings: [], records: [{
         asOf: '2026-08-20T20:00:00Z', confidence: '0.7', direction: 'BULLISH',
         horizon: 'MEDIUM', id: 'thesis-1', opinion: 'BULLISH',
         summary: 'Persisted thesis remains visible.', symbol: 'NVDA',
-      }]),
+      }]})),
     }))
     const { default: ResearchRoute } = await import('../app/research/[symbol]/page')
 
