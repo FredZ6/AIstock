@@ -14,6 +14,27 @@ import {
 } from '../lib/fixtures'
 
 describe('portfolio and review pages', () => {
+  it('supports roving keyboard tabs linked to the performance panel', () => {
+    render(<PerformanceChart snapshot={fixturePortfolioSnapshot} />)
+    const tabs = screen.getAllByRole('tab')
+    tabs[0].focus()
+    fireEvent.keyDown(tabs[0], { key: 'ArrowRight' })
+    expect(tabs[1]).toHaveFocus()
+    expect(tabs[1]).toHaveAttribute('aria-selected', 'true')
+    expect(tabs[0]).toHaveAttribute('tabindex', '-1')
+    const panel = screen.getByRole('tabpanel')
+    expect(tabs[1]).toHaveAttribute('aria-controls', panel.id)
+    expect(panel).toHaveAttribute('aria-labelledby', tabs[1].id)
+    fireEvent.keyDown(tabs[1], { key: 'End' })
+    expect(tabs[2]).toHaveFocus()
+    fireEvent.keyDown(tabs[2], { key: 'ArrowRight' })
+    expect(tabs[0]).toHaveFocus()
+    fireEvent.keyDown(tabs[0], { key: 'ArrowLeft' })
+    expect(tabs[2]).toHaveFocus()
+    fireEvent.keyDown(tabs[2], { key: 'Home' })
+    expect(tabs[0]).toHaveFocus()
+  })
+
   it('normalizes monetary chart coordinates without binary floating-point loss', () => {
     const snapshot = {
       ...fixturePortfolioSnapshot,

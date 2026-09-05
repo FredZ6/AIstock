@@ -61,6 +61,54 @@ export type ResearchRecord = {
   symbol: string
 }
 
+export type SecFiling = {
+  acceptedAt: string
+  accessionNumber: string
+  availableAt: string
+  description: string
+  documentRawObjectKey: string
+  filingDate: string
+  form: string
+  id: string
+  provider: string
+  reportDate: string | null
+}
+
+export type FinancialFact = {
+  accessionNumber: string
+  availableAt: string
+  canonicalConcept: string | null
+  currency: string | null
+  id: string
+  mappingStatus: 'EXACT' | 'DERIVED' | 'UNMAPPED' | 'AMBIGUOUS'
+  periodEnd: string
+  periodStart: string
+  provider: string
+  sourceConcept: string
+  taxonomy: string
+  unit: string
+  value: string
+}
+
+export type StockResearch = {
+  financialFacts: FinancialFact[]
+  records: ResearchRecord[]
+  secFilings: SecFiling[]
+}
+
+export type DataQuality = {
+  conflict: boolean
+  coverage: 'IEX' | 'SIP' | null
+  dataset: string
+  delay: string | null
+  dimension: string
+  freshness: string | null
+  id: string
+  observedAt: string
+  provider: string
+  status: 'PASS' | 'DEGRADED' | 'UNAVAILABLE' | 'FAIL'
+}
+
 export type LiveDataClientOptions = {
   baseUrl: string
   decisionTime: string
@@ -137,7 +185,7 @@ function enumeration<T extends string>(value: unknown, allowed: readonly T[], pa
   return value as T
 }
 
-function configured(value: unknown, path: string): boolean {
+function booleanValue(value: unknown, path: string): boolean {
   if (typeof value !== 'boolean') throw new TypeError(`${path} must be boolean`)
   return value
 }
@@ -274,7 +322,7 @@ export async function getWeeklyReviewDetail(
         outcomeId: text(item.outcome_id, 'weekly_review.attribution.outcome_id'),
         category: text(item.category, 'weekly_review.attribution.category'),
         rationale: text(item.rationale, 'weekly_review.attribution.rationale'),
-        controllable: configured(item.controllable, 'weekly_review.attribution.controllable'),
+        controllable: booleanValue(item.controllable, 'weekly_review.attribution.controllable'),
       })),
       lessons: rows('lessons').map((item) => ({
         id: text(item.id, 'weekly_review.lesson.id'),
@@ -381,7 +429,7 @@ export async function getProviderHealth(options: LiveDataClientOptions): Promise
     for (const [name, value] of Object.entries(rows)) {
       const row = record(value, `health.providers.${name}`)
       providers[name] = {
-        configured: configured(row.configured, `${name}.configured`),
+        configured: booleanValue(row.configured, `${name}.configured`),
         mode: enumeration(row.mode, ['fixture', 'read_only', 'unavailable'] as const, `${name}.mode`),
         coverage: row.coverage === undefined || row.coverage === null ? null : text(row.coverage, `${name}.coverage`),
         status: row.status === undefined || row.status === null
@@ -445,14 +493,14 @@ export async function getPortfolioSummary(options: LiveDataClientOptions): Promi
 export async function getStockResearch(
   options: LiveDataClientOptions,
   symbol: string,
-): Promise<ResearchRecord[]> {
+): Promise<StockResearch> {
   if (!symbolPattern.test(symbol)) throw new LiveDataApiError('contract', 'Research symbol is invalid')
   const query = new URLSearchParams({ decision_time: options.decisionTime })
   const value = await requestJson(options, `/api/v1/stocks/${encodeURIComponent(symbol)}/research?${query}`)
   return contract(() => {
     const page = record(value, 'research')
     if (!Array.isArray(page.items)) throw new TypeError('research.items must be an array')
-    return page.items.map((item, index) => {
+    const records = page.items.map((item, index) => {
       const row = record(item, `research[${index}]`)
       return {
         id: text(row.id, 'research.id'),
@@ -467,5 +515,71 @@ export async function getStockResearch(
           : enumeration(row.opinion, ['BULLISH', 'NEUTRAL', 'BEARISH', 'ABSTAIN'] as const, 'research.opinion'),
       }
     })
+    if (!Array.isArray(page.sec_filings)) throw new TypeError('research.sec_filings must be an array')
+    if (!Array.isArray(page.financial_facts)) throw new TypeError('research.financial_facts must be an array')
+    const secFilings = page.sec_filings.map((item, index) => {
+      const row = record(item, `sec_filings[${index}]`)
+      return {
+        acceptedAt: instant(row.accepted_at, 'filing.accepted_at'), accessionNumber: text(row.accession_number, 'filing.accession_number'),
+        availableAt: instant(row.available_at, 'filing.available_at'), description: text(row.description, 'filing.description'),
+        documentRawObjectKey: text(row.document_raw_object_key, 'filing.document_raw_object_key'),
+        filingDate: text(row.filing_date, 'filing.filing_date'), form: text(row.form, 'filing.form'),
+        id: text(row.id, 'filing.id'), provider: text(row.provider, 'filing.provider'),
+        reportDate: row.report_date === null ? null : text(row.report_date, 'filing.report_date'),
+      }
+    })
+    const financialFacts = page.financial_facts.map((item, index) => {
+      const row = record(item, `financial_facts[${index}]`)
+      return {
+        accessionNumber: text(row.accession_number, 'fact.accession_number'), availableAt: instant(row.available_at, 'fact.available_at'),
+        canonicalConcept: row.canonical_concept === null ? null : text(row.canonical_concept, 'fact.canonical_concept'),
+        currency: row.currency === null ? null : text(row.currency, 'fact.currency'), id: text(row.id, 'fact.id'),
+        mappingStatus: enumeration(row.mapping_status, ['EXACT', 'DERIVED', 'UNMAPPED', 'AMBIGUOUS'] as const, 'fact.mapping_status'),
+        periodEnd: text(row.period_end, 'fact.period_end'), periodStart: text(row.period_start, 'fact.period_start'),
+        provider: text(row.provider, 'fact.provider'), sourceConcept: text(row.source_concept, 'fact.source_concept'),
+        taxonomy: text(row.taxonomy, 'fact.taxonomy'), unit: text(row.unit, 'fact.unit'), value: decimal(row.value, 'fact.value'),
+      }
+    })
+    return { financialFacts, records, secFilings }
+  })
+}
+
+export async function getDataQuality(
+  options: LiveDataClientOptions,
+  provider: string,
+  dataset: string,
+): Promise<DataQuality[]> {
+  if (!provider.trim() || !dataset.trim()) throw new LiveDataApiError('contract', 'Data quality scope is required')
+  const query = new URLSearchParams({
+    dataset,
+    decision_time: options.decisionTime,
+    provider,
+  })
+  const value = await requestJson(options, `/api/v1/data-quality?${query}`)
+  return contract(() => {
+    const page = record(value, 'data_quality')
+    enumeration(page.status, ['SUCCESS', 'DEGRADED', 'FAILURE'] as const, 'data_quality.status')
+    if (!Array.isArray(page.items)) throw new TypeError('data_quality.items must be an array')
+    const parsed = page.items.map((item, index) => {
+      const row = record(item, `data_quality[${index}]`)
+      return {
+        conflict: booleanValue(row.conflict, 'data_quality.conflict'),
+        coverage: row.coverage === null ? null : enumeration(row.coverage, ['IEX', 'SIP'] as const, 'data_quality.coverage'),
+        dataset: text(row.dataset, 'data_quality.dataset'),
+        delay: row.delay === null ? null : text(row.delay, 'data_quality.delay'),
+        dimension: text(row.dimension, 'data_quality.dimension'),
+        freshness: row.freshness === null ? null : text(row.freshness, 'data_quality.freshness'),
+        id: text(row.id, 'data_quality.id'),
+        observedAt: instant(row.observed_at, 'data_quality.observed_at'),
+        provider: text(row.provider, 'data_quality.provider'),
+        status: enumeration(row.status, ['PASS', 'DEGRADED', 'UNAVAILABLE', 'FAIL'] as const, 'data_quality.status'),
+      }
+    })
+    const latest = new Map<string, DataQuality>()
+    for (const item of parsed) {
+      const key = `${item.provider}:${item.dataset}:${item.dimension}`
+      if (!latest.has(key)) latest.set(key, item)
+    }
+    return [...latest.values()]
   })
 }

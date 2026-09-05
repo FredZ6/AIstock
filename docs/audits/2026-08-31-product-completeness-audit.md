@@ -1,6 +1,6 @@
 # Product completeness audit — 2026-08-31
 
-Status: Open
+Status: Historical baseline; see dated reconciliation below (not all rows are current blockers)
 Branch: `codex/live-runtime-closure`
 Scope: API-mode frontend, provider ingestion runtime, paper portfolio, research, alerts, learning,
 and developer verification isolation.
@@ -8,7 +8,62 @@ and developer verification isolation.
 This is the authoritative local remediation list for the post–M7.5 runtime closure review. It
 records observed facts only. Fixture values are never accepted as evidence for API-mode completion.
 
+## 2026-09-04 reconciliation
+
+The original facts/counts below describe the August 31 observation, not today's database.
+Do not treat every historical `full gate pending` row as an outstanding blocker: subsequent
+delivery evidence is recorded in `docs/progress.md`. Conversely, do not close unverified runtime
+items solely because the unit/build gate passes.
+
+- AUD-023: corrected locally with linked tabs/panel, roving focus, arrows, Home/End and regression.
+- AUD-024: saved light/dark preference now bootstraps in the document head before hydration;
+  desktop/mobile browser tests block client scripts and verify dark mode still applies.
+  Strict future CSP deployments must authorize this static bootstrap by hash/nonce.
+- AUD-019: partially addressed with all eight API routes under controlled backend outage on
+  desktop/mobile, asserting explicit Failure and no Fixture substitution. Seeded successful API,
+  recovery, SSE and zoom coverage remain open; this is not full runtime acceptance.
+- New page-language mismatch corrected (`en`, matching the interface).
+- New concurrent decision-supersession race corrected with atomic conflict handling; identical
+  redelivery is a no-op, differing replacements are rejected without aborting the transaction.
+- Provider prerequisites remain external: SIP entitlement, Alpha Vantage key and SEC identity
+  must be supplied truthfully. No credentials or entitlements were invented.
+- AUD-008/009/010/011/012/022 remain subject to targeted revalidation/remediation. Historical
+  rows are preserved rather than silently marked complete.
+
+
 ## Confirmed facts
+
+### 2026-09-04 second-pass evidence (supersedes corresponding August observations)
+
+- AUD-008 observation is no longer current: read-only PostgreSQL inspection found ALPACA bars
+  visible at the query cutoff for all 11 current Watchlist symbols, latest event
+  `2026-09-03T19:57:00Z`. This proves stored coverage, not current-session freshness or a new
+  MinIO lineage acceptance run.
+- AUD-011 corrected with loopback-only `allowedDevOrigins` and RED/GREEN configuration test.
+- AUD-019 now has an opt-in isolated PostgreSQL + real FastAPI + Next.js browser harness:
+  `RUN_API_BROWSER=1 UV_CACHE_DIR=.uv-cache uv run pytest backend/tests/integration/api/test_browser_runtime.py -q -s`.
+  It verifies persisted Watchlist reads, stop/restart/retry recovery, all eight route boundaries,
+  Empty alerts, run metadata, and PostgreSQL-backed SSE resume after server restart on desktop/mobile.
+  Its rows are explicit synthetic test facts, not live Provider acceptance evidence. SSE uses
+  Playwright's HTTP client, not a frontend event-stream component. Run Trace still lacks that UI
+  integration. Populated research/portfolio/weekly review and 200% zoom are not covered by this run.
+- AUD-010/022: no document overflow observed at 1440x900 or 393x852 in the API matrix; this does
+  not close narrow-desktop/zoom and navigation-discoverability concerns.
+- AUD-012 remains: provider health ages observations by wall-clock time, without an exchange
+  session calendar. AUD-009 also remains pending targeted no-session regression; no historical
+  dead letters were changed. Do not suppress stale/failure status without a verified session model.
+- Local configuration remains paper/IEX; Alpha key and SEC User-Agent absent. Operator was given
+  safe SEC setup instructions and asked to supply their real contact identity, not a fabricated one.
+
+### Original August 31 snapshot
+
+SEC follow-up on September 4: operator identity is now configured in the project's accepted
+`application/version email` form. The SEC company-facts transport live test passed against NVDA.
+The old smoke used legacy `fetch` with a pre-request decision cutoff and correctly hit
+`future_data_rejected`; the smoke now checks raw `fetch_batch` identity/structure without
+weakening PIT. This supersedes the earlier "SEC User-Agent absent" note only. It is not proof
+of live SEC ingestion into business tables or frontend presentation. Alpha remains unconfigured,
+IEX is unchanged, and no SIP subscription was purchased.
 
 - Alpaca credentials are configured for read-only IEX Market Data in `paper` mode.
 - PostgreSQL contains persisted Alpaca facts for AVGO and NVDA; nine other configured Watchlist
@@ -146,6 +201,36 @@ Severity summary: **0 P0, 12 P1, 12 P2, 0 P3**.
    hierarchy and finish responsive, keyboard, theming, and API-mode E2E evidence.
 
 ## Audit continuation
+
+### 2026-09-04 live SEC verification: open blockers
+
+- Real NVDA ingestion persisted 387 filings; all 393 SEC raw objects passed MinIO SHA-256
+  readback and the persisted filings have complete raw/document/normalized FK lineage.
+- Job `8ac053c2-62c1-42a9-8699-c9d2f1a2f9f3` ended DEAD_LETTER after two TIMEOUT attempts
+  and a document HTTP 404 (classified INVALID_SECURITY). Blocked historical 10-Q accession:
+  `0001012870-00-006127`, primary document `0001.txt`, filed 2000-12-08.
+- Financial facts remain 0 because the dependent Company Facts job requires successful filings
+  completion. This is a real end-to-end blocker despite successful SEC transport smoke tests.
+- Actual API-mode `/research/NVDA` browser display has no SEC facts/documents; API/UI wiring is
+  absent. Do not close the research-completeness finding based on ingestion alone.
+- Detailed execution evidence and exact outcomes are recorded in `docs/progress.md`.
+
+### 2026-09-05 SEC blocker resolution
+
+The September 4 bullets above remain as the append-only incident snapshot. PR #20 supersedes their
+current blocker status with the following verified evidence:
+
+- The blocked historical filing now falls back to the official SEC complete-submission document
+  when the primary document is missing, invalid, or absent. Its raw `.txt` object was read back
+  from MinIO with a matching SHA-256 hash.
+- The corrected production ingestion path persisted 412 SEC filings and 15,642 financial facts;
+  all 426 SEC raw-object rows had present, hash-matching MinIO objects, and no fact violated filing
+  or availability ordering.
+- `/api/v1/stocks/{symbol}/research` now returns PIT-filtered SEC filings and financial facts, and
+  API-mode Stock Research renders those facts plus their raw quality dimensions. Desktop/mobile
+  live-browser checks passed without Fixture substitution or horizontal overflow.
+- Alpha Vantage remains unconfigured and SIP remains unavailable. These are explicit provider
+  prerequisites, not silently substituted data and not resolved by this SEC repair.
 
 The following areas still require targeted verification before remediation begins:
 

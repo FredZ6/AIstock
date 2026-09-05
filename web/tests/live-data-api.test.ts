@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  getDataQuality,
   getMarketQuotes,
   getPortfolioSummary,
   getProviderHealth,
@@ -67,7 +68,10 @@ describe('live data API client', () => {
         fills: [], initialized_at: null, latest_nav: null, orders: [], performance_history: [],
         positions: [], risk_decisions: [], status: 'EMPTY', trading: 'paper_only',
       })
-      return jsonResponse({ decision_time: options.decisionTime, items: [], next_cursor: null })
+      return jsonResponse({
+        decision_time: options.decisionTime, financial_facts: [], items: [],
+        next_cursor: null, sec_filings: [],
+      })
     })
 
     await expect(getProviderHealth({ ...options, fetchImpl })).resolves.toMatchObject({
@@ -81,7 +85,39 @@ describe('live data API client', () => {
     await expect(getPortfolioSummary({ ...options, fetchImpl })).resolves.toMatchObject({
       cash: null, latestNav: null, status: 'EMPTY', trading: 'paper_only',
     })
-    await expect(getStockResearch({ ...options, fetchImpl }, 'NVDA')).resolves.toEqual([])
+    await expect(getStockResearch({ ...options, fetchImpl }, 'NVDA')).resolves.toEqual({
+      financialFacts: [], records: [], secFilings: [],
+    })
+  })
+
+  it('loads point-in-time SEC data-quality dimensions without deriving a UI grade', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      decision_time: options.decisionTime,
+      items: [{
+        conflict: false, coverage: null, created_at: options.decisionTime,
+        dataset: 'company_facts', delay: null, details: {}, dimension: 'FRESHNESS',
+        freshness: 'PT0S', id: 'quality-1', normalized_record_id: 'record-1',
+        observed_at: '2026-08-29T09:20:00Z', policy_version: 'quality-v1', provider: 'SEC',
+        raw_data_object_id: 'raw-1', status: 'PASS',
+      }, {
+        conflict: false, coverage: null, created_at: '2026-08-29T09:00:00Z',
+        dataset: 'company_facts', delay: null, details: {}, dimension: 'FRESHNESS',
+        freshness: 'PT10M', id: 'quality-old', normalized_record_id: 'record-old',
+        observed_at: '2026-08-29T09:00:00Z', policy_version: 'quality-v1', provider: 'SEC',
+        raw_data_object_id: 'raw-old', status: 'DEGRADED',
+      }],
+      status: 'SUCCESS',
+    }))
+
+    await expect(getDataQuality({ ...options, fetchImpl }, 'SEC', 'company_facts')).resolves.toEqual([{
+      conflict: false, coverage: null, dataset: 'company_facts', delay: null,
+      dimension: 'FRESHNESS', freshness: 'PT0S', id: 'quality-1',
+      observedAt: '2026-08-29T09:20:00Z', provider: 'SEC', status: 'PASS',
+    }])
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/data-quality?'),
+      expect.objectContaining({ cache: 'no-store' }),
+    )
   })
 
   it('classifies network and HTTP failures without exposing upstream bodies', async () => {

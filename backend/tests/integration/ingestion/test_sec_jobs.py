@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -48,8 +49,9 @@ class InMemoryRawStore:
 
 
 class FixtureSecTransport:
-    def __init__(self, *, observed_at: datetime = NOW) -> None:
+    def __init__(self, *, observed_at: datetime = NOW, plain_document: bool = False) -> None:
         self.observed_at = observed_at
+        self.plain_document = plain_document
 
     def _batch(self, feed_type: FeedType, symbol: str, body: bytes) -> ProviderBatch:
         return ProviderBatch(
@@ -81,9 +83,17 @@ class FixtureSecTransport:
         primary_document: str,
         as_of: datetime,
     ) -> ProviderBatch:
-        return self._batch(
+        batch = self._batch(
             FeedType.FILINGS, symbol, (FIXTURES / "filing_document.html").read_bytes()
         )
+        if self.plain_document:
+            # Synthetic full-submission payload; the transport contract verifies identity.
+            return replace(
+                batch,
+                body=b"<SEC-DOCUMENT>test-only</SEC-DOCUMENT>",
+                headers={"content-type": "text/plain; charset=UTF-8"},
+            )
+        return batch
 
 
 @pytest.fixture
@@ -106,9 +116,11 @@ def isolated_minio_store() -> Iterator[MinioRawObjectStore]:
         client.remove_bucket(bucket)
 
 
+@pytest.mark.parametrize("plain_document", [False, True])
 def test_sec_jobs_are_idempotently_scheduled_and_persist_raw_filing_and_financial_lineage(
     isolated_database_url: str,
     isolated_minio_store: MinioRawObjectStore,
+    plain_document: bool,
 ) -> None:
     _migrate(isolated_database_url)
     engine = create_engine(isolated_database_url)
@@ -131,7 +143,7 @@ def test_sec_jobs_are_idempotently_scheduled_and_persist_raw_filing_and_financia
             ).mappings()
         }
 
-    transport = FixtureSecTransport()
+    transport = FixtureSecTransport(plain_document=plain_document)
     assert execute_sec_ingestion_job(
         engine=engine,
         raw_store=isolated_minio_store,
@@ -192,7 +204,26 @@ def test_sec_jobs_are_idempotently_scheduled_and_persist_raw_filing_and_financia
         )
         assert len(quality_rows) == 3
         assert {row["status"] for row in quality_rows} == {"PASS"}
+        company_facts_quality = (
+            connection.execute(
+                select(data_quality_observation).where(
+                    data_quality_observation.c.provider == "SEC",
+                    data_quality_observation.c.dataset == FeedType.COMPANY_FACTS.value,
+                )
+            )
+            .mappings()
+            .all()
+        )
+        assert company_facts_quality
+        assert {row["status"] for row in company_facts_quality} == {"PASS"}
     assert len(isolated_minio_store.list_keys("live/SEC/")) == 4
+    if plain_document:
+        document_keys = isolated_minio_store.list_keys("live/SEC/filing_sections/")
+        assert len(document_keys) == 1
+        assert document_keys[0].endswith(".txt")
+        assert (
+            isolated_minio_store.get(document_keys[0]) == b"<SEC-DOCUMENT>test-only</SEC-DOCUMENT>"
+        )
 
     next_day = NOW.replace(day=27)
     assert schedule_sec_daily_jobs(engine, now=next_day) == 11
@@ -207,7 +238,7 @@ def test_sec_jobs_are_idempotently_scheduled_and_persist_raw_filing_and_financia
                 )
             ).mappings()
         }
-    next_transport = FixtureSecTransport(observed_at=next_day)
+    next_transport = FixtureSecTransport(observed_at=next_day, plain_document=plain_document)
     assert execute_sec_ingestion_job(
         engine=engine,
         raw_store=isolated_minio_store,

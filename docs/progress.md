@@ -2926,3 +2926,296 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   source files; Alembic reported no drift; backend 721 passed / 4 skipped; frontend TypeScript and
   ESLint clean; Vitest 22 files / 126 tests passed; and the Next.js production build completed. The
   post-gate MinIO orphan reporter returned 0.
+
+## 2026-09-04 — Post-audit remediation, first batch (local, not delivered)
+
+- Fixed English document language, linked performance tabs/panel with roving keyboard focus,
+  and saved-theme bootstrap before hydration. The static script contains no user input; a future
+  strict CSP deployment must authorize it by hash/nonce. Existing theme persistence remains intact.
+- Fixed concurrent decision supersession with PostgreSQL `ON CONFLICT DO NOTHING RETURNING`.
+  Same replacement returns false, competing replacement raises the existing domain ValueError;
+  the transaction remains usable. No UPDATE/DELETE or migration was introduced.
+- Added real two-connection regressions in isolated databases, including conflicting replacements.
+  Test databases were created/dropped by the existing isolated fixture; business facts were untouched.
+- Added desktop/mobile controlled-API-outage coverage for all eight routes and a pre-hydration
+  theme test with client scripts blocked. This does not close successful API/recovery/SSE coverage.
+- Reconciled the historical audit document without claiming stale observations remain current.
+
+### Commands and observed results
+
+- `CI=true pnpm --dir web exec vitest run tests/layout-contract.test.tsx tests/review-and-portfolio-pages.test.tsx`:
+  RED exit 1 (3 intended failures, 5 passed); GREEN exit 0 (8 passed).
+- `UV_CACHE_DIR=.uv-cache uv run pytest backend/tests/integration/research/test_supersession_concurrency.py -q`:
+  initial exit 1 with 2 setup errors because Docker was stopped (not RED evidence).
+  Docker Desktop and existing postgres/redis/minio containers were started; no volume was removed.
+  Re-run exit 1 with 2 actual UniqueViolation failures. `--tb=short` confirmed the previous-decision
+  unique constraint race, also exit 1.
+- `UV_CACHE_DIR=.uv-cache uv run pytest backend/tests/integration/research/test_supersession_concurrency.py backend/tests/integration/research/test_daily_research.py -q --tb=short`:
+  GREEN exit 0, 6 passed, including existing PIT and append-only regressions.
+- `WEB_DATA_MODE=api API_BASE_URL=http://127.0.0.1:1 EXPECT_API_FAILURE=1 PLAYWRIGHT_WEB_PORT=3107 pnpm --dir web exec playwright test e2e/api-failure-matrix.spec.ts e2e/theme-startup.spec.ts`:
+  initial exit 1 (2 passed / 2 locator failures matching Next's hidden announcer); narrowed locator
+  to the named unavailable alert; final exit 0, 4 passed. API outage is intentional; no live provider
+  or business database is involved in this browser matrix.
+- `UV_CACHE_DIR=.uv-cache uv run ruff check backend/tests/integration/research/test_supersession_concurrency.py backend/src/stock_platform/application/research/supersession.py`:
+  exit 1 (one import sorting issue); `ruff check --fix` exit 0. `ruff format` exit 0.
+- First `make verify`: exit 2, four strict typing errors in the new test; corrected annotations.
+- Final `make verify`: exit 0; 322 files formatted; Ruff clean; Mypy 280 files clean; Alembic no drift;
+  backend 723 passed / 4 skipped; TypeScript/ESLint passed; Vitest 23 files / 129 passed; Next build passed.
+- `git diff --check`: exit 0.
+- pnpm initially could not access its dependency store/registry in sandbox and was interrupted
+  (exit 130); approved re-run restored dependencies. No lockfile changes. Browser color-environment
+  warnings and intentional fault-injection diagnostic logs are not test failures.
+
+### Remaining scope
+
+- SIP entitlement and Alpha/SEC configuration are external prerequisites, not bypassed.
+- API successful/Empty/Degraded/recovery/SSE browser matrix remains incomplete.
+- Historical AUD-008/009/010/011/012/022 need targeted verification/remediation before closure.
+- No commit, push, PR, Notion or Linear completion update performed in this batch.
+
+## 2026-09-04 — Post-audit remediation, second batch
+
+- Added opt-in isolated PostgreSQL / real FastAPI / Next.js / desktop-mobile browser checks.
+  The test API disables local `.env` loading and refuses non-isolated database URLs. All seeded
+  rows are test-only; no Provider credentials, real quotes or business transactions are invented.
+- Coverage: persisted Watchlist, real API termination/restart and UI retry, eight API route
+  boundaries without Fixture fallback or document overflow, Empty alerts, persisted run metadata,
+  and SSE Last-Event-ID resume after an API restart. SSE is HTTP-client coverage, not UI integration.
+- Fixed AUD-011 with a narrow localhost/127.0.0.1 development-origin allowlist.
+- Reconciled old market-coverage observation: all 11 configured symbols now have visible ALPACA
+  bars, latest event 2026-09-03T19:57:00Z. This is read-only coverage evidence, not freshness or a
+  new full MinIO lineage gate. No historical records or volumes were deleted.
+
+### Verification
+
+- `RUN_API_BROWSER=1 UV_CACHE_DIR=.uv-cache uv run pytest backend/tests/integration/api/test_browser_runtime.py -q -s --tb=short`:
+  exit 0, 1 pytest harness / 6 Playwright tests passed (desktop and mobile).
+- `CI=true pnpm --dir web exec vitest run tests/dev-origin.test.ts`: RED exit 1 (undefined allowlist);
+  GREEN exit 0, 1 passed.
+- `ruff format` and `ruff check` on new Python test files: exit 0.
+- Initial `make verify`: exit 2, strict type checker rejected `_env_file` constructor keyword in
+  test entrypoint. Replaced with explicit test-only Settings subclass configuration.
+- Final `make verify`: exit 0, 324 files formatted; Ruff clean; Mypy 282 files clean; no Alembic
+  drift; backend 723 passed / 5 skipped; web 24 files / 130 passed; types/lint/build passed.
+  The fifth skip is the opt-in browser harness, run separately above, not an untested provider.
+- `git diff --check`: exit 0. No source commit/push performed.
+
+### Still open
+
+- Frontend live Run Trace SSE rendering; populated research/portfolio/weekly-review browser
+  assertions; 200% zoom/navigation discoverability.
+- No-session ingestion classification and exchange-session-aware provider health.
+- Operator SEC contact identity and Alpha key; verified SIP entitlement if needed. No subscription
+  was purchased or coverage declaration altered. SEC setup instructions and current official
+  Alpaca pricing were provided to the operator.
+
+## 2026-09-04 — SEC configuration and live transport verification
+
+- Preserved paper/IEX configuration; no SIP purchase, entitlement change, or execution bypass.
+- Corrected previous operator guidance: SEC's general identity convention is broader than the
+  repository's locked `application/version email` validator. Normalized private `.env` identity
+  to that accepted form, preserving the operator-supplied contact (not copied into this document).
+  `.env` remains mode 0600 and ignored by Git. Added a safe placeholder/example to README/.env.example.
+- First live smoke: exit 1, `missing_credentials` from local validation (no request sent).
+- Second live smoke after normalization: exit 1, `future_data_rejected`. The legacy smoke used
+  `fetch` with a cutoff captured before the network response. This was correct PIT rejection,
+  not evidence of a bad SEC identity.
+- Changed only the SEC transport smoke to the current `fetch_batch` path, validating NVDA CIK,
+  entity name, nonempty facts and response observation time. Production PIT guards are unchanged.
+- `LIVE_PROVIDER_TESTS=1 UV_CACHE_DIR=.uv-cache uv run pytest backend/tests/contract/providers/test_live_adapter_contracts.py -q -k sec_live_contract --tb=short`
+  after sourcing private `.env`: exit 0, 1 passed / 30 deselected. This proves live raw transport,
+  not live MinIO/PostgreSQL persistence or historical decision eligibility.
+- `UV_CACHE_DIR=.uv-cache uv run pytest backend/tests/contract/providers/test_sec_ingestion.py backend/tests/contract/providers/test_live_adapter_contracts.py -q --tb=short`:
+  exit 0, 40 passed / 3 live tests skipped in the credential-free run.
+- `UV_CACHE_DIR=.uv-cache uv run pytest backend/tests/integration/ingestion/test_sec_facts.py backend/tests/integration/ingestion/test_sec_jobs.py -q --tb=short`:
+  exit 0, 10 passed (recorded test-data ingestion/lineage, not live provider ingestion).
+- Fresh `make verify`: exit 0; 324 formatted files; Ruff/Mypy clean (282 files); no migration drift;
+  backend 723 passed / 5 skipped; web typecheck/lint/tests and production build passed.
+- `git diff --check`: exit 0. No commit/push or completion status change.
+- Next work: bounded live SEC ingestion and frontend research evidence verification; remaining
+  session-aware status, no-session jobs and frontend SSE work are not claimed complete.
+
+## 2026-09-04 — Real SEC persistence and browser verification (gate NOT passed)
+
+- Scope: one real NVDA filings ingestion, using the configured SEC identity and existing production
+  worker, PostgreSQL and MinIO. No Fixture substitution, entitlement changes or paper orders.
+- Initial database: 0 SEC filings / 0 financial facts. Job:
+  `8ac053c2-62c1-42a9-8699-c9d2f1a2f9f3`. Official submission pages contained 412 supported filings.
+- Executed `PYTHONPATH=backend/src UV_CACHE_DIR=.uv-cache uv run python` drivers calling
+  `run_sec_ingestion_job.run(job_id)`. Initial attempt: process exit 0, worker returned False;
+  295 filings persisted, attempt outcome RETRY_SCHEDULED / TIMEOUT. A process exit 0 is NOT a
+  successful ingestion result. Two direct retry invocations also returned False without acquiring
+  a new attempt; RETRY_SCHEDULED requires the normal requeue step, not only elapsed backoff.
+- Used `IngestionJobStore.requeue_due(now=aware_utc_now)` only after checking that the due set
+  contained exactly this job, then invoked the same worker. Attempt 2: process exit 0, False,
+  387 filings persisted, TIMEOUT. Attempt 3: process exit 0, False, DEAD_LETTER / INVALID_SECURITY,
+  HTTP 404. No retry limits, lease checks or immutable facts were bypassed.
+- The unpersisted normalized filing is NVDA 10-Q accession `0001012870-00-006127`, filed
+  2000-12-08, primaryDocument `0001.txt`. Failure occurred on the filing-document path. The
+  transport maps this 404 to INVALID_SECURITY; it does not prove that NVDA's identity is invalid.
+  Full historical-document handling needs remediation before rerunning this gate.
+- Company Facts is enqueued only after successful filings completion. It was not enqueued;
+  final financial_fact count remains 0. Do not claim financial metrics are available.
+- Final read-only SQL checks (`uv run python` / SQLAlchemy): exit 0; 387 sec_filing rows,
+  0 duplicate accession groups, 0 missing raw/document/normalized FK joins,
+  0 accepted_at/available_at mismatches. These are lineage/availability-column checks, not a
+  full historical-query PIT regression suite.
+- Final MinIO readback (`MinioRawObjectStore.get` + hashlib.sha256 for every SEC raw_data_object):
+  exit 0; 393 objects checked, 0 hash mismatches. Retry snapshots explain the count exceeding
+  filing count. No objects or history were deleted.
+- Started local FastAPI :8000 and API-mode Next.js :3000. Actual browser reload of
+  `http://127.0.0.1:3000/research/NVDA` shows persisted ALPACA/IEX quote and existing thesis only;
+  no SEC filings, source documents or financial facts. Code inspection confirms the API-mode
+  research page reads market quotes/research, with no SEC read/display path. Frontend gate FAILED.
+- Next authorized implementation should address missing historical document handling (without
+  inventing raw evidence), the filings-to-company-facts dependency, and PIT-aware SEC read API/UI.
+  Add regression tests before behavior changes. This verification batch changed documentation
+  only; no new make verify run, commit, push, PR or Notion/Linear completion update was performed.
+
+## 2026-09-04 — Pre-SEC-repair local checkpoint
+
+- User approved a checkpoint of the preceding uncommitted audit remediation before SEC repairs.
+  Created `codex/post-audit-checkpoint` from `main@dbacc0b`; all existing changes were preserved.
+- Reviewed the source/test/documentation diff. Private `.env` and `web/.env.local` remain ignored
+  and untracked; `output/` and runtime artifacts are excluded from this checkpoint.
+- Fresh `make verify`: exit 0. Ruff format: 324 files unchanged; Ruff/Mypy clean (282 source
+  files); Alembic no drift; MCP/OpenAPI contract checks passed; backend 723 passed / 5 skipped
+  in 74.45s; Vitest 24 files / 130 passed; TypeScript, ESLint and Next.js production build passed.
+  The opt-in browser harness and live-provider tests are not rerun by this standard gate; their
+  earlier explicitly scoped evidence is recorded above. Intentional failure-path web diagnostics
+  are expected test output, not live Provider failures.
+- `git diff --check`: exit 0. This is a local checkpoint only, not SEC completion or release
+  acceptance. SEC document 404/Company Facts dependency and missing SEC API/UI remain open.
+- No push, merge, or Notion/Linear Done transition is authorized for this checkpoint.
+
+## 2026-09-04 — SEC repair slice 1 (TDD, not final acceptance)
+
+- Branch: `codex/sec-repair`, base `aebbfd6`. Preserved unrelated untracked `output/`.
+- SEC documents its complete-submission root path at
+  https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data
+  (Paths and directory structure). Only primary-document HTTP 404 triggers that official path;
+  401/403/429/5xx remain unchanged failures. No general URL fetch or Fixture fallback was added.
+- Validate the complete submission's accession and CIK in its SEC header, rejecting error pages
+  and mismatched identities. Preserve original bytes, use text/plain / .txt for text submissions,
+  and retain content-addressed MinIO and PostgreSQL lineage. No history was rewritten.
+- RED: `UV_CACHE_DIR=.uv-cache uv run pytest backend/tests/contract/providers/test_sec_ingestion.py
+  -q -k 'missing_primary_document or primary_document_errors'`: exit 1, 1 intended failure / 4
+  safety regressions passed. GREEN: same command exit 0, 5 passed.
+- RED: same file with `-q -k complete_submission_rejects --tb=short`: exit 1, 3 intended failures.
+  GREEN: entire contract file exit 0, 20 passed.
+- RED: `UV_CACHE_DIR=.uv-cache uv run pytest backend/tests/integration/ingestion/test_sec_jobs.py
+  -q -k idempotently --tb=short`: exit 1, 1 passed / 1 failed because text was stored as .html.
+  GREEN: SEC jobs + SEC facts integration files with `-q --tb=short`: exit 0, 11 passed against
+  isolated PostgreSQL/MinIO, covering financial lineage and repeat ingestion.
+- Ruff initially reported three overlong test literals (exit 1); split literals and formatted.
+  Fresh `make verify`: exit 0; 324 formatted files; Ruff/Mypy clean (282 source files); no Alembic
+  drift; contract checks passed; backend 732 passed / 5 skipped in 72.74s; Web 130 passed;
+  TypeScript, ESLint and production build passed. `git diff --check`: exit 0.
+- Real probes: direct official text request returned 503; first repaired-adapter probe timed out
+  (exit 1). One diagnostic attempted timeout=30 and was rejected locally by the existing 10-second
+  cap (exit 1, no request); cap was not changed. Default-timeout adapter probe then succeeded
+  (exit 0), returning 120,749 bytes for accession `0001012870-00-006127` with validated identity.
+- New bounded NVDA job `bb6452d9-011f-4c85-a77c-6183b36a6c6a` preserved the old dead letter;
+  worker process exit 0 but returned False after TIMEOUT. Current state RETRY_SCHEDULED.
+  Filings increased 387 -> 388. Readback of the formerly blocked filing proved a .txt MinIO
+  object, 120,749 bytes, matching SHA-256 (exit 0). Financial facts remain 0.
+- Remaining: resume the normal due-job queue, finish filings / Company Facts, then implement
+  PIT-aware SEC API/frontend display with its own RED/GREEN tests. No frontend change, full SEC
+  acceptance, commit, push, or external completion update is claimed in this slice.
+
+## 2026-09-05 — SEC repair slice 2 (implementation verified, delivery pending)
+
+- Resumed the normal SEC queue and completed NVDA filings and Company Facts through the production
+  ingestion code. Final persisted facts: 412 SEC filings and 15,642 financial facts. All 426 SEC
+  PostgreSQL raw-object rows were read back from MinIO with 0 missing objects and 0 SHA-256
+  mismatches; 0 financial facts violate filing/availability timestamp order.
+- Added the second historical-document case discovered by the real run: an empty SEC
+  `primaryDocument` now reads the official complete-submission document directly. Contract RED:
+  1 intended failure; GREEN: full SEC provider contract passed. The corrected real Company Facts
+  worker returned `True`; process exit alone was not treated as success.
+- Extended the existing PIT research endpoint with normalized SEC filing and financial-fact facts.
+  Investment evidence remains separate from current TradingView reference data. Added future
+  filing/fact rows to the integration regression and verified `available_at <= decision_time`.
+  Focused API/regression command: exit 0, 43 passed; dedicated PIT regression: exit 0, 1 passed.
+- Added strict frontend contracts and API-mode rendering for filings, source object keys,
+  availability times, financial values and raw quality dimensions. Decimal strings are formatted
+  without conversion to binary floating point; the regression includes a value above JavaScript's
+  safe integer range. Empty/non-PASS quality now explicitly degrades the page, while repeated
+  observations are reduced to the newest provider/dataset/dimension fact for display. Frontend
+  RED: missing `FRESHNESS`, then duplicate/empty-quality state failures; final GREEN: 3 files /
+  15 tests passed.
+- A real runtime probe found `SEC:company_facts` had no quality observations. TDD RED: 2 SEC
+  PostgreSQL/MinIO cases failed because the quality policy lacked that dataset. Added its versioned
+  freshness threshold and persisted one immutable observation per normalized Company Facts record.
+  GREEN: 2 passed, including next-day repeat ingestion. The bounded real repair job
+  `30d4bedb-6e87-4a7c-bbbc-d46de08d685b` returned `True`; 15,587 Company Facts quality rows now
+  exist and `/api/v1/data-quality` reports SUCCESS/PASS.
+- The first post-quality browser rerun exposed a mobile page-level overflow: a 393px viewport was
+  expanded to 1,207px by unbroken SEC raw-object keys. Constrained terminal cards and their inner
+  table scrollers to the parent width without truncating evidence. Mobile GREEN: 1 passed.
+- `RUN_SEC_LIVE_BROWSER=1 WEB_DATA_MODE=api API_BASE_URL=http://127.0.0.1:8000
+  PLAYWRIGHT_WEB_PORT=3000 ./node_modules/.bin/playwright test
+  e2e/sec-live-runtime.spec.ts --workers=1`: exit 0, 2 passed (desktop and mobile Chrome). It
+  verifies filings, financial facts, SEC data quality, no Fixture Mode, and no horizontal overflow.
+- Final fresh `make verify`: exit 0. 324 files formatted; Ruff/Mypy clean (282 source files);
+  Alembic has no drift; backend 734 passed / 5 skipped in 74.30s; Web 24 files / 132 passed; TypeScript, ESLint
+  and Next.js production build passed. Expected diagnostics in failure-path web tests are test
+  evidence, not live Provider failures.
+- The interrupted `pnpm` dependency relink was repaired from the content-addressable store; no
+  dependency versions or lockfile entries changed. Private `.env` files remain ignored and were
+  not read into logs. `output/` remains untracked and untouched.
+- No commit, push, PR, merge, Notion update, or Linear status transition is claimed in this slice.
+
+## 2026-09-05 — Today TradingView market list (scheme C)
+
+- Replaced the API Today page's large persisted-quote card grid with one isolated TradingView
+  Market Data list. TradingView is labeled as external current-market context and is never used as
+  decision-time evidence; the original Alpaca/IEX price, coverage and `available_at` facts remain
+  available in a collapsed PIT audit disclosure. No backend contract or Fixture fallback changed.
+- Preserved the locked watchlist exchange identity (`BE` and `TSM` on NYSE; remaining current
+  symbols on Nasdaq), normalized and rejected malformed inputs, and reinitialized the widget with
+  its supported light/dark theme configuration. The one-widget layout avoids eleven separate chart
+  documents and reserves a compact height without an empty tail.
+- The first official Web Component implementation passed jsdom but failed real-browser QA because
+  `https://www.tradingview-widget.com/w/en/tv-ticker-tape.js` was rejected by CORS. It was replaced
+  through TDD with TradingView's supported isolated iframe script. Browser rerun loaded all 11
+  symbols with 0 console errors; desktop light/dark and 390px narrow-screen screenshots showed the
+  component contained within the page.
+- TDD evidence: initial missing component and old Today grid failed as expected; the exchange test
+  then failed on `NASDAQ:BE,NASDAQ:TSM`, and the compact-height regression failed on `42.35rem`.
+  Final focused command `corepack pnpm --dir web exec vitest run
+  tests/tradingview-ticker-list.test.tsx tests/api-pages.test.tsx
+  tests/api-route-degradation.test.tsx`: exit 0, 3 files / 12 passed.
+- Web verification: `corepack pnpm --dir web test -- --run`: exit 0, 25 files / 136 passed;
+  `corepack pnpm --dir web typecheck`: exit 0; `corepack pnpm --dir web lint`: exit 0;
+  `corepack pnpm --dir web build`: exit 0.
+- Full gate: the first sandboxed `make verify` exited 1 because localhost PostgreSQL access was
+  denied with `Operation not permitted`; no test failed. The identical command rerun with local
+  service access exited 0: 324 formatted files, Ruff/Mypy clean (282 source files), no Alembic
+  drift, backend 734 passed / 5 skipped, web 136 passed, TypeScript/ESLint/build passed.
+- Remaining risk: TradingView is an external delayed-data surface and can be unavailable due to
+  network, blocking or provider policy. The explicit placeholder and separate persisted evidence
+  remain visible; the application never substitutes Fixture data or treats widget values as
+  research, portfolio or execution inputs.
+
+## 2026-09-05 — PR #20 review remediation
+
+- GitHub PR #20 checks completed successfully: `evaluation` passed in 14 seconds and `Verify`
+  passed in 4 minutes 27 seconds. The PR is mergeable and has no remote review comments.
+- Standards review found README's API-mode wording was narrower than the implemented, approved
+  TradingView boundary. Updated it to state that authoritative decision inputs remain persisted
+  FastAPI facts while the isolated widget is external current-market context only.
+- Spec review found the audit preserved the September 4 SEC incident without a colocated resolution;
+  added a September 5 reconciliation that keeps the historical evidence while identifying the
+  verified document fallback, persisted counts/lineage, PIT API/UI closure, and remaining external
+  Alpha/SIP prerequisites.
+- Renamed the generic runtime Boolean validator from `configured` to `booleanValue`; this removes
+  misleading terminology at the new data-quality conflict call site without changing behavior.
+- Dependency recovery: an initial focused `pnpm` invocation detected a stale dependency metadata
+  link and began rebuilding `node_modules`; sandbox DNS was unavailable, so it was stopped. A
+  locked `pnpm install --frozen-lockfile` then restored 468 packages entirely from the local
+  content-addressable store (`reused 468`, `downloaded 0`); no manifest or lockfile changed.
+- Frontend regression command `pnpm --dir web test -- --run tests/live-data-api.test.ts
+  tests/tradingview-ticker-list.test.tsx tests/api-pages.test.tsx && pnpm --dir web typecheck &&
+  pnpm --dir web lint`: exit 0; Vitest ran the configured complete suite, 25 files / 136 tests
+  passed, followed by successful TypeScript and ESLint checks.

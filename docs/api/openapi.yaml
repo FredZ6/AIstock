@@ -445,6 +445,105 @@
         "title": "EvalRunPage",
         "type": "object"
       },
+      "FinancialFactItem": {
+        "additionalProperties": false,
+        "properties": {
+          "accession_number": {
+            "title": "Accession Number",
+            "type": "string"
+          },
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "canonical_concept": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Concept"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "mapping_status": {
+            "enum": [
+              "EXACT",
+              "DERIVED",
+              "UNMAPPED",
+              "AMBIGUOUS"
+            ],
+            "title": "Mapping Status",
+            "type": "string"
+          },
+          "period_end": {
+            "format": "date",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date",
+            "title": "Period Start",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "source_concept": {
+            "title": "Source Concept",
+            "type": "string"
+          },
+          "taxonomy": {
+            "title": "Taxonomy",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "taxonomy",
+          "source_concept",
+          "canonical_concept",
+          "value",
+          "unit",
+          "currency",
+          "period_start",
+          "period_end",
+          "accession_number",
+          "available_at",
+          "mapping_status"
+        ],
+        "title": "FinancialFactItem",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1542,6 +1641,13 @@
             "title": "Decision Time",
             "type": "string"
           },
+          "financial_facts": {
+            "items": {
+              "$ref": "#/components/schemas/FinancialFactItem"
+            },
+            "title": "Financial Facts",
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/ResearchItem"
@@ -1559,11 +1665,20 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "sec_filings": {
+            "items": {
+              "$ref": "#/components/schemas/SecFilingItem"
+            },
+            "title": "Sec Filings",
+            "type": "array"
           }
         },
         "required": [
           "decision_time",
           "items",
+          "sec_filings",
+          "financial_facts",
           "next_cursor"
         ],
         "title": "ResearchPage",
@@ -1817,6 +1932,77 @@
           "data_cutoff"
         ],
         "title": "RunResponse",
+        "type": "object"
+      },
+      "SecFilingItem": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_at": {
+            "format": "date-time",
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "accession_number": {
+            "title": "Accession Number",
+            "type": "string"
+          },
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "document_raw_object_key": {
+            "title": "Document Raw Object Key",
+            "type": "string"
+          },
+          "filing_date": {
+            "format": "date",
+            "title": "Filing Date",
+            "type": "string"
+          },
+          "form": {
+            "title": "Form",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "report_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Date"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "accession_number",
+          "form",
+          "filing_date",
+          "report_date",
+          "accepted_at",
+          "available_at",
+          "description",
+          "document_raw_object_key"
+        ],
+        "title": "SecFilingItem",
         "type": "object"
       },
       "ValidationError": {

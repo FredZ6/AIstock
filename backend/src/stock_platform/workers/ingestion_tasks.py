@@ -757,6 +757,16 @@ def _archive_sec_document(
 ) -> UUID:
     heartbeat()
     content_hash = hashlib.sha256(batch.body).hexdigest()
+    mime_type = next(
+        (
+            value.split(";", 1)[0].strip().lower()
+            for key, value in batch.headers.items()
+            if key.lower() == "content-type"
+        ),
+        "text/html",
+    )
+    is_text = mime_type == "text/plain" or batch.body.lstrip().startswith(b"<SEC-DOCUMENT>")
+    extension = "txt" if is_text else "html"
     record = ProviderRecord(
         symbol=batch.symbol,
         feed_type=FeedType.FILING_SECTIONS,
@@ -765,13 +775,13 @@ def _archive_sec_document(
         available_at=batch.observed_at,
         ingested_at=max(require_aware(ingested_at), batch.observed_at),
         content_hash=content_hash,
-        raw_object_key=f"live/SEC/filing_sections/{content_hash}.html",
+        raw_object_key=f"live/SEC/filing_sections/{content_hash}.{extension}",
         payload={},
     )
     raw_id = RawWriter(engine=engine, raw_store=raw_store).write_artifact(
         record=record,
         raw_content=batch.body,
-        content_type="text/html",
+        content_type="text/plain" if is_text else "text/html",
         job_id=job_id,
         transaction_guard=transaction_guard,
     )
@@ -1043,6 +1053,16 @@ def _persist_sec_company_facts(
                     available_at=batch.observed_at,
                     result=result,
                 )
+    with engine.begin() as connection:
+        transaction_guard(connection)
+        _persist_freshness_quality(
+            connection=connection,
+            raw_id=raw_id,
+            provider="SEC",
+            dataset=FeedType.COMPANY_FACTS.value,
+            observed_at=max(require_aware(ingested_at), batch.observed_at),
+            latest_available_at=batch.observed_at,
+        )
 
 
 def _enqueue_sec_company_facts(

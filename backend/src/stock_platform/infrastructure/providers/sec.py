@@ -17,6 +17,7 @@ from sqlalchemy import Connection, or_, select
 
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
+from stock_platform.domain.ingestion.models import IngestionErrorClass
 from stock_platform.infrastructure.db.models.tables import (
     security_identifier_version,
     security_profile_version,
@@ -25,6 +26,7 @@ from stock_platform.infrastructure.providers.base import (
     FeedType,
     GovernedHttpProvider,
     ProviderBatch,
+    ProviderTransportError,
 )
 
 
@@ -279,20 +281,44 @@ class SecProvider(GovernedHttpProvider):
             raise ValueError("SEC User-Agent requires application/version and contact")
         if not _ACCESSION.fullmatch(accession_number):
             raise ValueError("invalid SEC accession number")
-        if not _DOCUMENT.fullmatch(primary_document):
+        if primary_document and not _DOCUMENT.fullmatch(primary_document):
             raise ValueError("invalid SEC primary document name")
         accession_path = accession_number.replace("-", "")
         cik_path = str(int(identity.cik))
-        url = (
-            f"https://www.sec.gov/Archives/edgar/data/{cik_path}/"
-            f"{accession_path}/{primary_document}"
-        )
-        return self._fetch_batch_from_url(
+        if primary_document:
+            url = (
+                f"https://www.sec.gov/Archives/edgar/data/{cik_path}/"
+                f"{accession_path}/{primary_document}"
+            )
+            try:
+                return self._fetch_batch_from_url(
+                    feed_type=FeedType.FILINGS,
+                    symbol=normalized_symbol,
+                    query_as_of=query_as_of,
+                    url=url,
+                )
+            except ProviderTransportError as error:
+                if error.status_code != 404:
+                    raise
+        # SEC's documented complete-submission path also covers pre-EDGAR-7 filings.
+        # Fetch original SEC bytes, never substitute a fixture or an empty document.
+        batch = self._fetch_batch_from_url(
             feed_type=FeedType.FILINGS,
             symbol=normalized_symbol,
             query_as_of=query_as_of,
-            url=url,
+            url=f"https://www.sec.gov/Archives/edgar/data/{cik_path}/{accession_number}.txt",
         )
+        header = batch.body.split(b"</SEC-HEADER>", 1)[0]
+        accessions = re.findall(rb"(?m)^\s*ACCESSION NUMBER:\s*([\d-]+)\s*$", header)
+        ciks = re.findall(rb"(?m)^\s*CENTRAL INDEX KEY:\s*(\d+)\s*$", header)
+        if (
+            b"<SEC-HEADER>" not in header
+            or b"</SEC-DOCUMENT>" not in batch.body
+            or accessions != [accession_number.encode("ascii")]
+            or identity.cik.encode("ascii") not in [cik.zfill(10) for cik in ciks]
+        ):
+            raise ProviderTransportError(error_class=IngestionErrorClass.SCHEMA_DRIFT)
+        return batch
 
     def fetch_historical_submissions(
         self,

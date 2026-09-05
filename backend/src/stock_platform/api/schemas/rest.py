@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -278,9 +278,40 @@ class ResearchItem(StrictModel):
     opinion: Literal["BULLISH", "NEUTRAL", "BEARISH", "ABSTAIN"] | None
 
 
+class SecFilingItem(StrictModel):
+    id: UUID
+    provider: str
+    accession_number: str
+    form: str
+    filing_date: date
+    report_date: date | None
+    accepted_at: datetime
+    available_at: datetime
+    description: str
+    document_raw_object_key: str
+
+
+class FinancialFactItem(StrictModel):
+    id: UUID
+    provider: str
+    taxonomy: str
+    source_concept: str
+    canonical_concept: str | None
+    value: Decimal
+    unit: str
+    currency: str | None
+    period_start: date
+    period_end: date
+    accession_number: str
+    available_at: datetime
+    mapping_status: Literal["EXACT", "DERIVED", "UNMAPPED", "AMBIGUOUS"]
+
+
 class ResearchPage(StrictModel):
     decision_time: datetime
     items: list[ResearchItem]
+    sec_filings: list[SecFilingItem]
+    financial_facts: list[FinancialFactItem]
     next_cursor: str | None
 
 

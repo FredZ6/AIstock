@@ -80,6 +80,7 @@ from stock_platform.infrastructure.db.models.tables import (
     decision_outcome,
     decision_snapshot,
     error_attribution,
+    financial_fact,
     ingestion_job,
     investment_thesis,
     lesson_approval,
@@ -94,6 +95,7 @@ from stock_platform.infrastructure.db.models.tables import (
     replay_run,
     research_opinion,
     risk_decision,
+    sec_filing,
     security,
     security_identifier_version,
     watchlist_item,
@@ -723,7 +725,86 @@ def get_stock_research(
         .all()
     )
     items, next_cursor = _page(rows, limit, "as_of")
-    return {"decision_time": cutoff, "items": items, "next_cursor": next_cursor}
+    visible_security = (
+        select(security_identifier_version.c.security_id)
+        .where(
+            security_identifier_version.c.identifier_type == "PRIMARY_SYMBOL",
+            security_identifier_version.c.identifier_value == _symbol(symbol),
+            security_identifier_version.c.available_at <= cutoff,
+            security_identifier_version.c.effective_from <= cutoff,
+            or_(
+                security_identifier_version.c.effective_to.is_(None),
+                security_identifier_version.c.effective_to > cutoff,
+            ),
+        )
+        .order_by(security_identifier_version.c.available_at.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    document_raw = raw_data_object.alias("sec_document_raw")
+    filing_rows = (
+        connection.execute(
+            select(
+                sec_filing.c.id,
+                sec_filing.c.provider,
+                sec_filing.c.accession_number,
+                sec_filing.c.form,
+                sec_filing.c.filing_date,
+                sec_filing.c.report_date,
+                sec_filing.c.accepted_at,
+                sec_filing.c.available_at,
+                sec_filing.c.description,
+                document_raw.c.raw_object_key.label("document_raw_object_key"),
+            )
+            .join(document_raw, document_raw.c.id == sec_filing.c.document_raw_data_object_id)
+            .where(
+                sec_filing.c.security_id == visible_security,
+                sec_filing.c.accepted_at <= cutoff,
+                sec_filing.c.available_at <= cutoff,
+                document_raw.c.available_at <= cutoff,
+            )
+            .order_by(sec_filing.c.accepted_at.desc(), sec_filing.c.id.desc())
+            .limit(20)
+        )
+        .mappings()
+        .all()
+    )
+    fact_rows = (
+        connection.execute(
+            select(
+                financial_fact.c.id,
+                financial_fact.c.provider,
+                financial_fact.c.taxonomy,
+                financial_fact.c.source_concept,
+                financial_fact.c.canonical_concept,
+                financial_fact.c.value,
+                financial_fact.c.unit,
+                financial_fact.c.currency,
+                financial_fact.c.period_start,
+                financial_fact.c.period_end,
+                financial_fact.c.accession_number,
+                financial_fact.c.available_at,
+                financial_fact.c.mapping_status,
+            )
+            .join(sec_filing, sec_filing.c.id == financial_fact.c.sec_filing_id)
+            .where(
+                financial_fact.c.security_id == visible_security,
+                financial_fact.c.available_at <= cutoff,
+                sec_filing.c.available_at <= cutoff,
+            )
+            .order_by(financial_fact.c.period_end.desc(), financial_fact.c.id.desc())
+            .limit(100)
+        )
+        .mappings()
+        .all()
+    )
+    return {
+        "decision_time": cutoff,
+        "items": items,
+        "sec_filings": [_row(row) for row in filing_rows],
+        "financial_facts": [_row(row) for row in fact_rows],
+        "next_cursor": next_cursor,
+    }
 
 
 @router.get("/alerts", response_model=AlertPage)
