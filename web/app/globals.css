@@ -10,9 +10,9 @@
   --text: oklch(19% 0.035 260);
   --text-secondary: oklch(45% 0.04 258);
   --text-tertiary: oklch(50% 0.035 258);
-  --signal: oklch(58% 0.15 252);
-  --positive: oklch(56% 0.15 148);
-  --negative: oklch(57% 0.19 27);
+  --signal: oklch(52% 0.15 252);
+  --positive: oklch(51% 0.15 148);
+  --negative: oklch(52% 0.19 27);
   --space-page: clamp(1rem, 3vw, 3rem);
   --space-section: clamp(1.25rem, 2.5vw, 2rem);
   --space-row: 0.75rem;
@@ -50,7 +50,8 @@ a { color: inherit; text-decoration-color: color-mix(in oklch, currentColor 45%,
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
-table:focus-visible {
+table:focus-visible,
+.table-scroll:focus-visible {
   border-radius: 0.35rem;
   outline: 0.18rem solid var(--signal);
   outline-offset: 0.18rem;
@@ -379,7 +380,7 @@ button:hover { box-shadow: 0 0.65rem 1.5rem -0.85rem oklch(34% 0.08 255 / 0.4); 
 .market-widget-mini-chart .tradingview-widget-container { height: calc(100% - 2.85rem); }
 .tradingview-widget-container, .tradingview-widget-container__widget { width: 100%; height: 100%; }
 .tradingview-widget-copyright { padding: 0.2rem 0.75rem; color: var(--text-tertiary); font-size: 0.58rem; text-align: right; }
-.tradingview-widget-copyright a { color: var(--signal); }
+.tradingview-widget-copyright a { color: var(--signal); text-decoration-line: underline; text-decoration-thickness: 0.08em; }
 .mini-chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 1rem; margin-top: 1.25rem; }
 .market-reference-list { overflow: hidden; margin-top: 1.25rem; border: 1px solid var(--line-soft); border-radius: 1.5rem; background: var(--ink-raised); box-shadow: 0 1.2rem 3rem -2.25rem oklch(36% 0.07 255 / 0.32), inset 0 1px 0 color-mix(in oklch, white 75%, transparent); }
 .market-reference-widget { width: 100%; background: var(--ink-raised); }

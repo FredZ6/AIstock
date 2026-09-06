@@ -3219,3 +3219,64 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   tests/tradingview-ticker-list.test.tsx tests/api-pages.test.tsx && pnpm --dir web typecheck &&
   pnpm --dir web lint`: exit 0; Vitest ran the configured complete suite, 25 files / 136 tests
   passed, followed by successful TypeScript and ESLint checks.
+
+## 2026-09-06 — Frontend experience closure (Tasks 1–6, local review checkpoint)
+
+- Branch/worktree: `codex/frontend-experience-closure` in
+  `/private/tmp/aistock-frontend-experience`, based on merged `main@1ac7b30`. The prior `output/`
+  directory remains preserved as `stash@{0}` in the primary worktree; it was neither restored nor
+  deleted. Approved design and execution plans are commits `0a563a8` and `0886e44`.
+- Task 1 (`44b99ad`): introduced explicit compact navigation, current-page context, one reachable
+  eight-destination nav, keyboard dismissal and responsive shell behavior.
+- Task 2 (`79162ae`): normalized spacing, radii, surfaces, typography and light/dark semantic tokens
+  across the product while retaining restrained Apple-style hierarchy and paper-only safety copy.
+- Task 3 (`ef01629`): prioritized Today decision facts and compacted secondary mode/degradation
+  context so the first viewport leads with actionable persisted information.
+- Task 4 (`6531862`): converted Watchlist into a ranked research list with compact trend, quote,
+  quality and provenance fields; grouped configuration controls; separated current TradingView
+  context from point-in-time research evidence. Focused result: 5 files / 57 tests passed;
+  TypeScript and ESLint exit 0.
+- Task 5 (`30175ca`): added summary-first Portfolio, operational Run Trace, explicit alert queue,
+  outcome-first Weekly Review and grouped Eval/Admin evidence. Focused result: 5 files / 30 tests
+  passed; TypeScript and ESLint exit 0.
+- Task 6 RED: the first desktop/mobile happy-path run exited 1 with 6 passed / 6 failed. It proved
+  the Skip link target was not focusable and exposed a brittle reduced-motion string assertion.
+  A measured Portfolio width diagnostic showed the 58rem table was correctly contained by
+  `.table-scroll`; root-page `scrollX` remained 0, so the earlier `scrollWidth` assertion was a
+  false positive rather than a layout regression. The first axe run exited 1 for shared light-theme
+  signal/positive contrast ratios below 4.5:1; the next exited 1 for an un-underlined TradingView
+  attribution link and two non-focusable mobile table scrollers. Demo RED runs then identified
+  three stale ambiguous selectors and the intentionally absent offline-evaluation artifact.
+- Task 6 GREEN: `<main>` is now a programmatically focusable Skip-link destination; viewport checks
+  test actual page-level horizontal scrolling; reduced-motion accepts the browser-normalized
+  equivalent duration; semantic colors meet the automated contrast gate; TradingView attribution
+  is visibly underlined; every horizontally scrollable evidence table has keyboard access. The
+  Playwright configuration uses one deterministic worker and stores artifacts under
+  `web/test-results/frontend-experience/` and `web/playwright-report/frontend-experience/`.
+- `PLAYWRIGHT_WEB_PORT=3106 pnpm --dir web exec playwright test e2e/happy-path.spec.ts
+  --project=desktop-chrome --project=mobile-chrome`: exit 0, 12 passed in 2.2m. It covers all eight
+  routes at 320/393/768/1120/1440, one H1, reachable navigation, Skip-link focus, desktop/mobile,
+  light/dark and reduced-motion behavior.
+- `PLAYWRIGHT_WEB_PORT=3109 pnpm --dir web exec playwright test e2e/accessibility.spec.ts
+  --project=desktop-chrome --project=mobile-chrome`: exit 0, 2 passed; all eight owned-DOM pages
+  have zero serious or critical axe violations in both profiles.
+- `WEB_DATA_MODE=api EXPECT_API_FAILURE=1 API_BASE_URL=http://127.0.0.1:65534
+  PLAYWRIGHT_WEB_PORT=3110 pnpm --dir web exec playwright test
+  e2e/api-failure-matrix.spec.ts --project=desktop-chrome --project=mobile-chrome`: exit 0,
+  2 passed. All eight API routes remained explicit Failure/Degraded surfaces with no Fixture data.
+- `RUN_API_BROWSER=1 UV_CACHE_DIR=.uv-cache uv run pytest -q
+  backend/tests/integration/api/test_browser_runtime.py`: exit 0, 1 passed in 28.24s. The isolated
+  PostgreSQL/FastAPI/browser harness verified persisted success, outage recovery, all eight API
+  routes, and durable SSE resume after restart; its temporary database was dropped by the fixture.
+- `make evaluate`: exit 0, `offline evaluation: PASS`. The generated ignored artifact was then used
+  by `PLAYWRIGHT_WEB_PORT=3114 ... playwright test e2e/demo.spec.ts` which exited 0 with 2 passed
+  across desktop/mobile. Theme startup separately passed in both profiles.
+- Frontend verification: Vitest exit 0, 26 files / 151 passed; ESLint exit 0; production build exit
+  0. A deliberately parallel `tsc`/`next build` attempt exited 2 because both commands raced on
+  `.next/types`; the stable post-build `pnpm --dir web typecheck` rerun exited 0. These two commands
+  must remain sequential.
+- Final `make verify`: exit 0. Ruff format/check clean for 324 files; Mypy clean for 282 source
+  files; Alembic reported no drift; MCP/OpenAPI checks passed; backend 734 passed / 5 skipped in
+  82.49s; frontend 26 files / 151 passed; TypeScript, ESLint and Next.js production build passed.
+  `git diff --check`: exit 0. This is a local review checkpoint; no push, PR, merge or external
+  Notion/Linear completion transition is claimed.

@@ -103,7 +103,7 @@ export function AppShell({ children, currentPath }: AppShellProps) {
           </button>
         </div>
       </header>
-      <main className={`app-main${currentPath === '/' ? ' app-main-today' : ''}`} id="main-content">{children}</main>
+      <main className={`app-main${currentPath === '/' ? ' app-main-today' : ''}`} id="main-content" tabIndex={-1}>{children}</main>
       <footer className="app-footer">
         <p>Paper Trading only · Not investment advice</p>
       </footer>

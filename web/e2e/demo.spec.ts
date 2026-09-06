@@ -24,11 +24,12 @@ test('the ten-minute fixture demo exposes every interview acceptance artifact', 
 
   await page.goto('/alerts')
   await expect(page.getByRole('button', { name: 'Acknowledge alert alert-nvda-volume-001' })).toBeVisible()
-  await expect(page.getByText('Relative volume and return z-score crossed the frozen deterministic rule.')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Relative volume and return z-score crossed the frozen deterministic rule.' })).toBeVisible()
 
   await page.goto('/portfolio')
-  await expect(page.getByText('USD 100,425.18', { exact: true })).toBeVisible()
-  await expect(page.getByText('-1.80%', { exact: true })).toBeVisible()
+  const portfolioSnapshot = page.getByRole('region', { name: 'Portfolio snapshot' })
+  await expect(portfolioSnapshot.getByText('USD 100,425.18', { exact: true })).toBeVisible()
+  await expect(portfolioSnapshot.getByText('-1.80%', { exact: true })).toBeVisible()
   await expect(page.getByRole('rowheader', { name: 'risk-decision-001' })).toBeVisible()
   await expect(page.getByText('REJECTED', { exact: true })).toBeVisible()
   await expect(page.getByRole('rowheader', { name: 'fill-nvda-001' })).toBeVisible()

@@ -31,16 +31,16 @@ test.describe('isolated real API runtime', () => {
 
   test('reads persisted configuration, recovers from outage, and never substitutes fixtures', async ({ page }) => {
     await page.goto('/watchlist')
-    await expect(page.getByRole('table', { name: 'Research watchlist' })).toBeVisible()
-    await expect(page.getByRole('rowheader', { name: 'NVDA', exact: true })).toBeVisible()
+    await expect(page.getByRole('list', { name: 'Ranked research watchlist' })).toBeVisible()
+    await expect(page.getByRole('list', { name: 'Ranked research watchlist' }).getByRole('link', { name: 'NVDA', exact: true })).toBeVisible()
     await expect(page.getByText('Fixture Mode', { exact: true })).toHaveCount(0)
     await stop()
     await page.reload()
     await expect(page.getByRole('alert', { name: 'Watchlist unavailable' })).toBeVisible()
-    await expect(page.getByRole('table', { name: 'Research watchlist' })).toHaveCount(0)
+    await expect(page.getByRole('list', { name: 'Ranked research watchlist' })).toHaveCount(0)
     await start()
     await page.getByRole('link', { name: 'Try again' }).click()
-    await expect(page.getByRole('table', { name: 'Research watchlist' })).toBeVisible()
+    await expect(page.getByRole('list', { name: 'Ranked research watchlist' })).toBeVisible()
     await expect(page.getByText('Fixture Mode', { exact: true })).toHaveCount(0)
   })
 
