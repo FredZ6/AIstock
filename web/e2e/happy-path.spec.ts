@@ -54,3 +54,35 @@ test('keyboard focus is visible and the document does not overflow its viewport'
   const overflows = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
   expect(overflows).toBe(false)
 })
+
+test('compact layouts expose every destination through an explicit navigation menu', async ({ page }) => {
+  await page.setViewportSize({ height: 852, width: 393 })
+  await page.goto('/')
+
+  const navigation = page.getByRole('navigation', { name: 'Primary' })
+  const trigger = page.getByRole('button', { name: 'Open navigation' })
+
+  await expect(trigger).toBeVisible()
+  await expect(navigation).toBeHidden()
+
+  await trigger.click()
+
+  await expect(page.getByRole('button', { name: 'Close navigation' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  await expect(navigation).toBeVisible()
+  await expect(navigation.getByRole('link')).toHaveCount(8)
+
+  await page.keyboard.press('Escape')
+  await expect(navigation).toBeHidden()
+
+  for (const width of [320, 720]) {
+    await page.setViewportSize({ height: 852, width })
+    await page.reload()
+    const overflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth,
+    )
+    expect(overflows, `${width}px layout overflowed`).toBe(false)
+  }
+})
