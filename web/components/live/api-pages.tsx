@@ -225,17 +225,16 @@ export function ApiPortfolioPage({ asOf, portfolio }: { asOf: string; portfolio:
           <input name="effective_at" type="hidden" value={asOf} />
           <input name="idempotency_key" type="hidden" value={`portfolio-init:${asOf}`} />
           <button className="state-retry" type="submit">Initialize USD 100,000 paper portfolio</button>
-        </form> : <section className="terminal-section first-section" aria-label="Paper portfolio summary">
-          <p className="section-kicker">Paper portfolio</p>
-          <h2>{portfolio.latestNav
-            ? formatMoney(portfolio.latestNav.nav, 'USD')
-            : portfolio.cash
-              ? formatMoney(portfolio.cash.balance, portfolio.cash.currency)
-              : 'Unavailable'}</h2>
-          <p>{portfolio.latestNav
-            ? <time dateTime={portfolio.latestNav.eventTime}>{formatDualTime(portfolio.latestNav.eventTime).newYork}</time>
-            : 'Cash balance · no NAV snapshot yet'}</p>
-        </section>}
+        </form> : <>
+          <section className="portfolio-snapshot" aria-label="Portfolio snapshot">
+            <div><p className="section-kicker">Paper portfolio</p><h2>Persisted snapshot</h2><p>As of <time dateTime={asOf}>{formatDualTime(asOf).newYork}</time></p></div>
+            <dl><div><dt>Net asset value</dt><dd>{portfolio.latestNav ? formatMoney(portfolio.latestNav.nav, 'USD') : <span className="unavailable-value">Unavailable</span>}</dd></div><div><dt>Day return</dt><dd className="unavailable-value">Unavailable</dd></div><div><dt>Current drawdown</dt><dd className="unavailable-value">Unavailable</dd></div><div><dt>Available cash</dt><dd>{portfolio.cash ? formatMoney(portfolio.cash.balance, portfolio.cash.currency) : <span className="unavailable-value">Unavailable</span>}</dd></div></dl>
+          </section>
+          <section className="terminal-section" aria-label="Paper trading evidence availability">
+            <p className="section-kicker">Persisted evidence</p><h2>Evidence availability</h2>
+            <dl className="evidence-counts"><div><dt>Positions</dt><dd>{portfolio.positions.length}</dd></div><div><dt>Risk decisions</dt><dd>{portfolio.riskDecisions.length}</dd></div><div><dt>Paper fills</dt><dd>{portfolio.fills.length}</dd></div><div><dt>Cash ledger entries</dt><dd>{portfolio.cashLedger.length}</dd></div></dl>
+          </section>
+        </>}
       </StateBoundary>
     </AppShell>
   )
@@ -252,8 +251,8 @@ export function ApiWeeklyReviewPage({ asOf, detail }: { asOf: string; detail: We
         message: 'The persisted review remains visible; missing outcomes are not substituted.',
         providers: ['Matured outcomes'],
       } : { kind: 'success' }}>
-        <section className="terminal-section first-section" aria-labelledby="weekly-outcomes-title">
-          <p className="section-kicker">Measure</p><h2 id="weekly-outcomes-title">Outcome attribution</h2>
+        <section className="terminal-section first-section" aria-label="Weekly outcome summary">
+          <div className="section-heading"><div><p className="section-kicker">Measure</p><h2 id="weekly-outcomes-title">Outcome attribution</h2></div><span className="unavailable-value">Benchmark comparison unavailable in the persisted review contract</span></div>
           <div className="table-scroll"><table aria-label="Persisted weekly outcomes"><thead><tr><th>Symbol</th><th>Opinion</th><th>Confidence</th><th>Return</th><th>Status</th></tr></thead><tbody>
             {detail.outcomes.map((outcome) => {
               const horizons = Object.keys(outcome.returns).sort((left, right) => Number(left) - Number(right))
@@ -270,7 +269,11 @@ export function ApiWeeklyReviewPage({ asOf, detail }: { asOf: string; detail: We
           <p className="section-kicker">Attribute</p><h2 id="weekly-attribution-title">Error attribution</h2>
           <ul className="plain-list">{detail.attributions.map((item) => <li key={item.id}><strong>{item.category}</strong><p>{item.rationale}</p></li>)}</ul>
         </section>
-        <section className="terminal-section" aria-labelledby="weekly-lessons-title">
+        <section className="terminal-section" aria-label="Point-in-time replays">
+          <p className="section-kicker">Verify</p><h2>Point-in-time replays</h2>
+          {detail.replays.length ? <ul className="plain-list">{detail.replays.map((replay) => <li key={replay.id}><strong>{replay.id}</strong><p>Lesson {replay.lessonId} · delta {formatPercent(replay.delta)}</p><time dateTime={replay.dataCutoff}>{formatDualTime(replay.dataCutoff).newYork}</time></li>)}</ul> : <p className="unavailable-value">No replay evidence persisted.</p>}
+        </section>
+        <section className="terminal-section" aria-label="Candidate lessons">
           <p className="section-kicker">Control</p><h2 id="weekly-lessons-title">Candidate lessons</h2>
           <ul className="plain-list">{detail.lessons.map((lesson) => <li key={lesson.id}><strong>{lesson.status}</strong><p>{lesson.statement}</p><small>Confidence {formatPercent(lesson.confidence, { signed: false })} · replay delta {formatPercent(lesson.replayDelta)}</small></li>)}</ul>
         </section>

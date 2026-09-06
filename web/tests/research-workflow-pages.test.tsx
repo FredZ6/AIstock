@@ -140,4 +140,20 @@ describe('research workflow pages', () => {
     expect(within(trace).getAllByRole('listitem')).toHaveLength(fixtureRunTrace.events.length)
     expect(screen.getByText(/Last-Event-ID/i)).toBeInTheDocument()
   })
+
+  it('summarizes run progress and cutoff before the verbose durable event list', () => {
+    render(<RunTracePage snapshot={fixtureRunTrace} />)
+
+    const summary = screen.getByRole('region', { name: 'Run operations summary' })
+    const events = screen.getByRole('region', { name: 'Durable event trace' })
+    expect(summary).toHaveTextContent('RUNNING')
+    expect(within(summary).getByText('Elapsed').parentElement).toHaveTextContent('28,000 ms')
+    expect(within(summary).getByText('Current step').parentElement).toHaveTextContent('Citation verifier running')
+    expect(within(summary).getByText('Retries').parentElement).toHaveTextContent('1')
+    expect(within(summary).getByText('Degradations').parentElement).toHaveTextContent('1')
+    expect(within(summary).getByText('Checkpoints').parentElement).toHaveTextContent('1')
+    expect(summary).toHaveTextContent('Data cutoff')
+    expect(summary.querySelector('time')).toHaveAttribute('datetime', fixtureRunTrace.asOf)
+    expect(summary.compareDocumentPosition(events) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
 })

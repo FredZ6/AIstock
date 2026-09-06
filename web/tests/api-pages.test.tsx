@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { ApiPortfolioPage, ApiResearchPage, ApiTodayPage, ApiWeeklyReviewPage } from '../components/live/api-pages'
@@ -112,6 +112,20 @@ describe('API mode pages', () => {
     expect(screen.getByRole('status', { name: 'Portfolio evidence is partial' })).toBeInTheDocument()
   })
 
+  it('labels the persisted API portfolio snapshot and evidence availability explicitly', () => {
+    render(<ApiPortfolioPage
+      asOf="2026-08-29T09:30:00Z"
+      portfolio={{ ...emptyPortfolio, cash: { balance: '100000', currency: 'USD' }, initializedAt: '2026-08-29T09:00:00Z', status: 'SUCCESS' }}
+    />)
+
+    const summary = screen.getByRole('region', { name: 'Portfolio snapshot' })
+    expect(within(summary).getByText('Net asset value').parentElement).toHaveTextContent('Unavailable')
+    expect(within(summary).getByText('Available cash').parentElement).toHaveTextContent('USD 100,000.00')
+    expect(summary).toHaveTextContent('As of')
+    const evidence = screen.getByRole('region', { name: 'Paper trading evidence availability' })
+    expect(within(evidence).getByText('Positions').parentElement).toHaveTextContent('0')
+  })
+
   it('renders persisted weekly outcomes, calibration, attribution, and lessons', () => {
     render(<ApiWeeklyReviewPage asOf="2026-08-29T09:30:00Z" detail={{
       approvals: [],
@@ -128,5 +142,24 @@ describe('API mode pages', () => {
     expect(screen.getByText('Late entry.')).toBeInTheDocument()
     expect(screen.getByText('Wait for confirmation.')).toBeInTheDocument()
     expect(screen.getAllByText('80.00%')).toHaveLength(2)
+  })
+
+  it('keeps API weekly benchmarks honest and replays ahead of candidate lessons', () => {
+    render(<ApiWeeklyReviewPage asOf="2026-08-29T09:30:00Z" detail={{
+      approvals: [],
+      attributions: [],
+      calibration: [],
+      lessons: [{ confidence: '0.7', id: 'l1', replayDelta: '0.1', statement: 'Wait.', status: 'CANDIDATE' }],
+      outcomes: [],
+      replays: [{ dataCutoff: '2026-08-21T20:00:00Z', delta: '0.05', id: 'p1', lessonId: 'l1' }],
+      review: { dataCutoff: '2026-08-21T20:00:00Z', id: 'r1', status: 'COMPLETED' },
+    }} />)
+
+    const outcomes = screen.getByRole('region', { name: 'Weekly outcome summary' })
+    const replay = screen.getByRole('region', { name: 'Point-in-time replays' })
+    const lessons = screen.getByRole('region', { name: 'Candidate lessons' })
+    expect(outcomes).toHaveTextContent('Benchmark comparison unavailable')
+    expect(replay).toHaveTextContent('Aug 21, 2026')
+    expect(replay.compareDocumentPosition(lessons) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
