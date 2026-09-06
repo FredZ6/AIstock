@@ -402,6 +402,13 @@ button:hover { box-shadow: 0 0.65rem 1.5rem -0.85rem oklch(34% 0.08 255 / 0.4); 
 .watchlist-controls form { display: grid; grid-template-columns: minmax(8rem, 12rem) auto; gap: 0.35rem 0.6rem; }
 .watchlist-controls form label { grid-column: 1 / -1; color: var(--text-tertiary); font-size: 0.68rem; }
 input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--line); border-radius: 0.65rem; background: var(--ink); color: var(--text); font: inherit; }
+.research-run-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem 2rem; align-items: end; margin-top: var(--space-section); padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid color-mix(in oklch, var(--signal) 28%, var(--line)); border-radius: var(--radius-control); background: var(--surface-highlight); }
+.research-run-control h2 { margin: 0.4rem 0 0; font-size: clamp(1.1rem, 2vw, 1.5rem); }
+.research-run-control p:not(.section-kicker) { margin: 0.45rem 0 0; color: var(--text-secondary); font-size: 0.75rem; }
+.research-run-control form { display: grid; grid-template-columns: minmax(8rem, 12rem) auto; gap: 0.35rem 0.6rem; }
+.research-run-control label { grid-column: 1 / -1; color: var(--text-tertiary); font-size: 0.68rem; }
+.research-run-message { grid-column: 1 / -1; margin: 0; }
+.research-run-message[data-status="error"] { color: var(--negative); }
 .watchlist-settings { display: grid; min-width: 11rem; gap: 0.45rem; }
 .watchlist-settings label { display: flex; align-items: center; gap: 0.4rem; color: var(--text-secondary); font-size: 0.66rem; }
 .watchlist-settings input[type="checkbox"] { min-height: auto; accent-color: var(--signal); }
@@ -580,6 +587,8 @@ input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--l
   .performance-facts div + div { padding: 1rem 0 0; border-top: 1px solid var(--line-soft); border-left: 0; }
   .benchmark-panel .benchmark-bars { grid-template-columns: 1fr; }
   .watchlist-controls { align-items: stretch; flex-direction: column; }
+  .research-run-control { grid-template-columns: 1fr; align-items: stretch; }
+  .research-run-control form { grid-template-columns: 1fr; }
   .watchlist-controls form { grid-template-columns: 1fr; }
   .watchlist-controls form label { grid-column: auto; }
   .ranked-watchlist > li { grid-template-columns: 1.5rem minmax(0, 1fr) auto; gap: 0.65rem; min-height: 0; }

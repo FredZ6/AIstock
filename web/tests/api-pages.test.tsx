@@ -1,7 +1,11 @@
 import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { ApiPortfolioPage, ApiResearchPage, ApiTodayPage, ApiWeeklyReviewPage } from '../components/live/api-pages'
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}))
 
 const quote = {
   availableAt: '2026-08-29T09:20:00Z',
@@ -50,11 +54,16 @@ describe('API mode pages', () => {
   })
 
   it('keeps current quote visible when persisted research is empty', () => {
-    render(<ApiResearchPage asOf="2026-08-29T09:30:00Z" dataQuality={[]} financialFacts={[]} quote={quote} records={[]} secFilings={[]} symbol="NVDA" />)
+    render(<ApiResearchPage asOf="2026-08-29T09:30:00Z" dataQuality={[]} financialFacts={[]} idempotencyKey="research-form-1" quote={quote} records={[]} secFilings={[]} symbol="NVDA" />)
 
     expect(screen.getByRole('heading', { name: 'NVDA research' })).toBeInTheDocument()
     expect(screen.getByRole('status', { name: 'Research evidence unavailable' })).toBeInTheDocument()
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Research symbol' })).toHaveValue('NVDA')
+    expect(screen.getByRole('button', { name: 'Run deterministic research' })).toBeInTheDocument()
+    expect(screen.getByDisplayValue('research-form-1')).toHaveAttribute('type', 'hidden')
+    expect(screen.queryByText(/run with (openai|anthropic|llm)/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /broker|trade|order/i })).not.toBeInTheDocument()
     expect(screen.queryByText(/frozen fixture/i)).not.toBeInTheDocument()
   })
 
@@ -72,6 +81,7 @@ describe('API mode pages', () => {
         periodEnd: '2026-07-31', periodStart: '2026-05-01', provider: 'SEC',
         sourceConcept: 'Revenues', taxonomy: 'us-gaap', unit: 'USD', value: '9007199254740993',
       }]}
+      idempotencyKey="research-form-2"
       quote={quote}
       records={[]}
       secFilings={[{

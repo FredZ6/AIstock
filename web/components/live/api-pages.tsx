@@ -16,6 +16,7 @@ import { formatDualTime } from '../../lib/time'
 import { AppShell } from '../layout/app-shell'
 import { TradingViewWidget } from '../market/tradingview-widget'
 import { TradingViewTickerList } from '../market/tradingview-ticker-list'
+import { ResearchRunControl } from '../research/research-run-control'
 import { StateBoundary } from '../states/state-boundary'
 import { PageHeading, Signal } from '../ui/product-ui'
 
@@ -133,6 +134,7 @@ export function ApiResearchPage({
   asOf,
   dataQuality,
   financialFacts,
+  idempotencyKey,
   quote,
   records,
   secFilings,
@@ -142,6 +144,7 @@ export function ApiResearchPage({
   asOf: string
   dataQuality: DataQuality[]
   financialFacts: FinancialFact[]
+  idempotencyKey: string
   quote: MarketQuote | null
   records: ResearchRecord[]
   secFilings: SecFiling[]
@@ -166,6 +169,7 @@ export function ApiResearchPage({
     <AppShell currentPath={`/research/${symbol}`}>
       <PageHeading asOf={asOf} eyebrow="Research · API Mode" title={`${symbol} research`} summary="Persisted research only; current market reference remains separate from historical decision evidence." />
       <StateBoundary state={state}>
+        <ResearchRunControl idempotencyKey={idempotencyKey} symbol={symbol} />
         {quote ? <section className="decision-hero" aria-label="Latest persisted market quote">
           <div><p className="section-kicker">Current market reference</p><h2>{quote.symbol}</h2><p className="thesis-copy">{formatMoney(quote.close, 'USD')}</p></div>
           <dl className="decision-facts"><div><dt>Provider</dt><dd>{quote.provider}</dd></div><div><dt>Coverage</dt><dd>{quote.coverage}</dd></div><div><dt>Available</dt><dd>{formatDualTime(quote.availableAt).newYork}</dd></div></dl>
