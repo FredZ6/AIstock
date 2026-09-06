@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { DurableEventStore, reconnectRequest } from '../lib/sse'
+import { DurableEventStore, IncrementalSseParser, reconnectRequest } from '../lib/sse'
 
 const event = (overrides: Partial<Parameters<DurableEventStore['append']>[0]> = {}) => ({
   event_id: 'event-001',
@@ -14,6 +14,22 @@ const event = (overrides: Partial<Parameters<DurableEventStore['append']>[0]> = 
 })
 
 describe('durable SSE client state', () => {
+  it('parses split custom-event frames and ignores heartbeat comments', () => {
+    const parser = new IncrementalSseParser()
+    const encoded = JSON.stringify(event())
+
+    expect(parser.push(': heartbeat\n\nid: event-001\nevent: node.completed\ndata: ' + encoded.slice(0, 37))).toEqual([])
+    expect(parser.push(encoded.slice(37) + '\n\n')).toEqual([event()])
+  })
+
+  it('flushes a final unterminated frame without inventing an event', () => {
+    const parser = new IncrementalSseParser()
+
+    expect(parser.push(`id: event-001\nevent: node.completed\ndata: ${JSON.stringify(event())}`)).toEqual([])
+    expect(parser.finish()).toEqual([event()])
+    expect(parser.finish()).toEqual([])
+  })
+
   it('builds a reconnect request with the durable Last-Event-ID cursor', () => {
     expect(reconnectRequest('/api/v1/events', 'run-001', 'event-009')).toEqual({
       headers: { 'Last-Event-ID': 'event-009' },
