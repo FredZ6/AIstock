@@ -82,6 +82,8 @@ describe('StateBoundary', () => {
     expect(status).toHaveClass('surface-card')
     expect(status).toHaveTextContent('SEC')
     expect(status).toHaveTextContent('Options')
+    const disclosure = screen.getByText('2 unavailable facts').closest('details')
+    expect(disclosure).not.toHaveAttribute('open')
     expect(screen.getByText('Partial market context')).toBeInTheDocument()
   })
 

@@ -57,6 +57,33 @@ type StateBoundaryProps = {
   state: ViewState
 }
 
+function DegradedDetails({ state }: { state: DegradedState }) {
+  const groups = state.groups?.length
+    ? state.groups
+    : [{ label: 'Providers', items: state.providers ?? [] }]
+  const unavailableCount = groups.reduce((count, group) => count + group.items.length, 0)
+
+  if (unavailableCount === 0) return null
+
+  return (
+    <details className="state-details">
+      <summary>
+        {unavailableCount} unavailable {unavailableCount === 1 ? 'fact' : 'facts'}
+      </summary>
+      <div className="state-detail-groups">
+        {groups.map((group) => (
+          <section aria-label={group.label} key={group.label}>
+            <h3>{group.label}</h3>
+            <ul className="state-tags">
+              {group.items.map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </details>
+  )
+}
+
 function StateMessage({ compact, state }: { compact?: boolean; state: EmptyState | StaleState | DegradedState | PartialState }) {
   if (state.kind === 'stale') {
     parseAwareInstant(state.lastUpdatedAt)
@@ -80,29 +107,7 @@ function StateMessage({ compact, state }: { compact?: boolean; state: EmptyState
           Last updated <time dateTime={state.lastUpdatedAt}>{state.lastUpdatedAt}</time>
         </p>
       ) : null}
-      {state.kind === 'degraded' ? (
-        state.groups?.length ? (
-          <details className="state-details">
-            <summary>
-              {state.groups.reduce((count, group) => count + group.items.length, 0)} unavailable facts
-            </summary>
-            <div className="state-detail-groups">
-              {state.groups.map((group) => (
-                <section aria-label={group.label} key={group.label}>
-                  <h3>{group.label}</h3>
-                  <ul className="state-tags">
-                    {group.items.map((item) => <li key={item}>{item}</li>)}
-                  </ul>
-                </section>
-              ))}
-            </div>
-          </details>
-        ) : (
-          <ul aria-label="Degraded providers" className="state-tags">
-            {(state.providers ?? []).map((provider) => <li key={provider}>{provider}</li>)}
-          </ul>
-        )
-      ) : null}
+      {state.kind === 'degraded' ? <DegradedDetails state={state} /> : null}
       {state.kind === 'partial' ? (
         <ul aria-label="Missing records" className="state-tags">
           {state.missing.map((item) => <li key={item}>{item}</li>)}
