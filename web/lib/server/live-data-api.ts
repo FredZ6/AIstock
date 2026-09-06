@@ -359,8 +359,7 @@ export async function getEvalRuns(options: LiveDataClientOptions): Promise<Paged
   return pagedRecords(await requestJson(options, `/api/v1/evals/runs?${query}`), 'eval_runs')
 }
 
-export async function getResearchRun(options: LiveDataClientOptions, runId: string): Promise<ResearchRun> {
-  const value = await requestJson(options, `/api/v1/research-runs/${encodeURIComponent(runId)}`)
+function researchRun(value: unknown): ResearchRun {
   return contract(() => {
     const source = record(value, 'research_run')
     return {
@@ -372,6 +371,40 @@ export async function getResearchRun(options: LiveDataClientOptions, runId: stri
       dataCutoff: instant(source.data_cutoff, 'research_run.data_cutoff'),
     }
   })
+}
+
+export async function createResearchRun(
+  options: LiveDataClientOptions,
+  symbol: string,
+  idempotencyKey: string,
+): Promise<ResearchRun> {
+  if (!symbolPattern.test(symbol)) {
+    throw new LiveDataApiError('contract', 'Research symbol is invalid')
+  }
+  if (!idempotencyKey) {
+    throw new LiveDataApiError('contract', 'Idempotency key is required')
+  }
+  try {
+    parseAwareInstant(options.decisionTime)
+  } catch {
+    throw new LiveDataApiError('contract', 'Decision time must include a timezone')
+  }
+  return researchRun(await requestJson(options, '/api/v1/research-runs', {
+    body: JSON.stringify({
+      data_cutoff: options.decisionTime,
+      decision_time: options.decisionTime,
+      symbol,
+    }),
+    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+    method: 'POST',
+  }))
+}
+
+export async function getResearchRun(options: LiveDataClientOptions, runId: string): Promise<ResearchRun> {
+  return researchRun(await requestJson(
+    options,
+    `/api/v1/research-runs/${encodeURIComponent(runId)}`,
+  ))
 }
 
 export async function getMarketQuotes(

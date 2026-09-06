@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  createResearchRun,
   getDataQuality,
   getMarketQuotes,
   getPortfolioSummary,
@@ -21,6 +22,51 @@ function jsonResponse(value: unknown, status = 200) {
 const options = { baseUrl: 'http://api.test', decisionTime: '2026-08-29T09:30:00Z' }
 
 describe('live data API client', () => {
+  it('admits a research run with one point-in-time cutoff and a stable idempotency key', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      data_cutoff: options.decisionTime,
+      decision_time: options.decisionTime,
+      run_id: '10000000-0000-0000-0000-000000000099',
+      run_type: 'RESEARCH',
+      status: 'QUEUED',
+      symbol: 'NVDA',
+    }, 202))
+
+    await expect(createResearchRun(
+      { ...options, fetchImpl },
+      'NVDA',
+      'research-form-1',
+    )).resolves.toMatchObject({ runId: '10000000-0000-0000-0000-000000000099' })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://api.test/api/v1/research-runs',
+      expect.objectContaining({
+        body: JSON.stringify({
+          data_cutoff: options.decisionTime,
+          decision_time: options.decisionTime,
+          symbol: 'NVDA',
+        }),
+        headers: expect.objectContaining({ 'Idempotency-Key': 'research-form-1' }),
+        method: 'POST',
+      }),
+    )
+  })
+
+  it('rejects invalid research admission input before calling FastAPI', async () => {
+    const fetchImpl = vi.fn()
+
+    await expect(createResearchRun(
+      { ...options, fetchImpl },
+      'nvda!',
+      'research-form-1',
+    )).rejects.toMatchObject({ kind: 'contract' })
+    await expect(createResearchRun(
+      { ...options, fetchImpl },
+      'NVDA',
+      '',
+    )).rejects.toMatchObject({ kind: 'contract' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
   it('validates point-in-time quote Decimal strings and provenance', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       status: 'SUCCESS',
