@@ -28,4 +28,27 @@ describe('visual system contract', () => {
     expect(darkBodyRule).not.toContain('radial-gradient')
     expect(css).not.toMatch(/\.primary-nav::-webkit-scrollbar\s*\{[^}]*display:\s*none/s)
   })
+
+  it('uses the theme light-blue surface for Today highlights', () => {
+    expect(css).toContain(
+      '--surface-highlight: oklch(95.5% 0.025 252);',
+    )
+    expect(css).toMatch(
+      /:root\[data-theme="dark"\]\s*\{[^}]*--surface-highlight:\s*oklch\(24% 0\.032 252\)/s,
+    )
+    expect(css).toMatch(
+      /:root\[data-theme="dark"\]\s+\.state-surface\[data-state="degraded"\][^{]*\{[^}]*background:\s*var\(--surface-highlight\)/s,
+    )
+
+    for (const selector of [
+      '\\.state-surface\\[data-state="degraded"\\][^{]*',
+      '\\.metric-list div',
+      '\\.watchlist-heatmap li',
+      '\\.watchlist-heatmap li\\[data-direction="negative"\\]',
+    ]) {
+      expect(css).toMatch(
+        new RegExp(`${selector}\\s*\\{[^}]*background:\\s*var\\(--surface-highlight\\)`, 's'),
+      )
+    }
+  })
 })
