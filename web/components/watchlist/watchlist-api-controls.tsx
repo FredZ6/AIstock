@@ -12,10 +12,12 @@ import {
 import type { ApiWatchlistItem } from '../../lib/product-types'
 import type { MarketQuote } from '../../lib/server/live-data-api'
 import { formatMoney } from '../../lib/format'
+import { formatDualTime } from '../../lib/time'
 import {
   initialWatchlistActionState,
   type WatchlistActionState,
 } from '../../lib/watchlist-action-state'
+import { companyName } from './watchlist-display'
 
 function SubmitButton({ label, pendingLabel }: { label: string; pendingLabel: string }) {
   const { pending } = useFormStatus()
@@ -78,6 +80,7 @@ function PersistedSettings({ item }: { item: ApiWatchlistItem }) {
         <SubmitButton label={`Delete ${item.symbol}`} pendingLabel={`Deleting ${item.symbol}…`} />
         <ActionMessage state={deleteState} />
       </form>
+      <p className="watchlist-setting-note">Earnings schedule unavailable</p>
     </div>
   )
 }
@@ -93,36 +96,42 @@ export function WatchlistApiControls({ items, quotes }: { items: ApiWatchlistIte
         </div>
         <span className="muted-copy">PostgreSQL configuration · paper trading only</span>
       </div>
-      <section className="watchlist-controls" aria-labelledby="watchlist-api-controls-title">
-        <div>
-          <h3 id="watchlist-api-controls-title">Watchlist controls</h3>
-          <p>Changes are confirmed by FastAPI before this page refreshes.</p>
+      <ol className="ranked-watchlist" aria-label="Ranked research watchlist">
+        {items.map((item, index) => {
+          const quote = quoteBySymbol.get(item.symbol)
+          return <li key={item.symbol}>
+            <span className="watchlist-rank" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+            <div className="watchlist-identity">
+              <Link href={`/research/${item.symbol}`}>{item.symbol}</Link>
+              <span>{companyName(item.symbol)}</span>
+            </div>
+            <div className="watchlist-trend unavailable-value" aria-label={`${item.symbol} compact trend`}>Trend unavailable</div>
+            <div className="watchlist-quote">
+              <strong className={quote ? undefined : 'unavailable-value'}>{quote ? formatMoney(quote.close, 'USD') : 'Price unavailable'}</strong>
+              <span className="unavailable-value">Change unavailable</span>
+            </div>
+            <div className="watchlist-provenance">
+              <span>{quote ? `${quote.provider} · ${quote.coverage}` : 'Quality unavailable'}</span>
+              {quote
+                ? <time dateTime={quote.availableAt}>Persisted {formatDualTime(quote.availableAt).newYork}</time>
+                : <span className="unavailable-value">Persistence time unavailable</span>}
+            </div>
+          </li>
+        })}
+      </ol>
+      <section className="watchlist-configuration" aria-labelledby="watchlist-configuration-title">
+        <div className="section-heading">
+          <div><p className="section-kicker">Configure</p><h3 id="watchlist-configuration-title">Watchlist configuration</h3></div>
+          <span className="muted-copy">Changes are confirmed by FastAPI before refresh.</span>
         </div>
-        <AddWatchlistForm />
+        <div className="watchlist-controls"><AddWatchlistForm /></div>
+        <div className="watchlist-config-list">
+          {items.map((item) => <section aria-label={`${item.symbol} settings`} key={item.symbol}>
+            <h4>{item.symbol}</h4>
+            <PersistedSettings item={item} />
+          </section>)}
+        </div>
       </section>
-      <div className="table-scroll">
-        <table aria-label="Persisted research watchlist">
-          <thead>
-            <tr><th scope="col">Symbol</th><th scope="col">Price</th><th scope="col">Day</th><th scope="col">Research opinion</th><th scope="col">Portfolio action</th><th scope="col">Next earnings</th><th scope="col">Monitoring</th><th scope="col">Last research</th><th scope="col">Data quality</th></tr>
-          </thead>
-          <tbody>
-            {items.map((item) => {
-              const quote = quoteBySymbol.get(item.symbol)
-              return <tr key={item.symbol}>
-                <th scope="row"><Link href={`/research/${item.symbol}`}>{item.symbol}</Link></th>
-                <td className={quote ? undefined : 'unavailable-value'}>{quote ? formatMoney(quote.close, 'USD') : 'Unavailable'}</td>
-                <td className="unavailable-value">Unavailable</td>
-                <td className="unavailable-value">Unavailable</td>
-                <td className="unavailable-value">Unavailable</td>
-                <td className="unavailable-value">Unavailable</td>
-                <td><PersistedSettings item={item} /></td>
-                <td className="unavailable-value">Unavailable</td>
-                <td>{quote ? `${quote.provider} · ${quote.coverage}` : <span className="unavailable-value">Unavailable</span>}</td>
-              </tr>
-            })}
-          </tbody>
-        </table>
-      </div>
     </section>
   )
 }

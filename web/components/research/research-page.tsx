@@ -2,27 +2,32 @@ import Link from 'next/link'
 
 import type { ResearchSnapshot } from '../../lib/product-types'
 import { formatPercent } from '../../lib/format'
-import { formatDualTime } from '../../lib/time'
+import { formatDualTime, parseAwareInstant } from '../../lib/time'
 import { AppShell } from '../layout/app-shell'
 import { TradingViewWidget } from '../market/tradingview-widget'
 import { FixtureNotice, PageHeading, QualityFacts, Signal } from '../ui/product-ui'
 
 export function ResearchPage({ snapshot }: { snapshot: ResearchSnapshot }) {
+  const freshestEvidenceAt = snapshot.lineage
+    .map((item) => item.evidence.availableAt)
+    .sort((left, right) => parseAwareInstant(left).getTime() - parseAwareInstant(right).getTime())
+    .at(-1) ?? snapshot.asOf
+
   return (
     <AppShell currentPath={`/research/${snapshot.symbol}`}>
       <PageHeading asOf={snapshot.asOf} eyebrow="Research" title={`${snapshot.symbol} research`} summary="A decision record whose conclusions stay attached to evidence, gaps, and provenance." />
       <FixtureNotice />
-      <section className="decision-hero" aria-labelledby="thesis-title">
-        <div><p className="section-kicker">Investment thesis</p><h2 id="thesis-title">Investment thesis</h2><p className="thesis-copy">{snapshot.thesis.summary}</p><p className="muted-copy">Report <strong>{snapshot.report.id}</strong> · <time dateTime={snapshot.report.generatedAt}>{formatDualTime(snapshot.report.generatedAt).newYork}</time></p></div>
+      <section className="decision-hero research-conclusion" aria-label={`${snapshot.symbol} research conclusion`}>
+        <div><p className="section-kicker">Latest conclusion · {snapshot.symbol}</p><h2 id="thesis-title">Investment thesis</h2><p className="thesis-copy">{snapshot.thesis.summary}</p><p className="muted-copy">Report <strong>{snapshot.report.id}</strong> · <time dateTime={snapshot.report.generatedAt}>{formatDualTime(snapshot.report.generatedAt).newYork}</time></p><p className="research-freshness"><span>Evidence freshness</span><time dateTime={freshestEvidenceAt}>{formatDualTime(freshestEvidenceAt).newYork}</time></p></div>
         <dl className="decision-facts"><div><dt>Research opinion</dt><dd><Signal tone={snapshot.researchOpinion}>{snapshot.researchOpinion}</Signal></dd></div><div><dt>Portfolio action</dt><dd><Signal tone={snapshot.portfolioAction}>{snapshot.portfolioAction}</Signal></dd></div><div><dt>Confidence</dt><dd>{formatPercent(snapshot.thesis.confidence, { signed: false })}</dd></div><div><dt>Horizon</dt><dd>{snapshot.thesis.horizon}</dd></div></dl>
       </section>
       <TradingViewWidget kind="symbol-overview" symbol={snapshot.symbol} />
-      <section className="research-domain-grid" aria-label="Research domains">
-        <article><h2>Fundamentals</h2><dl>{snapshot.fundamentals.map((fact) => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}<small>{fact.source}</small></dd></div>)}</dl></article>
-        <article><h2>Earnings</h2>{snapshot.earnings.map((item) => <div key={item.period}><strong>{item.period}</strong><p>{item.summary}</p><time dateTime={item.reportedAt}>{formatDualTime(item.reportedAt).newYork}</time></div>)}</article>
-        <article><h2>News</h2>{snapshot.news.map((item) => <div key={item.headline}><strong>{item.headline}</strong><p>{item.provider}</p><time dateTime={item.eventTime}>{formatDualTime(item.eventTime).newYork}</time></div>)}</article>
-        <article><h2>Options</h2><Signal tone={snapshot.options.status}>{snapshot.options.status}</Signal><p>{snapshot.options.summary}</p></article>
-        <article><h2>Analyst targets</h2><dl><div><dt>Consensus</dt><dd>{snapshot.analystTargets.consensus}</dd></div><div><dt>Target price</dt><dd>{snapshot.analystTargets.targetPrice}</dd></div></dl><p>{snapshot.analystTargets.provider} · <time dateTime={snapshot.analystTargets.asOf}>{formatDualTime(snapshot.analystTargets.asOf).newYork}</time></p></article>
+      <section className="research-domain-grid" aria-label="Point-in-time research evidence">
+        <section aria-labelledby="fundamentals-title"><h2 id="fundamentals-title">Fundamentals</h2><dl>{snapshot.fundamentals.map((fact) => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}<small>{fact.source}</small></dd></div>)}</dl></section>
+        <section aria-labelledby="earnings-title"><h2 id="earnings-title">Earnings</h2>{snapshot.earnings.map((item) => <div key={item.period}><strong>{item.period}</strong><p>{item.summary}</p><time dateTime={item.reportedAt}>{formatDualTime(item.reportedAt).newYork}</time></div>)}</section>
+        <section aria-labelledby="news-title"><h2 id="news-title">News</h2>{snapshot.news.map((item) => <div key={item.headline}><strong>{item.headline}</strong><p>{item.provider}</p><time dateTime={item.eventTime}>{formatDualTime(item.eventTime).newYork}</time></div>)}</section>
+        <section aria-labelledby="options-title"><h2 id="options-title">Options</h2><Signal tone={snapshot.options.status}>{snapshot.options.status}</Signal><p>{snapshot.options.summary}</p></section>
+        <section aria-labelledby="analyst-targets-title"><h2 id="analyst-targets-title">Analyst targets</h2><dl><div><dt>Consensus</dt><dd>{snapshot.analystTargets.consensus}</dd></div><div><dt>Target price</dt><dd>{snapshot.analystTargets.targetPrice}</dd></div></dl><p>{snapshot.analystTargets.provider} · <time dateTime={snapshot.analystTargets.asOf}>{formatDualTime(snapshot.analystTargets.asOf).newYork}</time></p></section>
       </section>
       <div className="research-grid">
         <section className="terminal-section" aria-labelledby="lineage-title">

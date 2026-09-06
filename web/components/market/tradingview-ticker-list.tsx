@@ -71,7 +71,7 @@ export function TradingViewTickerList({ symbols }: { symbols: string[] }) {
   }, [normalized, theme])
 
   return (
-    <section aria-label="Current market reference" className="market-reference-list">
+    <section aria-label="Current market reference" className="market-reference-list" data-evidence-scope="external-current-market">
       <div className="market-widget-heading">
         <span>Current market reference</span>
         <small>TradingView · Not decision-time evidence</small>
