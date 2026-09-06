@@ -14,14 +14,14 @@
 
 **Files:**
 
-- Create: `backend/alembic/versions/0037_evidence_gap_run_lineage.py`
+- Create: `backend/migrations/versions/0037_evidence_gap_run_lineage.py`
 - Modify: `backend/src/stock_platform/infrastructure/db/models/tables.py`
-- Modify: `backend/src/stock_platform/application/research/store.py`
-- Modify: `backend/src/stock_platform/api/models/rest.py`
+- Modify: `backend/src/stock_platform/application/research/persistence.py`
+- Modify: `backend/src/stock_platform/api/schemas/rest.py`
 - Modify: `backend/src/stock_platform/api/routes/rest.py`
 - Modify: `backend/tests/contract/api/test_rest_contract.py`
 - Create: `backend/tests/integration/api/test_research_run_report.py`
-- Modify: `backend/tests/integration/migrations/test_schema_contract.py`
+- Modify: `backend/tests/integration/db/test_migrations.py`
 
 ### Step 1: Write failing contract and integration tests
 
@@ -39,7 +39,7 @@ Run:
 UV_CACHE_DIR=.uv-cache uv run pytest \
   backend/tests/contract/api/test_rest_contract.py \
   backend/tests/integration/api/test_research_run_report.py \
-  backend/tests/integration/migrations/test_schema_contract.py -q
+  backend/tests/integration/db/test_migrations.py -q
 ```
 
 Expected: FAIL because `evidence_gap.run_id` and the closed lineage response do not exist.
@@ -85,14 +85,14 @@ Expected: all commands exit 0.
 ### Step 6: Commit
 
 ```bash
-git add backend/alembic/versions/0037_evidence_gap_run_lineage.py \
+git add backend/migrations/versions/0037_evidence_gap_run_lineage.py \
   backend/src/stock_platform/infrastructure/db/models/tables.py \
-  backend/src/stock_platform/application/research/store.py \
-  backend/src/stock_platform/api/models/rest.py \
+  backend/src/stock_platform/application/research/persistence.py \
+  backend/src/stock_platform/api/schemas/rest.py \
   backend/src/stock_platform/api/routes/rest.py \
   backend/tests/contract/api/test_rest_contract.py \
   backend/tests/integration/api/test_research_run_report.py \
-  backend/tests/integration/migrations/test_schema_contract.py
+  backend/tests/integration/db/test_migrations.py
 git commit -m "feat(agent): close persisted research report lineage"
 ```
 
