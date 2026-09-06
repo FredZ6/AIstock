@@ -1684,6 +1684,450 @@
         "title": "ResearchPage",
         "type": "object"
       },
+      "ResearchReportDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_cutoff": {
+            "format": "date-time",
+            "title": "Data Cutoff",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "policy_versions": {
+            "$ref": "#/components/schemas/ResearchReportPolicyVersions"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "data_cutoff",
+          "available_at",
+          "prompt_version",
+          "model_version",
+          "policy_versions",
+          "created_at"
+        ],
+        "title": "ResearchReportDecision",
+        "type": "object"
+      },
+      "ResearchReportDecisionDiff": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "additionalProperties": true,
+            "title": "Changes",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_id": {
+            "format": "uuid",
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "generator": {
+            "const": "DETERMINISTIC_CODE",
+            "title": "Generator",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "previous_decision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Decision Id"
+          }
+        },
+        "required": [
+          "id",
+          "decision_id",
+          "previous_decision_id",
+          "generator",
+          "changes",
+          "created_at"
+        ],
+        "title": "ResearchReportDecisionDiff",
+        "type": "object"
+      },
+      "ResearchReportEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "claims": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
+            "type": "string"
+          },
+          "feed_type": {
+            "title": "Feed Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "ingested_at": {
+            "format": "date-time",
+            "title": "Ingested At",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "raw_object_key": {
+            "title": "Raw Object Key",
+            "type": "string"
+          },
+          "relation": {
+            "enum": [
+              "SUPPORTS",
+              "CONTRADICTS",
+              "CONTEXT"
+            ],
+            "title": "Relation",
+            "type": "string"
+          },
+          "weight": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Weight",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "relation",
+          "weight",
+          "rationale",
+          "claims",
+          "provider",
+          "feed_type",
+          "event_time",
+          "available_at",
+          "ingested_at",
+          "content_hash",
+          "raw_object_key"
+        ],
+        "title": "ResearchReportEvidence",
+        "type": "object"
+      },
+      "ResearchReportEvidenceGap": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "UNKNOWN",
+              "MISSING",
+              "UNAVAILABLE",
+              "CONFLICTED"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "kind",
+          "field",
+          "domain",
+          "reason",
+          "provider",
+          "observed_at",
+          "created_at"
+        ],
+        "title": "ResearchReportEvidenceGap",
+        "type": "object"
+      },
+      "ResearchReportOpinion": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "value": {
+            "enum": [
+              "BULLISH",
+              "NEUTRAL",
+              "BEARISH",
+              "ABSTAIN"
+            ],
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "value",
+          "created_at"
+        ],
+        "title": "ResearchReportOpinion",
+        "type": "object"
+      },
+      "ResearchReportPolicyVersions": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "string"
+          },
+          "execution": {
+            "title": "Execution",
+            "type": "string"
+          },
+          "research_scoring": {
+            "title": "Research Scoring",
+            "type": "string"
+          },
+          "risk": {
+            "title": "Risk",
+            "type": "string"
+          }
+        },
+        "required": [
+          "research_scoring",
+          "risk",
+          "execution",
+          "confidence"
+        ],
+        "title": "ResearchReportPolicyVersions",
+        "type": "object"
+      },
+      "ResearchReportThesis": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "catalysts": {
+            "items": {},
+            "title": "Catalysts",
+            "type": "array"
+          },
+          "confidence": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Confidence",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "invalidation_conditions": {
+            "items": {},
+            "title": "Invalidation Conditions",
+            "type": "array"
+          },
+          "risks": {
+            "items": {},
+            "title": "Risks",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "supersedes_thesis_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Thesis Id"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "symbol",
+          "as_of",
+          "direction",
+          "summary",
+          "catalysts",
+          "risks",
+          "invalidation_conditions",
+          "horizon",
+          "confidence",
+          "supersedes_thesis_id",
+          "created_at"
+        ],
+        "title": "ResearchReportThesis",
+        "type": "object"
+      },
+      "ResearchRunReportResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/ResearchReportDecision"
+          },
+          "decision_diff": {
+            "$ref": "#/components/schemas/ResearchReportDecisionDiff"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchReportEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "evidence_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchReportEvidenceGap"
+            },
+            "title": "Evidence Gaps",
+            "type": "array"
+          },
+          "opinion": {
+            "$ref": "#/components/schemas/ResearchReportOpinion"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "thesis": {
+            "$ref": "#/components/schemas/ResearchReportThesis"
+          }
+        },
+        "required": [
+          "run_id",
+          "thesis",
+          "opinion",
+          "decision",
+          "evidence",
+          "evidence_gaps",
+          "decision_diff"
+        ],
+        "title": "ResearchRunReportResponse",
+        "type": "object"
+      },
       "ResearchRunRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3808,9 +4252,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Research Report Api V1 Research Runs  Run Id  Report Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ResearchRunReportResponse"
                 }
               }
             },

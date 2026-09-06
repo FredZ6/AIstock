@@ -127,6 +127,7 @@ def test_live_read_endpoints_publish_closed_response_schemas() -> None:
         "/api/v1/market-data/bars/{symbol}",
         "/api/v1/data-quality",
         "/api/v1/portfolio",
+        "/api/v1/research-runs/{run_id}/report",
         "/api/v1/stocks/{symbol}/research",
         "/api/v1/alerts",
         "/api/v1/portfolio/orders",

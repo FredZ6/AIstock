@@ -152,6 +152,7 @@ evidence_gap = Table(
     "evidence_gap",
     metadata,
     uuid_pk(),
+    Column("run_id", UUID(as_uuid=True), ForeignKey("agent_run.id")),
     Column("kind", evidence_gap_kind, nullable=False),
     Column("field", Text, nullable=False),
     Column("domain", Text, nullable=False),
@@ -159,6 +160,7 @@ evidence_gap = Table(
     Column("provider", Text),
     Column("observed_at", DateTime(timezone=True), nullable=False),
     created_at(),
+    Index("ix_evidence_gap_run_id", "run_id"),
 )
 claim = Table(
     "claim",

@@ -30,6 +30,7 @@ from stock_platform.api.schemas.rest import (
     PortfolioRunRequest,
     ProviderHealthResponse,
     ResearchPage,
+    ResearchRunReportResponse,
     ResearchRunRequest,
     RunResponse,
     WatchlistPatch,
@@ -76,16 +77,24 @@ from stock_platform.infrastructure.db.models.tables import (
     alert_event,
     candidate_lesson,
     cash_ledger,
+    claim,
+    confidence_policy_version,
     data_quality_observation,
+    decision_diff,
     decision_outcome,
     decision_snapshot,
+    derived_metric,
     error_attribution,
+    evidence_gap,
+    evidence_item,
+    execution_policy_version,
     financial_fact,
     ingestion_job,
     investment_thesis,
     lesson_approval,
     lesson_attribution_link,
     market_bar,
+    normalized_record,
     paper_fill,
     paper_order,
     paper_portfolio_config,
@@ -94,10 +103,13 @@ from stock_platform.infrastructure.db.models.tables import (
     raw_data_object,
     replay_run,
     research_opinion,
+    research_scoring_policy_version,
     risk_decision,
+    risk_policy_version,
     sec_filing,
     security,
     security_identifier_version,
+    thesis_evidence_link,
     watchlist_item,
     weekly_review_run,
 )
@@ -660,12 +672,11 @@ def cancel_research_run(run_id: UUID, connection: ConnectionDependency) -> RunRe
     return _run_response(row)
 
 
-@router.get("/research-runs/{run_id}/report")
+@router.get("/research-runs/{run_id}/report", response_model=ResearchRunReportResponse)
 def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[str, Any]:
-    row = (
+    thesis = (
         connection.execute(
-            select(investment_thesis, research_opinion.c.value.label("opinion"))
-            .outerjoin(research_opinion, research_opinion.c.thesis_id == investment_thesis.c.id)
+            select(investment_thesis)
             .where(investment_thesis.c.run_id == run_id)
             .order_by(investment_thesis.c.created_at.desc())
             .limit(1)
@@ -673,9 +684,174 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
         .mappings()
         .one_or_none()
     )
-    if row is None:
+    if thesis is None:
         raise ApiError(404, "NOT_FOUND", "Research report not found")
-    return _row(row)
+    opinion = (
+        connection.execute(
+            select(research_opinion)
+            .where(research_opinion.c.thesis_id == thesis["id"])
+            .order_by(research_opinion.c.created_at.desc())
+            .limit(1)
+        )
+        .mappings()
+        .one()
+    )
+    decision = (
+        connection.execute(
+            select(
+                decision_snapshot.c.id,
+                decision_snapshot.c.data_cutoff,
+                decision_snapshot.c.available_at,
+                decision_snapshot.c.prompt_version,
+                decision_snapshot.c.model_version,
+                decision_snapshot.c.created_at,
+                research_scoring_policy_version.c.version.label("research_scoring"),
+                risk_policy_version.c.version.label("risk"),
+                execution_policy_version.c.version.label("execution"),
+                confidence_policy_version.c.version.label("confidence"),
+            )
+            .join(
+                research_scoring_policy_version,
+                research_scoring_policy_version.c.id
+                == decision_snapshot.c.research_scoring_policy_version_id,
+            )
+            .join(
+                risk_policy_version,
+                risk_policy_version.c.id == decision_snapshot.c.risk_policy_version_id,
+            )
+            .join(
+                execution_policy_version,
+                execution_policy_version.c.id == decision_snapshot.c.execution_policy_version_id,
+            )
+            .join(
+                confidence_policy_version,
+                confidence_policy_version.c.id == decision_snapshot.c.confidence_policy_version_id,
+            )
+            .where(decision_snapshot.c.thesis_id == thesis["id"])
+            .order_by(decision_snapshot.c.created_at.desc())
+            .limit(1)
+        )
+        .mappings()
+        .one()
+    )
+    evidence_rows = (
+        connection.execute(
+            select(
+                evidence_item.c.id,
+                thesis_evidence_link.c.relation,
+                thesis_evidence_link.c.weight,
+                thesis_evidence_link.c.rationale,
+                claim.c.statement,
+                raw_data_object.c.provider,
+                raw_data_object.c.feed_type,
+                raw_data_object.c.event_time,
+                raw_data_object.c.available_at,
+                raw_data_object.c.ingested_at,
+                raw_data_object.c.content_hash,
+                raw_data_object.c.raw_object_key,
+            )
+            .select_from(
+                thesis_evidence_link.join(
+                    evidence_item,
+                    evidence_item.c.id == thesis_evidence_link.c.evidence_id,
+                )
+                .join(
+                    derived_metric,
+                    derived_metric.c.id == evidence_item.c.derived_metric_id,
+                )
+                .join(
+                    normalized_record,
+                    normalized_record.c.id == derived_metric.c.normalized_record_id,
+                )
+                .join(
+                    raw_data_object,
+                    raw_data_object.c.id == normalized_record.c.raw_data_object_id,
+                )
+                .outerjoin(claim, claim.c.evidence_id == evidence_item.c.id)
+            )
+            .where(thesis_evidence_link.c.thesis_id == thesis["id"])
+            .order_by(evidence_item.c.id, claim.c.created_at, claim.c.id)
+        )
+        .mappings()
+        .all()
+    )
+    evidence: list[dict[str, Any]] = []
+    evidence_by_link: dict[tuple[UUID, str], dict[str, Any]] = {}
+    for item in evidence_rows:
+        key = (item["id"], str(item["relation"]))
+        rendered = evidence_by_link.get(key)
+        if rendered is None:
+            rendered = {
+                "id": item["id"],
+                "relation": item["relation"],
+                "weight": item["weight"],
+                "rationale": item["rationale"],
+                "claims": [],
+                "provider": item["provider"],
+                "feed_type": item["feed_type"],
+                "event_time": item["event_time"],
+                "available_at": item["available_at"],
+                "ingested_at": item["ingested_at"],
+                "content_hash": item["content_hash"],
+                "raw_object_key": item["raw_object_key"],
+            }
+            evidence_by_link[key] = rendered
+            evidence.append(rendered)
+        if item["statement"] is not None:
+            rendered["claims"].append(item["statement"])
+
+    gaps = (
+        connection.execute(
+            select(evidence_gap)
+            .where(evidence_gap.c.run_id == run_id)
+            .order_by(evidence_gap.c.observed_at, evidence_gap.c.id)
+        )
+        .mappings()
+        .all()
+    )
+    diff = (
+        connection.execute(
+            select(decision_diff).where(decision_diff.c.decision_id == decision["id"])
+        )
+        .mappings()
+        .one()
+    )
+    return {
+        "run_id": run_id,
+        "thesis": {
+            key: thesis[key]
+            for key in (
+                "id",
+                "symbol",
+                "as_of",
+                "direction",
+                "summary",
+                "catalysts",
+                "risks",
+                "invalidation_conditions",
+                "horizon",
+                "confidence",
+                "supersedes_thesis_id",
+                "created_at",
+            )
+        },
+        "opinion": {key: opinion[key] for key in ("id", "value", "created_at")},
+        "decision": {
+            "id": decision["id"],
+            "data_cutoff": decision["data_cutoff"],
+            "available_at": decision["available_at"],
+            "prompt_version": decision["prompt_version"],
+            "model_version": decision["model_version"],
+            "policy_versions": {
+                key: decision[key]
+                for key in ("research_scoring", "risk", "execution", "confidence")
+            },
+            "created_at": decision["created_at"],
+        },
+        "evidence": evidence,
+        "evidence_gaps": [dict(gap) for gap in gaps],
+        "decision_diff": dict(diff),
+    }
 
 
 @router.get("/stocks/{symbol}/research", response_model=ResearchPage)
