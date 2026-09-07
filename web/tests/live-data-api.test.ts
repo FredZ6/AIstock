@@ -7,6 +7,7 @@ import {
   getPortfolioSummary,
   getProviderHealth,
   getStockResearch,
+  getResearchRunReport,
   getWeeklyReviewDetail,
   initializePortfolio,
   LiveDataApiError,
@@ -22,6 +23,24 @@ function jsonResponse(value: unknown, status = 200) {
 const options = { baseUrl: 'http://api.test', decisionTime: '2026-08-29T09:30:00Z' }
 
 describe('live data API client', () => {
+  it('parses the closed research report without weakening Decimal or timestamp contracts', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      run_id: 'run-1',
+      thesis: { id: 'thesis-1', symbol: 'NVDA', as_of: options.decisionTime, direction: 'UP', summary: 'Durable demand.', catalysts: [], risks: [], invalidation_conditions: [], horizon: '12M', confidence: '0.82', supersedes_thesis_id: null, created_at: options.decisionTime },
+      opinion: { id: 'opinion-1', value: 'BULLISH', created_at: options.decisionTime },
+      decision: { id: 'decision-1', data_cutoff: options.decisionTime, available_at: options.decisionTime, prompt_version: 'prompt-v1', model_version: 'model-v1', policy_versions: { research_scoring: 'score-v1', risk: 'risk-v1', execution: 'paper-v1', confidence: 'confidence-v1' }, created_at: options.decisionTime },
+      evidence: [{ id: 'evidence-1', relation: 'SUPPORTS', weight: '1', rationale: 'Filed fact.', claims: ['Revenue grew'], provider: 'SEC', feed_type: 'FINANCIALS', event_time: options.decisionTime, available_at: options.decisionTime, ingested_at: options.decisionTime, content_hash: 'abc', raw_object_key: 'sec/raw.json' }],
+      evidence_gaps: [],
+      decision_diff: { id: 'diff-1', decision_id: 'decision-1', previous_decision_id: null, generator: 'DETERMINISTIC_CODE', changes: {}, created_at: options.decisionTime },
+    }))
+
+    await expect(getResearchRunReport({ ...options, fetchImpl }, 'run-1')).resolves.toMatchObject({
+      thesis: { confidence: '0.82' },
+      evidence: [{ rawObjectKey: 'sec/raw.json' }],
+      decisionDiff: { generator: 'DETERMINISTIC_CODE' },
+    })
+  })
+
   it('admits a research run with one point-in-time cutoff and a stable idempotency key', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       data_cutoff: options.decisionTime,

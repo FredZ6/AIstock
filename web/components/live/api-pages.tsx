@@ -9,6 +9,8 @@ import type {
   PortfolioSummary,
   ProviderHealth,
   ResearchRecord,
+  ResearchRun,
+  ResearchRunReport,
   SecFiling,
   WeeklyReviewDetail,
 } from '../../lib/server/live-data-api'
@@ -18,6 +20,7 @@ import { TradingViewWidget } from '../market/tradingview-widget'
 import { TradingViewTickerList } from '../market/tradingview-ticker-list'
 import { ResearchRunControl } from '../research/research-run-control'
 import { StateBoundary } from '../states/state-boundary'
+import { LiveRunTrace } from '../trace/live-run-trace'
 import { PageHeading, Signal } from '../ui/product-ui'
 
 export function ApiCollectionPage({
@@ -50,14 +53,42 @@ export function ApiCollectionPage({
   )
 }
 
-export function ApiRunMetadataPage({ run }: { run: import('../../lib/server/live-data-api').ResearchRun }) {
+const displayReportItem = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value)
+
+export function ApiRunMetadataPage({ run, report }: { run: ResearchRun; report?: ResearchRunReport }) {
   return (
     <AppShell currentPath={`/runs/${run.runId}`}>
       <PageHeading asOf={run.decisionTime} eyebrow="Audit · API Mode" title={`Research run · ${run.symbol ?? 'Portfolio'}`} summary="Persisted run admission and status facts. Durable events remain available through the SSE contract." />
-      <section className="run-overview" aria-label="Persisted run metadata">
-        <div><p className="section-kicker">Status</p><Signal tone={run.status}>{run.status}</Signal><small>{run.runId}</small></div>
-        <dl className="budget-strip"><div><dt>Run type</dt><dd>{run.runType}</dd></div><div><dt>Decision time</dt><dd>{formatDualTime(run.decisionTime).newYork}</dd></div><div><dt>Data cutoff</dt><dd>{formatDualTime(run.dataCutoff).newYork}</dd></div></dl>
-      </section>
+      <LiveRunTrace initialRun={run} />
+      {report ? <article className="terminal-section" aria-labelledby="research-report-title">
+        <div className="section-heading"><div><p className="section-kicker">Closed persisted report</p><h2 id="research-report-title">Deterministic Research Workflow</h2></div><Signal tone={report.opinion.value}>{report.opinion.value}</Signal></div>
+        <p className="thesis-copy">{report.thesis.summary}</p>
+        <dl className="decision-facts">
+          <div><dt>Confidence</dt><dd>{formatPercent(report.thesis.confidence, { signed: false })}</dd></div>
+          <div><dt>Direction / horizon</dt><dd>{report.thesis.direction} · {report.thesis.horizon}</dd></div>
+          <div><dt>Thesis ID</dt><dd><code>{report.thesis.id}</code></dd></div>
+          <div><dt>Decision ID</dt><dd><code>{report.decision.id}</code></dd></div>
+          <div><dt>Available</dt><dd><time dateTime={report.decision.availableAt}>{formatDualTime(report.decision.availableAt).newYork}</time></dd></div>
+          <div><dt>Data cutoff</dt><dd><time dateTime={report.decision.dataCutoff}>{formatDualTime(report.decision.dataCutoff).newYork}</time></dd></div>
+        </dl>
+        <section aria-label="Thesis conditions">
+          <h3>Catalysts, risks, and invalidation</h3>
+          <dl className="decision-facts"><div><dt>Catalysts</dt><dd>{report.thesis.catalysts.map(displayReportItem).join(' · ') || 'None persisted'}</dd></div><div><dt>Risks</dt><dd>{report.thesis.risks.map(displayReportItem).join(' · ') || 'None persisted'}</dd></div><div><dt>Invalidation</dt><dd>{report.thesis.invalidationConditions.map(displayReportItem).join(' · ') || 'None persisted'}</dd></div></dl>
+        </section>
+        <section aria-label="Version pins">
+          <h3>Version pins</h3>
+          <dl className="pin-list"><div><dt>Prompt</dt><dd>{report.decision.promptVersion}</dd></div><div><dt>Model</dt><dd>{report.decision.modelVersion}</dd></div><div><dt>Research scoring</dt><dd>{report.decision.policyVersions.researchScoring}</dd></div><div><dt>Risk</dt><dd>{report.decision.policyVersions.risk}</dd></div><div><dt>Execution</dt><dd>{report.decision.policyVersions.execution}</dd></div><div><dt>Confidence</dt><dd>{report.decision.policyVersions.confidence}</dd></div></dl>
+        </section>
+        <section aria-label="Linked evidence">
+          <h3>Linked evidence and citations</h3>
+          {report.evidence.length ? <ul className="lineage-list">{report.evidence.map((item) => <li key={item.id}><strong>{item.relation} · {item.provider} · {item.feedType}</strong><p>{item.rationale}</p><p>{item.claims.join(' · ')}</p><code>{item.rawObjectKey}</code><small>{item.contentHash} · available <time dateTime={item.availableAt}>{formatDualTime(item.availableAt).newYork}</time></small></li>)}</ul> : <p className="unavailable-value">No linked evidence persisted.</p>}
+        </section>
+        <section aria-label="Evidence gaps">
+          <h3>Evidence gaps</h3>
+          {report.evidenceGaps.length ? <ul className="plain-list">{report.evidenceGaps.map((gap) => <li key={gap.id}><strong>{gap.kind} · {gap.domain} · {gap.field}</strong><p>{gap.reason}</p><small>{gap.provider ?? 'No provider'} · <time dateTime={gap.observedAt}>{formatDualTime(gap.observedAt).newYork}</time></small></li>)}</ul> : <p>No evidence gaps persisted.</p>}
+        </section>
+        <section aria-label="Deterministic decision diff"><h3>Decision diff</h3><Signal tone={report.decisionDiff.generator}>{report.decisionDiff.generator}</Signal><pre>{JSON.stringify(report.decisionDiff.changes, null, 2)}</pre></section>
+      </article> : null}
     </AppShell>
   )
 }

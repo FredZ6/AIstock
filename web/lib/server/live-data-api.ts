@@ -137,6 +137,16 @@ export type ResearchRun = {
   symbol: string | null
 }
 
+export type ResearchRunReport = {
+  runId: string
+  thesis: { id: string; symbol: string; asOf: string; direction: string; summary: string; catalysts: unknown[]; risks: unknown[]; invalidationConditions: unknown[]; horizon: string; confidence: string; supersedesThesisId: string | null; createdAt: string }
+  opinion: { id: string; value: 'BULLISH' | 'NEUTRAL' | 'BEARISH' | 'ABSTAIN'; createdAt: string }
+  decision: { id: string; dataCutoff: string; availableAt: string; promptVersion: string; modelVersion: string; policyVersions: { researchScoring: string; risk: string; execution: string; confidence: string }; createdAt: string }
+  evidence: Array<{ id: string; relation: 'SUPPORTS' | 'CONTRADICTS' | 'CONTEXT'; weight: string; rationale: string; claims: string[]; provider: string; feedType: string; eventTime: string; availableAt: string; ingestedAt: string; contentHash: string; rawObjectKey: string }>
+  evidenceGaps: Array<{ id: string; runId: string; kind: 'UNKNOWN' | 'MISSING' | 'UNAVAILABLE' | 'CONFLICTED'; field: string; domain: string; reason: string; provider: string | null; observedAt: string; createdAt: string }>
+  decisionDiff: { id: string; decisionId: string; previousDecisionId: string | null; generator: 'DETERMINISTIC_CODE'; changes: JsonRecord; createdAt: string }
+}
+
 export type LiveDataApiErrorKind = 'contract' | 'response' | 'unavailable'
 
 export class LiveDataApiError extends Error {
@@ -405,6 +415,59 @@ export async function getResearchRun(options: LiveDataClientOptions, runId: stri
     options,
     `/api/v1/research-runs/${encodeURIComponent(runId)}`,
   ))
+}
+
+export async function getResearchRunReport(
+  options: LiveDataClientOptions,
+  runId: string,
+): Promise<ResearchRunReport> {
+  const value = await requestJson(options, `/api/v1/research-runs/${encodeURIComponent(runId)}/report`)
+  return contract(() => {
+    const source = record(value, 'research_report')
+    const thesis = record(source.thesis, 'research_report.thesis')
+    const opinion = record(source.opinion, 'research_report.opinion')
+    const decision = record(source.decision, 'research_report.decision')
+    const policies = record(decision.policy_versions, 'research_report.decision.policy_versions')
+    const diff = record(source.decision_diff, 'research_report.decision_diff')
+    if (!Array.isArray(source.evidence) || !Array.isArray(source.evidence_gaps)) {
+      throw new TypeError('research_report evidence collections must be arrays')
+    }
+    const unknowns = (input: unknown, path: string): unknown[] => {
+      if (!Array.isArray(input)) throw new TypeError(`${path} must be an array`)
+      return input
+    }
+    const strings = (input: unknown, path: string): string[] => unknowns(input, path)
+      .map((item, index) => text(item, `${path}[${index}]`))
+    const nullableText = (input: unknown, path: string): string | null => input === null ? null : text(input, path)
+    return {
+      runId: text(source.run_id, 'research_report.run_id'),
+      thesis: {
+        id: text(thesis.id, 'research_report.thesis.id'), symbol: text(thesis.symbol, 'research_report.thesis.symbol'),
+        asOf: instant(thesis.as_of, 'research_report.thesis.as_of'), direction: text(thesis.direction, 'research_report.thesis.direction'),
+        summary: text(thesis.summary, 'research_report.thesis.summary'), catalysts: unknowns(thesis.catalysts, 'research_report.thesis.catalysts'),
+        risks: unknowns(thesis.risks, 'research_report.thesis.risks'), invalidationConditions: unknowns(thesis.invalidation_conditions, 'research_report.thesis.invalidation_conditions'),
+        horizon: text(thesis.horizon, 'research_report.thesis.horizon'), confidence: decimal(thesis.confidence, 'research_report.thesis.confidence'),
+        supersedesThesisId: nullableText(thesis.supersedes_thesis_id, 'research_report.thesis.supersedes_thesis_id'),
+        createdAt: instant(thesis.created_at, 'research_report.thesis.created_at'),
+      },
+      opinion: { id: text(opinion.id, 'research_report.opinion.id'), value: enumeration(opinion.value, ['BULLISH', 'NEUTRAL', 'BEARISH', 'ABSTAIN'] as const, 'research_report.opinion.value'), createdAt: instant(opinion.created_at, 'research_report.opinion.created_at') },
+      decision: {
+        id: text(decision.id, 'research_report.decision.id'), dataCutoff: instant(decision.data_cutoff, 'research_report.decision.data_cutoff'),
+        availableAt: instant(decision.available_at, 'research_report.decision.available_at'), promptVersion: text(decision.prompt_version, 'research_report.decision.prompt_version'),
+        modelVersion: text(decision.model_version, 'research_report.decision.model_version'), createdAt: instant(decision.created_at, 'research_report.decision.created_at'),
+        policyVersions: { researchScoring: text(policies.research_scoring, 'research_report.decision.policy_versions.research_scoring'), risk: text(policies.risk, 'research_report.decision.policy_versions.risk'), execution: text(policies.execution, 'research_report.decision.policy_versions.execution'), confidence: text(policies.confidence, 'research_report.decision.policy_versions.confidence') },
+      },
+      evidence: source.evidence.map((item, index) => {
+        const row = record(item, `research_report.evidence[${index}]`)
+        return { id: text(row.id, 'evidence.id'), relation: enumeration(row.relation, ['SUPPORTS', 'CONTRADICTS', 'CONTEXT'] as const, 'evidence.relation'), weight: decimal(row.weight, 'evidence.weight'), rationale: text(row.rationale, 'evidence.rationale'), claims: strings(row.claims, 'evidence.claims'), provider: text(row.provider, 'evidence.provider'), feedType: text(row.feed_type, 'evidence.feed_type'), eventTime: instant(row.event_time, 'evidence.event_time'), availableAt: instant(row.available_at, 'evidence.available_at'), ingestedAt: instant(row.ingested_at, 'evidence.ingested_at'), contentHash: text(row.content_hash, 'evidence.content_hash'), rawObjectKey: text(row.raw_object_key, 'evidence.raw_object_key') }
+      }),
+      evidenceGaps: source.evidence_gaps.map((item, index) => {
+        const row = record(item, `research_report.evidence_gaps[${index}]`)
+        return { id: text(row.id, 'gap.id'), runId: text(row.run_id, 'gap.run_id'), kind: enumeration(row.kind, ['UNKNOWN', 'MISSING', 'UNAVAILABLE', 'CONFLICTED'] as const, 'gap.kind'), field: text(row.field, 'gap.field'), domain: text(row.domain, 'gap.domain'), reason: text(row.reason, 'gap.reason'), provider: nullableText(row.provider, 'gap.provider'), observedAt: instant(row.observed_at, 'gap.observed_at'), createdAt: instant(row.created_at, 'gap.created_at') }
+      }),
+      decisionDiff: { id: text(diff.id, 'diff.id'), decisionId: text(diff.decision_id, 'diff.decision_id'), previousDecisionId: nullableText(diff.previous_decision_id, 'diff.previous_decision_id'), generator: enumeration(diff.generator, ['DETERMINISTIC_CODE'] as const, 'diff.generator'), changes: record(diff.changes, 'diff.changes'), createdAt: instant(diff.created_at, 'diff.created_at') },
+    }
+  })
 }
 
 export async function getMarketQuotes(

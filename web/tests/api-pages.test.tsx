@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ApiPortfolioPage, ApiResearchPage, ApiTodayPage, ApiWeeklyReviewPage } from '../components/live/api-pages'
+import { ApiPortfolioPage, ApiResearchPage, ApiRunMetadataPage, ApiTodayPage, ApiWeeklyReviewPage } from '../components/live/api-pages'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -38,6 +38,30 @@ const emptyPortfolio = {
 }
 
 describe('API mode pages', () => {
+  it('renders the closed persisted report with lineage, gaps, pins, and deterministic diff', () => {
+    render(<ApiRunMetadataPage run={{
+      dataCutoff: '2026-09-06T14:00:00Z', decisionTime: '2026-09-06T14:00:00Z',
+      runId: 'run-1', runType: 'RESEARCH', status: 'COMPLETED', symbol: 'NVDA',
+    }} report={{
+      runId: 'run-1',
+      thesis: { id: 'thesis-1', symbol: 'NVDA', asOf: '2026-09-06T14:00:00Z', direction: 'UP', summary: 'Demand remains durable.', catalysts: ['Blackwell'], risks: ['Supply'], invalidationConditions: ['Margin decline'], horizon: '12M', confidence: '0.82', supersedesThesisId: null, createdAt: '2026-09-06T14:00:02Z' },
+      opinion: { id: 'opinion-1', value: 'BULLISH', createdAt: '2026-09-06T14:00:02Z' },
+      decision: { id: 'decision-1', dataCutoff: '2026-09-06T14:00:00Z', availableAt: '2026-09-06T14:00:02Z', promptVersion: 'prompt-v1', modelVersion: 'deterministic-v1', policyVersions: { researchScoring: 'score-v1', risk: 'risk-v1', execution: 'paper-v1', confidence: 'confidence-v1' }, createdAt: '2026-09-06T14:00:02Z' },
+      evidence: [{ id: 'evidence-1', relation: 'SUPPORTS', weight: '0.9', rationale: 'Revenue acceleration.', claims: ['Revenue grew'], provider: 'SEC', feedType: 'FINANCIALS', eventTime: '2026-09-05T20:00:00Z', availableAt: '2026-09-05T20:01:00Z', ingestedAt: '2026-09-05T20:02:00Z', contentHash: 'abc123', rawObjectKey: 'sec/raw/abc.json' }],
+      evidenceGaps: [{ id: 'gap-1', runId: 'run-1', kind: 'UNAVAILABLE', field: 'options', domain: 'DERIVATIVES', reason: 'Provider not configured', provider: null, observedAt: '2026-09-06T14:00:01Z', createdAt: '2026-09-06T14:00:02Z' }],
+      decisionDiff: { id: 'diff-1', decisionId: 'decision-1', previousDecisionId: null, generator: 'DETERMINISTIC_CODE', changes: { opinion: { after: 'BULLISH' } }, createdAt: '2026-09-06T14:00:02Z' },
+    }} />)
+
+    expect(screen.getByRole('heading', { name: 'Deterministic Research Workflow' })).toBeInTheDocument()
+    expect(screen.getByText('Demand remains durable.')).toBeInTheDocument()
+    expect(screen.getByText('82.00%')).toBeInTheDocument()
+    expect(screen.getByText('sec/raw/abc.json')).toBeInTheDocument()
+    expect(screen.getByText('Provider not configured')).toBeInTheDocument()
+    expect(screen.getByText('prompt-v1')).toBeInTheDocument()
+    expect(screen.getByText('deterministic-v1')).toBeInTheDocument()
+    expect(screen.getByText('DETERMINISTIC_CODE')).toBeInTheDocument()
+  })
+
   it('shows real Today facts and explicit degraded domains without a Fixture notice', () => {
     render(<ApiTodayPage asOf="2026-08-29T09:30:00Z" health={health} portfolio={emptyPortfolio} quotes={[quote]} />)
 
