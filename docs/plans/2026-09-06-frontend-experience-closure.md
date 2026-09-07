@@ -36,7 +36,7 @@ expect(trigger).toHaveAttribute('aria-expanded', 'false')
 
 **Step 2: Run the focused test and observe RED**
 
-Run: `pnpm --dir web test --run tests/product-shell.test.tsx`  
+Run: `pnpm --dir web test --run tests/product-shell.test.tsx`
 Expected: FAIL because no explicit navigation trigger or controlled menu exists.
 
 **Step 3: Add the minimum accessible shell behavior**
@@ -59,7 +59,7 @@ Use CSS breakpoints to keep the full nav visible where it fits and expose the tr
 
 **Step 4: Run focused tests and observe GREEN**
 
-Run: `pnpm --dir web test --run tests/product-shell.test.tsx tests/layout-contract.test.tsx`  
+Run: `pnpm --dir web test --run tests/product-shell.test.tsx tests/layout-contract.test.tsx`
 Expected: PASS.
 
 **Step 5: Add failing browser assertions**
@@ -68,8 +68,8 @@ Extend `happy-path.spec.ts` for the mobile project: open the menu, visit every d
 
 **Step 6: Run the browser test and observe RED, then GREEN**
 
-Run: `pnpm --dir web exec playwright test e2e/happy-path.spec.ts --project=mobile-chrome`  
-Expected before CSS completion: FAIL on navigation/overflow.  
+Run: `pnpm --dir web exec playwright test e2e/happy-path.spec.ts --project=mobile-chrome`
+Expected before CSS completion: FAIL on navigation/overflow.
 Expected after minimal CSS completion: PASS.
 
 **Step 7: Commit**
@@ -100,7 +100,7 @@ expect(css).not.toMatch(/\.primary-nav::?-webkit-scrollbar[^}]*display:\s*none/s
 
 **Step 2: Run the focused test and observe RED**
 
-Run: `pnpm --dir web test --run tests/visual-system-contract.test.ts`  
+Run: `pnpm --dir web test --run tests/visual-system-contract.test.ts`
 Expected: FAIL because the normalized tokens do not exist and the ambient gradients remain.
 
 **Step 3: Implement the minimum visual normalization**
@@ -119,9 +119,9 @@ Do not rename page-level classes yet; this task changes only the shared visual g
 
 **Step 4: Run focused tests, typecheck, and lint**
 
-Run: `pnpm --dir web test --run tests/visual-system-contract.test.ts tests/layout-contract.test.tsx`  
-Run: `pnpm --dir web typecheck`  
-Run: `pnpm --dir web lint`  
+Run: `pnpm --dir web test --run tests/visual-system-contract.test.ts tests/layout-contract.test.tsx`
+Run: `pnpm --dir web typecheck`
+Run: `pnpm --dir web lint`
 Expected: all PASS.
 
 **Step 5: Commit**
@@ -157,7 +157,7 @@ Add shared-state tests requiring consequence, timestamp when known, retry/next a
 
 **Step 2: Run focused tests and observe RED**
 
-Run: `pnpm --dir web test --run tests/today-page.test.tsx tests/page-states.test.tsx`  
+Run: `pnpm --dir web test --run tests/today-page.test.tsx tests/page-states.test.tsx`
 Expected: FAIL on hierarchy/disclosure anatomy.
 
 **Step 3: Implement the minimal hierarchy and state changes**
@@ -170,8 +170,8 @@ Expected: FAIL on hierarchy/disclosure anatomy.
 
 **Step 4: Run focused and failure/recovery tests**
 
-Run: `pnpm --dir web test --run tests/today-page.test.tsx tests/page-states.test.tsx tests/home.test.tsx tests/api-route-degradation.test.tsx`  
-Run: `WEB_DATA_MODE=api API_BASE_URL=http://127.0.0.1:8000 pnpm --dir web exec playwright test e2e/api-failure-matrix.spec.ts --project=desktop-chrome`  
+Run: `pnpm --dir web test --run tests/today-page.test.tsx tests/page-states.test.tsx tests/home.test.tsx tests/api-route-degradation.test.tsx`
+Run: `WEB_DATA_MODE=api API_BASE_URL=http://127.0.0.1:8000 pnpm --dir web exec playwright test e2e/api-failure-matrix.spec.ts --project=desktop-chrome`
 Expected: PASS with Failure/Degraded displayed and no Fixture fallback.
 
 **Step 5: Commit**
@@ -203,7 +203,7 @@ Require initial reading order: identity, opinion/confidence, thesis, freshness, 
 
 **Step 3: Run tests and observe RED**
 
-Run: `pnpm --dir web test --run tests/watchlist-route.test.tsx tests/research-workflow-pages.test.tsx tests/tradingview-ticker-list.test.tsx`  
+Run: `pnpm --dir web test --run tests/watchlist-route.test.tsx tests/research-workflow-pages.test.tsx tests/tradingview-ticker-list.test.tsx`
 Expected: FAIL on new labelled regions/order.
 
 **Step 4: Implement the minimum structural changes**
@@ -212,7 +212,7 @@ Use semantic list/table structures and section headings. Preserve existing value
 
 **Step 5: Run focused and related tests**
 
-Run: `pnpm --dir web test --run tests/watchlist-route.test.tsx tests/watchlist-actions.test.ts tests/watchlist-api.test.ts tests/research-workflow-pages.test.tsx tests/tradingview-ticker-list.test.tsx`  
+Run: `pnpm --dir web test --run tests/watchlist-route.test.tsx tests/watchlist-actions.test.ts tests/watchlist-api.test.ts tests/research-workflow-pages.test.tsx tests/tradingview-ticker-list.test.tsx`
 Expected: PASS.
 
 **Step 6: Commit**
@@ -248,7 +248,7 @@ git commit -m "feat(web): improve watchlist and research scanning"
 
 **Step 2: Run focused tests and observe RED**
 
-Run: `pnpm --dir web test --run tests/review-and-portfolio-pages.test.tsx tests/research-workflow-pages.test.tsx tests/api-pages.test.tsx tests/eval-report.test.ts`  
+Run: `pnpm --dir web test --run tests/review-and-portfolio-pages.test.tsx tests/research-workflow-pages.test.tsx tests/api-pages.test.tsx tests/eval-report.test.ts`
 Expected: FAIL on the new order and labelled-region expectations.
 
 **Step 3: Implement the minimum semantic recomposition**
@@ -257,7 +257,7 @@ Reorder existing facts and replace nested card mosaics with section/list/table g
 
 **Step 4: Run focused and related tests**
 
-Run: `pnpm --dir web test --run tests/review-and-portfolio-pages.test.tsx tests/research-workflow-pages.test.tsx tests/api-pages.test.tsx tests/eval-report.test.ts tests/api-route-degradation.test.tsx`  
+Run: `pnpm --dir web test --run tests/review-and-portfolio-pages.test.tsx tests/research-workflow-pages.test.tsx tests/api-pages.test.tsx tests/eval-report.test.ts tests/api-route-degradation.test.tsx`
 Expected: PASS.
 
 **Step 5: Commit**
@@ -291,7 +291,7 @@ Do not treat an unavailable provider domain as a failed page and do not substitu
 
 **Step 2: Run new tests and observe RED**
 
-Run: `pnpm --dir web exec playwright test e2e/accessibility.spec.ts e2e/happy-path.spec.ts --project=desktop-chrome --project=mobile-chrome`  
+Run: `pnpm --dir web exec playwright test e2e/accessibility.spec.ts e2e/happy-path.spec.ts --project=desktop-chrome --project=mobile-chrome`
 Expected: FAIL on any remaining overflow, focus, or hierarchy defect.
 
 **Step 3: Make only the CSS/markup corrections proven by failures**
@@ -300,16 +300,16 @@ Use `superpowers:systematic-debugging` for unexpected failures. Prefer CSS and s
 
 **Step 4: Run the complete frontend gate**
 
-Run: `pnpm --dir web typecheck`  
-Run: `pnpm --dir web lint`  
-Run: `pnpm --dir web test --run`  
-Run: `pnpm --dir web build`  
-Run: `pnpm --dir web exec playwright test --project=desktop-chrome --project=mobile-chrome`  
+Run: `pnpm --dir web typecheck`
+Run: `pnpm --dir web lint`
+Run: `pnpm --dir web test --run`
+Run: `pnpm --dir web build`
+Run: `pnpm --dir web exec playwright test --project=desktop-chrome --project=mobile-chrome`
 Expected: all PASS; credential-gated live tests may skip only when the gate condition is explicitly reported.
 
 **Step 5: Run repository verification and record evidence**
 
-Run: `make verify`  
+Run: `make verify`
 Expected: exit 0.
 
 Append to `docs/progress.md`:
@@ -323,8 +323,8 @@ Append to `docs/progress.md`:
 
 **Step 6: Verify scope and commit**
 
-Run: `git diff --check`  
-Run: `git status --short`  
+Run: `git diff --check`
+Run: `git status --short`
 Inspect the final diff for accidental live brokerage, credential, provider, schema, naive datetime, floating-point money, or Fixture fallback changes.
 
 ```bash
@@ -343,8 +343,8 @@ Read `superpowers:verification-before-completion` and rerun any command whose ev
 
 **Step 2: Review the branch diff**
 
-Run: `git diff --stat 1ac7b30...HEAD`  
-Run: `git diff --check 1ac7b30...HEAD`  
+Run: `git diff --stat 1ac7b30...HEAD`
+Run: `git diff --check 1ac7b30...HEAD`
 Run: `git log --oneline --decorate 1ac7b30..HEAD`
 
 Review for accessibility regression, contract drift, duplicated components, unsupported API data, hidden Fixture fallback, current-market/PIT ambiguity, and unsafe paper/live language.

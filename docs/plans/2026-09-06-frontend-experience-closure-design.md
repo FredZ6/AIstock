@@ -1,7 +1,7 @@
 # Frontend Experience Closure Design
 
-Date: 2026-09-06  
-Status: Approved  
+Date: 2026-09-06
+Status: Approved
 Authority: Notion v0.2, repository safety constraints, and the user-approved progressive system-closure approach (方案 C)
 
 ## Objective
