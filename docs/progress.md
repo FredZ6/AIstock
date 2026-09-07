@@ -3318,9 +3318,9 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   desktop/mobile Playwright matrix passed 8/8 in 28.7s, covering persisted Watchlist success,
   FastAPI outage/restart recovery, no Fixture substitution, all eight routes, duplicate HTTP
   admission, same-origin `Last-Event-ID` resumption, terminal report rendering, horizontal overflow
-  and zero serious/critical axe violations. The final post-review rerun passed 8/8 in 28.3s, and
-  backend worker/SSE integration then passed 28/28 in 15.02s. Reproducible logs are under
-  `output/agent-runtime/agent_runtime_13000_2740/`; the isolated database and child processes were
+  and zero serious/critical axe violations. The final post-commit rerun passed 8/8 in 27.6s, and
+  backend worker/SSE integration then passed 28/28 in 14.63s. Reproducible logs are under
+  `output/agent-runtime/agent_runtime_15731_3998/`; the isolated database and child processes were
   removed by the cleanup trap.
 - `./scripts/verify-recovery.sh`: exit 0, 9 passed in 3.00s. PostgreSQL backup/restore, Redis restart
   and migration drift checks succeeded. `pg_dump` emitted its existing TimescaleDB continuous-
@@ -3331,7 +3331,7 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   dependencies (168 passed / 3 failed). Focused RED/GREEN rerun after adding the minimal mocks and
   keeping the metadata-only case nonterminal: exit 0, 2 files / 7 tests passed.
 - Final fresh `make verify`: exit 0. Ruff format/check clean for 326 files; Mypy clean for 283 source
-  files; Alembic reported no drift; backend 736 passed / 5 skipped in 84.90s; frontend 30 files /
+  files; Alembic reported no drift; backend 736 passed / 5 skipped in 79.78s; frontend 30 files /
   171 passed; TypeScript, ESLint, dependency policy and Next.js production build passed. Expected
   failure-path diagnostics and JSDOM `AbortSignal`/local-storage warnings remain test-run noise;
   the real Chromium SSE path passed in both profiles.
@@ -3343,3 +3343,10 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   runtime harness reserves Redis database 15 but does not delete its contents. Generated runtime
   logs remain untracked for inspection. No push, PR, merge, Notion update or Linear transition is
   claimed by this local checkpoint.
+- Post-commit final review also removed pre-existing trailing whitespace from the two September 6
+  plan files so `git diff main...HEAD --check` can pass. One intervening `make verify` exited 2 with
+  735 passed / 1 failed / 5 skipped because PostgreSQL `CURRENT_TIMESTAMP` lagged the host clock by
+  about 15 minutes during the migration backfill assertion. Read-only host/container/database clock
+  probes subsequently agreed to the millisecond; the unchanged failing case then passed 1/1, and
+  the full gate passed with the counts above. No timestamp assertion or migration behavior was
+  weakened to hide the Docker clock resynchronization.
