@@ -17,12 +17,10 @@ export function LiveRunTrace({ initialRun }: { initialRun: ResearchRun }) {
   const { refresh } = useRouter()
   const store = useMemo(() => new DurableEventStore(initialRun.runId), [initialRun.runId])
   const [events, setEvents] = useState<AgentEvent[]>([])
-  const [connection, setConnection] = useState<ConnectionState>(
-    terminalStatuses.has(initialRun.status) ? 'Terminal' : 'Connecting',
-  )
+  const [connection, setConnection] = useState<ConnectionState>('Connecting')
 
   useEffect(() => {
-    if (terminalStatuses.has(initialRun.status)) return
+    const replayOnly = terminalStatuses.has(initialRun.status)
     const controller = new AbortController()
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined
     let stopped = false
@@ -39,7 +37,7 @@ export function LiveRunTrace({ initialRun }: { initialRun: ResearchRun }) {
       if (terminal) {
         stopped = true
         setConnection('Terminal')
-        refresh()
+        if (!replayOnly) refresh()
       }
     }
 
@@ -63,6 +61,10 @@ export function LiveRunTrace({ initialRun }: { initialRun: ResearchRun }) {
         }
         if (!stopped) accept(parser.push(decoder.decode()))
         if (!stopped) accept(parser.finish())
+        if (replayOnly) {
+          stopped = true
+          setConnection('Terminal')
+        }
       } catch (error) {
         if (controller.signal.aborted) return
         console.error('agent-event-stream-failure', { runId: initialRun.runId, error })

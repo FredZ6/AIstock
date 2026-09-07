@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Table, create_engine, func, insert, select, update
+from sqlalchemy import Table, create_engine, func, insert, select, text, update
 from sqlalchemy.engine import Connection, Engine, RowMapping
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from stock_platform.application.events.sse import load_events
@@ -453,6 +453,21 @@ def test_research_worker_runs_real_graph_once_with_ordered_events(
         assert events[-1][1] == "run.completed"
         assert [sequence for sequence, _ in events] == list(range(1, len(events) + 1))
         assert any(event_type == "node.completed" for _, event_type in events)
+        assert (
+            connection.execute(
+                text("SELECT count(*) FROM checkpoints WHERE thread_id = :run_id"),
+                {"run_id": str(run_id)},
+            ).scalar_one()
+            > 0
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(investment_thesis)
+                .where(investment_thesis.c.run_id == run_id)
+            ).scalar_one()
+            == 1
+        )
         correlation_id = connection.execute(
             select(agent_run.c.correlation_id).where(agent_run.c.id == run_id)
         ).scalar_one()

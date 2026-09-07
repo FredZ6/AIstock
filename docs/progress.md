@@ -3280,3 +3280,66 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   82.49s; frontend 26 files / 151 passed; TypeScript, ESLint and Next.js production build passed.
   `git diff --check`: exit 0. This is a local review checkpoint; no push, PR, merge or external
   Notion/Linear completion transition is claimed.
+
+## 2026-09-07 — Deterministic Research Agent runtime closure (Tasks 1–6, local delivery checkpoint)
+
+- Scope: one honest Research-page-to-persisted-report vertical slice. The browser admits one
+  idempotent run, the existing Beat recovery loop dispatches it to Celery, the deterministic
+  `DailyResearchGraph` writes PostgreSQL checkpoints and append-only events, and the Run Trace
+  resumes through a same-origin SSE proxy before rendering persisted lineage. No LLM provider,
+  live Provider credential, Fixture fallback in API mode, live-broker path, Portfolio run control,
+  Weekly Review run control or automatic policy activation was added.
+- Task 1 (`d45cf0a`) added migration `0037_evidence_gap_run_lineage`, run-owned EvidenceGap
+  persistence and a closed persisted report endpoint containing thesis, independent opinion,
+  evidence/claim lineage, gaps, decision pins and deterministic diff. Task 2 (`e97676d`) added the
+  server-only idempotent run client/action. Task 3 (`51e2cad`) added the accessible Research run
+  control and success-only navigation. Task 4 (`6b6e74b`) added the streaming same-origin SSE
+  route plus incremental parser. Task 5 (`a3fb4b2`) added the durable live trace and terminal
+  persisted report. Terminal pages now replay their historical event stream once after refresh;
+  active terminal events refresh server report data without duplicating rows.
+- Task 4 RED/GREEN: the absent proxy/parser cases failed first; the completed focused command for
+  `tests/sse.test.ts` and `tests/sse-route.test.ts` exited 0 with 8 passed, followed by successful
+  TypeScript checking. Task 5 RED/GREEN: trace/report tests initially failed against the metadata-
+  only page; the completed focused command exited 0 with 24 passed. TypeScript, ESLint and a direct
+  Next production build all exited 0.
+- Task 6 strengthened the real worker regression with checkpoint and exactly-one thesis/decision
+  assertions, strengthened SSE cursor exclusion, replaced hand-authored browser events with a real
+  graph run, and added duplicate HTTP admission, terminal history replay and serious/critical axe
+  checks. Initial runtime RED `./scripts/verify-agent-runtime.sh`: exit 127 before the harness
+  existed. The first implemented run exited 1 with 2 browser failures / 6 not run because the
+  runtime database had not seeded its persisted Watchlist; its page correctly exposed `0 symbols`.
+  Evidence also showed the test Broker shared Redis `/0` with an existing Beat. The harness now
+  seeds the approved security master, uses credential-free Redis `/15`, allocates a dynamic FastAPI
+  port, rejects an API child that exits before readiness, and never clears any Redis database.
+- Final `./scripts/verify-agent-runtime.sh`: exit 0. It migrated a uniquely named database from
+  empty to `0037`, recovered one queued run through actual Beat/Celery, proved strictly contiguous
+  unique AgentEvent sequences, ToolCall and LangGraph checkpoint persistence, exactly one linked
+  DecisionSnapshot, and unchanged event/tool/decision counts after duplicate task delivery. Its
+  desktop/mobile Playwright matrix passed 8/8 in 28.7s, covering persisted Watchlist success,
+  FastAPI outage/restart recovery, no Fixture substitution, all eight routes, duplicate HTTP
+  admission, same-origin `Last-Event-ID` resumption, terminal report rendering, horizontal overflow
+  and zero serious/critical axe violations. The final post-review rerun passed 8/8 in 28.3s, and
+  backend worker/SSE integration then passed 28/28 in 15.02s. Reproducible logs are under
+  `output/agent-runtime/agent_runtime_13000_2740/`; the isolated database and child processes were
+  removed by the cleanup trap.
+- `./scripts/verify-recovery.sh`: exit 0, 9 passed in 3.00s. PostgreSQL backup/restore, Redis restart
+  and migration drift checks succeeded. `pg_dump` emitted its existing TimescaleDB continuous-
+  aggregate circular-FK warning; restore and `alembic check` still completed successfully.
+- Full-gate attempts were preserved rather than hidden. First `make verify`: exit 2 at Ruff format
+  with two new test files; mechanical formatting fixed it. Second run passed 736 backend tests with
+  5 skips, then exited 2 because three older Vitest cases lacked the new Next Router/report test
+  dependencies (168 passed / 3 failed). Focused RED/GREEN rerun after adding the minimal mocks and
+  keeping the metadata-only case nonterminal: exit 0, 2 files / 7 tests passed.
+- Final fresh `make verify`: exit 0. Ruff format/check clean for 326 files; Mypy clean for 283 source
+  files; Alembic reported no drift; backend 736 passed / 5 skipped in 84.90s; frontend 30 files /
+  171 passed; TypeScript, ESLint, dependency policy and Next.js production build passed. Expected
+  failure-path diagnostics and JSDOM `AbortSignal`/local-storage warnings remain test-run noise;
+  the real Chromium SSE path passed in both profiles.
+- Dependency recovery did not modify manifests or the lockfile: an accidental `pnpm exec` workspace
+  relink was interrupted when sandbox DNS was unavailable, then `pnpm install --frozen-lockfile`
+  restored all 468 packages from the local content-addressable store (`reused 468`, downloaded 0).
+- Remaining limitations: the workflow is deliberately labelled deterministic and does not prove
+  real model inference; optional live Provider contracts account for the five backend skips; the
+  runtime harness reserves Redis database 15 but does not delete its contents. Generated runtime
+  logs remain untracked for inspection. No push, PR, merge, Notion update or Linear transition is
+  claimed by this local checkpoint.

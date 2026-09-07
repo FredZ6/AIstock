@@ -77,13 +77,15 @@ describe('live durable run trace', () => {
     await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
   })
 
-  it.each(['FAILED', 'CANCELLED'] as const)('keeps %s as an explicit terminal state', (status) => {
-    const fetchMock = vi.fn()
+  it.each(['FAILED', 'CANCELLED'] as const)('keeps %s explicit while replaying persisted history once', async (status) => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(frame(event())))
     vi.stubGlobal('fetch', fetchMock)
     render(<LiveRunTrace initialRun={{ ...run, status }} />)
 
     expect(screen.getByText(status)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByText('collect_evidence')).toHaveLength(2))
     expect(screen.getByRole('status', { name: 'Agent event connection' })).toHaveTextContent('Terminal')
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(refresh).not.toHaveBeenCalled()
   })
 })

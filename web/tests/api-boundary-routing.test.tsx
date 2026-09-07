@@ -1,6 +1,10 @@
 import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}))
+
 afterEach(() => {
   vi.unstubAllEnvs()
   vi.resetModules()
@@ -61,7 +65,7 @@ describe('API mode fixture boundary', () => {
         decisionTime: '2026-08-31T12:00:00Z',
         runId: '10000000-0000-0000-0000-000000000099',
         runType: 'RESEARCH',
-        status: 'COMPLETED',
+        status: 'RUNNING',
         symbol: 'NVDA',
       })),
     }))

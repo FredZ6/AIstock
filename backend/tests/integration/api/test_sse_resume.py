@@ -87,6 +87,8 @@ def test_sse_orders_redacts_and_resumes_from_postgres_without_redis(
     assert '"api_key":"[REDACTED]"' in full.text
     assert resumed.text.count("id:") == 1
     assert f"id: {event_ids[2]}" in resumed.text
+    assert f"id: {event_ids[0]}" not in resumed.text
+    assert f"id: {event_ids[1]}" not in resumed.text
 
 
 def test_last_event_id_must_belong_to_the_requested_run(isolated_database_url: str) -> None:
