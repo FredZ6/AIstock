@@ -237,6 +237,90 @@ class RunResponse(StrictModel):
     data_cutoff: datetime
 
 
+class ResearchReportThesis(StrictModel):
+    id: UUID
+    symbol: str
+    as_of: datetime
+    direction: str
+    summary: str
+    catalysts: list[Any]
+    risks: list[Any]
+    invalidation_conditions: list[Any]
+    horizon: str
+    confidence: Decimal
+    supersedes_thesis_id: UUID | None
+    created_at: datetime
+
+
+class ResearchReportOpinion(StrictModel):
+    id: UUID
+    value: Literal["BULLISH", "NEUTRAL", "BEARISH", "ABSTAIN"]
+    created_at: datetime
+
+
+class ResearchReportPolicyVersions(StrictModel):
+    research_scoring: str
+    risk: str
+    execution: str
+    confidence: str
+
+
+class ResearchReportDecision(StrictModel):
+    id: UUID
+    data_cutoff: datetime
+    available_at: datetime
+    prompt_version: str
+    model_version: str
+    policy_versions: ResearchReportPolicyVersions
+    created_at: datetime
+
+
+class ResearchReportEvidence(StrictModel):
+    id: UUID
+    relation: Literal["SUPPORTS", "CONTRADICTS", "CONTEXT"]
+    weight: Decimal
+    rationale: str
+    claims: list[str]
+    provider: str
+    feed_type: str
+    event_time: datetime
+    available_at: datetime
+    ingested_at: datetime
+    content_hash: str
+    raw_object_key: str
+
+
+class ResearchReportEvidenceGap(StrictModel):
+    id: UUID
+    run_id: UUID
+    kind: Literal["UNKNOWN", "MISSING", "UNAVAILABLE", "CONFLICTED"]
+    field: str
+    domain: str
+    reason: str
+    provider: str | None
+    observed_at: datetime
+    created_at: datetime
+
+
+class ResearchReportDecisionDiff(StrictModel):
+    id: UUID
+    decision_id: UUID
+    previous_decision_id: UUID | None
+    generator: Literal["DETERMINISTIC_CODE"]
+    changes: dict[str, Any]
+    created_at: datetime
+
+
+class ResearchRunReportResponse(StrictModel):
+    run_id: UUID
+    thesis: ResearchReportThesis
+    opinion: ResearchReportOpinion
+    decision: ResearchReportDecision
+    evidence: list[ResearchReportEvidence]
+    evidence_gaps: list[ResearchReportEvidenceGap]
+    decision_diff: ResearchReportDecisionDiff
+
+
 class WatchlistRequest(StrictModel):
     symbol: str
     daily_research: bool = True

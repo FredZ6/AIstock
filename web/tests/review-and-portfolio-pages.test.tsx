@@ -14,6 +14,10 @@ import {
 } from '../lib/fixtures'
 
 describe('portfolio and review pages', () => {
+  function expectBefore(earlier: Element, later: Element) {
+    expect(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  }
+
   it('supports roving keyboard tabs linked to the performance panel', () => {
     render(<PerformanceChart snapshot={fixturePortfolioSnapshot} />)
     const tabs = screen.getAllByRole('tab')
@@ -59,7 +63,7 @@ describe('portfolio and review pages', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'AI Portfolio' })).toBeInTheDocument()
     expect(screen.getAllByText(/Paper Trading/i).length).toBeGreaterThan(0)
-    expect(screen.getByText('USD 100,425.18')).toBeInTheDocument()
+    expect(screen.getAllByText('USD 100,425.18').length).toBeGreaterThan(0)
     const performance = screen.getByRole('figure', { name: 'Portfolio performance' })
     expect(within(performance).getByRole('tab', { name: 'Net asset value' })).toHaveAttribute('aria-selected', 'true')
     expect(within(performance).getByRole('img', { name: /Net asset value history/i })).toBeInTheDocument()
@@ -94,6 +98,26 @@ describe('portfolio and review pages', () => {
     expect(within(cashLedger).getAllByText('USD 74,699.58')).toHaveLength(1)
   })
 
+  it('puts the complete portfolio snapshot before the analytical chart and evidence tables', () => {
+    render(<PortfolioPage snapshot={fixturePortfolioSnapshot} />)
+
+    const snapshot = screen.getByRole('region', { name: 'Portfolio snapshot' })
+    const chart = screen.getByRole('figure', { name: 'Portfolio performance' })
+    expect(snapshot).toHaveTextContent('Net asset value')
+    expect(snapshot).toHaveTextContent('USD 100,425.18')
+    expect(snapshot).toHaveTextContent('Day return')
+    expect(snapshot).toHaveTextContent('+0.42%')
+    expect(snapshot).toHaveTextContent('Current drawdown')
+    expect(snapshot).toHaveTextContent('-1.80%')
+    expect(snapshot).toHaveTextContent('Available cash')
+    expect(snapshot).toHaveTextContent('USD 74,699.58')
+    expect(snapshot.querySelector('time')).toHaveAttribute('datetime', fixturePortfolioSnapshot.asOf)
+    expectBefore(snapshot, chart)
+    for (const name of ['Positions', 'Risk decisions', 'Paper fills', 'Cash ledger']) {
+      expect(screen.getByRole('region', { name })).toBeInTheDocument()
+    }
+  })
+
   it('renders deterministic alerts with thesis linkage and visible explanation failure', () => {
     render(<AlertsPage snapshot={fixtureAlertsSnapshot} />)
 
@@ -109,6 +133,19 @@ describe('portfolio and review pages', () => {
     for (const category of ['PRICE', 'VOLUME', 'OPTIONS', 'EARNINGS', 'NEWS', 'ANALYST_TARGET', 'PORTFOLIO_RISK']) {
       expect(screen.getByText(category)).toBeInTheDocument()
     }
+  })
+
+  it('makes each alert trigger, scope, time, and acknowledgement state scannable', () => {
+    render(<AlertsPage snapshot={fixtureAlertsSnapshot} />)
+
+    const list = screen.getByRole('list', { name: 'Actionable alert queue' })
+    const first = within(list).getAllByRole('listitem')[0]
+    expect(first).toHaveTextContent('Severity HIGH')
+    expect(first).toHaveTextContent('Category VOLUME')
+    expect(first).toHaveTextContent('Scope NVDA')
+    expect(within(first).getByText('Trigger').parentElement).toHaveTextContent('Relative volume and return z-score crossed')
+    expect(within(first).getByText('Acknowledgement').parentElement).toHaveTextContent('Pending')
+    expect(first.querySelector('time')).toHaveAttribute('datetime', '2026-08-21T19:45:00Z')
   })
 
   it('makes weekly lesson approval consequences and replay evidence explicit', () => {
@@ -130,6 +167,22 @@ describe('portfolio and review pages', () => {
     expect(screen.getByText(/70–79% confidence/i)).toBeInTheDocument()
   })
 
+  it('leads Weekly Review with outcomes, benchmark availability, thesis hits, and calibration', () => {
+    render(<WeeklyReviewPage snapshot={fixtureWeeklyReviewSnapshot} />)
+
+    const summary = screen.getByRole('region', { name: 'Weekly outcome summary' })
+    const attribution = screen.getByRole('region', { name: 'Error attribution' })
+    const replay = screen.getByRole('region', { name: 'Point-in-time replay' })
+    const lesson = screen.getByRole('region', { name: 'Candidate lesson' })
+    expect(summary).toHaveTextContent('Benchmark comparison unavailable')
+    expect(summary).toHaveTextContent('HIT')
+    expect(summary).toHaveTextContent('MISS')
+    expect(summary).toHaveTextContent('Confidence calibration')
+    expectBefore(summary, attribution)
+    expectBefore(summary, replay)
+    expectBefore(replay, lesson)
+  })
+
   it('keeps Eval and policy administration read-only in fixture mode', () => {
     render(<EvalAdminPage snapshot={fixtureEvalAdminSnapshot} />)
 
@@ -141,5 +194,15 @@ describe('portfolio and review pages', () => {
     expect(screen.getAllByText(/human authorization required/i)).toHaveLength(4)
     expect(screen.getAllByText(/automatic activation is disabled/i)).toHaveLength(4)
     expect(screen.queryByText(/Live Broker/i)).not.toBeInTheDocument()
+  })
+
+  it('groups evaluation status, versions, regressions, provider health, and policy state as operational evidence', () => {
+    render(<EvalAdminPage snapshot={fixtureEvalAdminSnapshot} />)
+
+    const operations = screen.getByRole('region', { name: 'Operational evidence' })
+    expect(within(operations).getByRole('region', { name: 'Evaluation report status' })).toBeInTheDocument()
+    expect(within(operations).getByRole('region', { name: 'Regression comparison' })).toHaveTextContent('Unavailable')
+    expect(within(operations).getByRole('region', { name: 'Provider health' })).toHaveTextContent('Unavailable')
+    expect(within(operations).getByRole('region', { name: 'Policy state' })).toBeInTheDocument()
   })
 })

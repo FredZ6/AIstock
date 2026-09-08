@@ -5,8 +5,11 @@ const webPort = process.env.PLAYWRIGHT_WEB_PORT ?? '3000'
 const apiBaseUrl = process.env.API_BASE_URL
 
 export default defineConfig({
+  outputDir: 'test-results/frontend-experience',
+  reporter: [['line'], ['html', { open: 'never', outputFolder: 'playwright-report/frontend-experience' }]],
   testDir: './e2e',
   fullyParallel: false,
+  workers: 1,
   projects: [
     {
       name: 'desktop-chrome',

@@ -15,17 +15,14 @@ describe('research workflow pages', () => {
     render(<WatchlistPage snapshot={fixtureWatchlistSnapshot} />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'Watchlist' })).toBeInTheDocument()
-    const table = screen.getByRole('table', { name: 'Research watchlist' })
-    expect(within(table).getByRole('columnheader', { name: 'Research opinion' })).toBeInTheDocument()
-    expect(within(table).getByRole('columnheader', { name: 'Portfolio action' })).toBeInTheDocument()
-    expect(within(table).getByText('ABSTAIN')).toBeInTheDocument()
-    expect(within(table).getAllByText('NO_ACTION')).toHaveLength(2)
-    expect(within(table).getAllByText(/coverage/).length).toBeGreaterThan(0)
+    const list = screen.getByRole('list', { name: 'Ranked research watchlist' })
+    expect(within(list).getByText('ABSTAIN')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'TSLA settings' })).getByText('NO_ACTION')).toBeInTheDocument()
+    expect(within(list).getAllByText(/coverage/).length).toBeGreaterThan(0)
     expect(screen.getByText(/5 of 20 symbols/i)).toBeInTheDocument()
-    const nvdaChart = screen.getByRole('region', { name: 'NVDA current market chart' })
-    await waitFor(() => expect(nvdaChart.querySelector('script')?.textContent).toContain('NASDAQ:NVDA'))
-    expect(nvdaChart.querySelector('script')?.textContent).toContain('"isTransparent":false')
-    expect(screen.getByRole('region', { name: 'MSFT current market chart' })).toBeInTheDocument()
+    const currentMarket = screen.getByRole('region', { name: 'Current market reference' })
+    await waitFor(() => expect(currentMarket.querySelector('script')?.textContent).toContain('NASDAQ:NVDA'))
+    expect(currentMarket.querySelector('script')?.textContent).toContain('NASDAQ:MSFT')
   })
 
   it('supports a fixture-session watchlist draft with schedules, thresholds, and earnings dates', () => {
@@ -35,14 +32,16 @@ describe('research workflow pages', () => {
     expect(screen.getByRole('checkbox', { name: 'NVDA daily research' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'NVDA intraday monitoring' })).toBeChecked()
     expect(screen.getByRole('textbox', { name: 'NVDA alert threshold' })).toHaveValue('0.025')
-    expect(screen.getByRole('columnheader', { name: 'Next earnings' })).toBeInTheDocument()
-    expect(screen.getByText('Aug 27, 2026')).toBeInTheDocument()
+    const nvdaSettings = screen.getByRole('region', { name: 'NVDA settings' })
+    expect(within(nvdaSettings).getByText(/Next earnings:/)).toBeInTheDocument()
+    expect(within(nvdaSettings).getByText('Aug 27, 2026')).toBeInTheDocument()
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Add symbol' }), {
       target: { value: 'goog' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Add to watchlist' }))
-    expect(screen.getByRole('rowheader', { name: 'GOOG' })).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: 'Ranked research watchlist' }))
+      .getByRole('link', { name: 'GOOG' })).toBeInTheDocument()
     expect(screen.getByText('6 of 20 symbols')).toBeInTheDocument()
     expect(screen.getByText(/session-only configuration draft/i)).toBeInTheDocument()
   })
@@ -93,6 +92,37 @@ describe('research workflow pages', () => {
     expect(within(history).getByText('HOLD')).toBeInTheDocument()
   })
 
+  it('orders the research conclusion, current market context, and point-in-time evidence explicitly', () => {
+    render(<ResearchPage snapshot={fixtureResearchSnapshot} />)
+
+    const main = screen.getByRole('main')
+    const conclusion = screen.getByRole('region', { name: 'NVDA research conclusion' })
+    const currentMarket = screen.getByRole('region', { name: 'NVDA current market overview' })
+    const pitEvidence = screen.getByRole('region', { name: 'Point-in-time research evidence' })
+    expect(conclusion).toHaveTextContent('BULLISH')
+    expect(conclusion).toHaveTextContent('74.00%')
+    expect(conclusion).toHaveTextContent('Evidence freshness')
+    expect(main.contains(conclusion)).toBe(true)
+    expect(conclusion.compareDocumentPosition(currentMarket)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(currentMarket.compareDocumentPosition(pitEvidence)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  })
+
+  it('exposes each research question as a labelled region', () => {
+    render(<ResearchPage snapshot={fixtureResearchSnapshot} />)
+
+    for (const name of [
+      'Fundamentals',
+      'Earnings',
+      'News',
+      'Options',
+      'Analyst targets',
+      'Evidence gaps',
+      'Decision history',
+    ]) {
+      expect(screen.getByRole('region', { name })).toBeInTheDocument()
+    }
+  })
+
   it('shows an ordered durable run trace with budgets, retries, fallback, and checkpoints', () => {
     render(<RunTracePage snapshot={fixtureRunTrace} />)
 
@@ -109,5 +139,21 @@ describe('research workflow pages', () => {
     const trace = screen.getByRole('list', { name: 'Durable run events' })
     expect(within(trace).getAllByRole('listitem')).toHaveLength(fixtureRunTrace.events.length)
     expect(screen.getByText(/Last-Event-ID/i)).toBeInTheDocument()
+  })
+
+  it('summarizes run progress and cutoff before the verbose durable event list', () => {
+    render(<RunTracePage snapshot={fixtureRunTrace} />)
+
+    const summary = screen.getByRole('region', { name: 'Run operations summary' })
+    const events = screen.getByRole('region', { name: 'Durable event trace' })
+    expect(summary).toHaveTextContent('RUNNING')
+    expect(within(summary).getByText('Elapsed').parentElement).toHaveTextContent('28,000 ms')
+    expect(within(summary).getByText('Current step').parentElement).toHaveTextContent('Citation verifier running')
+    expect(within(summary).getByText('Retries').parentElement).toHaveTextContent('1')
+    expect(within(summary).getByText('Degradations').parentElement).toHaveTextContent('1')
+    expect(within(summary).getByText('Checkpoints').parentElement).toHaveTextContent('1')
+    expect(summary).toHaveTextContent('Data cutoff')
+    expect(summary.querySelector('time')).toHaveAttribute('datetime', fixtureRunTrace.asOf)
+    expect(summary.compareDocumentPosition(events) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

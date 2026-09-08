@@ -11,6 +11,7 @@ from sqlalchemy import Connection, Table, and_, func, insert, select
 from stock_platform.agents.research.state import ResearchResult
 from stock_platform.infrastructure.db.models.tables import (
     agent_event,
+    agent_run,
     claim,
     confidence_policy_version,
     decision_diff,
@@ -110,6 +111,10 @@ class PostgresResearchStore:
         if result.thesis is None or result.opinion is None or result.decision_id is None:
             raise ValueError("cannot persist an incomplete research decision")
         persistence_time = self.available_at or datetime.now(UTC)
+        run_uuid = UUID(result.run_id)
+        durable_run_id = self.connection.execute(
+            select(agent_run.c.id).where(agent_run.c.id == run_uuid)
+        ).scalar_one_or_none()
 
         evidence_ids: set[UUID] = set()
         for evidence in result.evidence:
@@ -182,6 +187,7 @@ class PostgresResearchStore:
             self.connection.execute(
                 insert(evidence_gap).values(
                     id=gap.id,
+                    run_id=durable_run_id,
                     kind=gap.kind.value,
                     field=gap.field,
                     domain=gap.domain,
@@ -258,7 +264,6 @@ class PostgresResearchStore:
                 changes=dict(result.decision_diff or {}),
             )
         )
-        run_uuid = UUID(result.run_id)
         if not self.record_events:
             self._results[result.run_id] = result
             return

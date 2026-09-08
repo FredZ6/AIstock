@@ -84,4 +84,41 @@ describe('product shell', () => {
       'true',
     )
   })
+
+  it('opens and dismisses an explicit compact navigation menu', () => {
+    render(
+      <AppShell currentPath="/portfolio">
+        <h1>Portfolio</h1>
+      </AppShell>,
+    )
+
+    const openNavigation = screen.getByRole('button', { name: 'Open navigation' })
+    expect(openNavigation).toHaveAttribute('aria-expanded', 'false')
+    expect(openNavigation).toHaveAttribute('aria-controls', 'primary-navigation')
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toHaveAttribute(
+      'data-open',
+      'false',
+    )
+
+    fireEvent.click(openNavigation)
+
+    const closeNavigation = screen.getByRole('button', { name: 'Close navigation' })
+    expect(closeNavigation).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toHaveAttribute(
+      'data-open',
+      'true',
+    )
+    expect(screen.getByRole('link', { name: 'Weekly Review' })).toBeVisible()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toHaveAttribute(
+      'data-open',
+      'false',
+    )
+  })
 })

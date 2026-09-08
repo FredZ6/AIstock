@@ -81,6 +81,47 @@ def test_fresh_upgrade_does_not_invent_legacy_market_context(
     engine.dispose()
 
 
+def test_head_adds_nullable_run_lineage_to_evidence_gaps(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "head")
+
+    engine = create_engine(migration_database_url)
+    with engine.connect() as connection:
+        column = connection.execute(
+            text(
+                """
+                SELECT is_nullable
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'evidence_gap'
+                  AND column_name = 'run_id'
+                """
+            )
+        ).scalar_one_or_none()
+        foreign_key = connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM information_schema.table_constraints constraints
+                JOIN information_schema.constraint_column_usage usage
+                  ON usage.constraint_name = constraints.constraint_name
+                 AND usage.constraint_schema = constraints.constraint_schema
+                WHERE constraints.table_schema = 'public'
+                  AND constraints.table_name = 'evidence_gap'
+                  AND constraints.constraint_type = 'FOREIGN KEY'
+                  AND usage.table_name = 'agent_run'
+                  AND usage.column_name = 'id'
+                """
+            )
+        ).scalar_one()
+
+    assert column == "YES"
+    assert foreign_key == 1
+    engine.dispose()
+
+
 def test_head_can_downgrade_to_0024_and_upgrade_again(
     migration_database_url: str,
 ) -> None:
@@ -93,7 +134,7 @@ def test_head_can_downgrade_to_0024_and_upgrade_again(
     engine = create_engine(migration_database_url)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-            "0036_runtime_acceptance_guards"
+            "0037_evidence_gap_run_lineage"
         )
     engine.dispose()
 

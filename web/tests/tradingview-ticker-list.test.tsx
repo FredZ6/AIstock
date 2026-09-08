@@ -60,4 +60,12 @@ describe('TradingViewTickerList', () => {
     expect(screen.getByRole('region', { name: 'Current market reference' })
       .querySelector('.market-reference-widget')).toHaveStyle({ height: '30.75rem' })
   })
+
+  it('identifies the widget as external current-market context instead of persisted evidence', () => {
+    renderList(['NVDA'])
+
+    const region = screen.getByRole('region', { name: 'Current market reference' })
+    expect(region).toHaveAttribute('data-evidence-scope', 'external-current-market')
+    expect(region).toHaveTextContent('Not decision-time evidence')
+  })
 })

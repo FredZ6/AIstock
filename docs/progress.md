@@ -3219,3 +3219,134 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   tests/tradingview-ticker-list.test.tsx tests/api-pages.test.tsx && pnpm --dir web typecheck &&
   pnpm --dir web lint`: exit 0; Vitest ran the configured complete suite, 25 files / 136 tests
   passed, followed by successful TypeScript and ESLint checks.
+
+## 2026-09-06 — Frontend experience closure (Tasks 1–6, local review checkpoint)
+
+- Branch/worktree: `codex/frontend-experience-closure` in
+  `/private/tmp/aistock-frontend-experience`, based on merged `main@1ac7b30`. The prior `output/`
+  directory remains preserved as `stash@{0}` in the primary worktree; it was neither restored nor
+  deleted. Approved design and execution plans are commits `0a563a8` and `0886e44`.
+- Task 1 (`44b99ad`): introduced explicit compact navigation, current-page context, one reachable
+  eight-destination nav, keyboard dismissal and responsive shell behavior.
+- Task 2 (`79162ae`): normalized spacing, radii, surfaces, typography and light/dark semantic tokens
+  across the product while retaining restrained Apple-style hierarchy and paper-only safety copy.
+- Task 3 (`ef01629`): prioritized Today decision facts and compacted secondary mode/degradation
+  context so the first viewport leads with actionable persisted information.
+- Task 4 (`6531862`): converted Watchlist into a ranked research list with compact trend, quote,
+  quality and provenance fields; grouped configuration controls; separated current TradingView
+  context from point-in-time research evidence. Focused result: 5 files / 57 tests passed;
+  TypeScript and ESLint exit 0.
+- Task 5 (`30175ca`): added summary-first Portfolio, operational Run Trace, explicit alert queue,
+  outcome-first Weekly Review and grouped Eval/Admin evidence. Focused result: 5 files / 30 tests
+  passed; TypeScript and ESLint exit 0.
+- Task 6 RED: the first desktop/mobile happy-path run exited 1 with 6 passed / 6 failed. It proved
+  the Skip link target was not focusable and exposed a brittle reduced-motion string assertion.
+  A measured Portfolio width diagnostic showed the 58rem table was correctly contained by
+  `.table-scroll`; root-page `scrollX` remained 0, so the earlier `scrollWidth` assertion was a
+  false positive rather than a layout regression. The first axe run exited 1 for shared light-theme
+  signal/positive contrast ratios below 4.5:1; the next exited 1 for an un-underlined TradingView
+  attribution link and two non-focusable mobile table scrollers. Demo RED runs then identified
+  three stale ambiguous selectors and the intentionally absent offline-evaluation artifact.
+- Task 6 GREEN: `<main>` is now a programmatically focusable Skip-link destination; viewport checks
+  test actual page-level horizontal scrolling; reduced-motion accepts the browser-normalized
+  equivalent duration; semantic colors meet the automated contrast gate; TradingView attribution
+  is visibly underlined; every horizontally scrollable evidence table has keyboard access. The
+  Playwright configuration uses one deterministic worker and stores artifacts under
+  `web/test-results/frontend-experience/` and `web/playwright-report/frontend-experience/`.
+- `PLAYWRIGHT_WEB_PORT=3106 pnpm --dir web exec playwright test e2e/happy-path.spec.ts
+  --project=desktop-chrome --project=mobile-chrome`: exit 0, 12 passed in 2.2m. It covers all eight
+  routes at 320/393/768/1120/1440, one H1, reachable navigation, Skip-link focus, desktop/mobile,
+  light/dark and reduced-motion behavior.
+- `PLAYWRIGHT_WEB_PORT=3109 pnpm --dir web exec playwright test e2e/accessibility.spec.ts
+  --project=desktop-chrome --project=mobile-chrome`: exit 0, 2 passed; all eight owned-DOM pages
+  have zero serious or critical axe violations in both profiles.
+- `WEB_DATA_MODE=api EXPECT_API_FAILURE=1 API_BASE_URL=http://127.0.0.1:65534
+  PLAYWRIGHT_WEB_PORT=3110 pnpm --dir web exec playwright test
+  e2e/api-failure-matrix.spec.ts --project=desktop-chrome --project=mobile-chrome`: exit 0,
+  2 passed. All eight API routes remained explicit Failure/Degraded surfaces with no Fixture data.
+- `RUN_API_BROWSER=1 UV_CACHE_DIR=.uv-cache uv run pytest -q
+  backend/tests/integration/api/test_browser_runtime.py`: exit 0, 1 passed in 28.24s. The isolated
+  PostgreSQL/FastAPI/browser harness verified persisted success, outage recovery, all eight API
+  routes, and durable SSE resume after restart; its temporary database was dropped by the fixture.
+- `make evaluate`: exit 0, `offline evaluation: PASS`. The generated ignored artifact was then used
+  by `PLAYWRIGHT_WEB_PORT=3114 ... playwright test e2e/demo.spec.ts` which exited 0 with 2 passed
+  across desktop/mobile. Theme startup separately passed in both profiles.
+- Frontend verification: Vitest exit 0, 26 files / 151 passed; ESLint exit 0; production build exit
+  0. A deliberately parallel `tsc`/`next build` attempt exited 2 because both commands raced on
+  `.next/types`; the stable post-build `pnpm --dir web typecheck` rerun exited 0. These two commands
+  must remain sequential.
+- Final `make verify`: exit 0. Ruff format/check clean for 324 files; Mypy clean for 282 source
+  files; Alembic reported no drift; MCP/OpenAPI checks passed; backend 734 passed / 5 skipped in
+  82.49s; frontend 26 files / 151 passed; TypeScript, ESLint and Next.js production build passed.
+  `git diff --check`: exit 0. This is a local review checkpoint; no push, PR, merge or external
+  Notion/Linear completion transition is claimed.
+
+## 2026-09-07 — Deterministic Research Agent runtime closure (Tasks 1–6, local delivery checkpoint)
+
+- Scope: one honest Research-page-to-persisted-report vertical slice. The browser admits one
+  idempotent run, the existing Beat recovery loop dispatches it to Celery, the deterministic
+  `DailyResearchGraph` writes PostgreSQL checkpoints and append-only events, and the Run Trace
+  resumes through a same-origin SSE proxy before rendering persisted lineage. No LLM provider,
+  live Provider credential, Fixture fallback in API mode, live-broker path, Portfolio run control,
+  Weekly Review run control or automatic policy activation was added.
+- Task 1 (`d45cf0a`) added migration `0037_evidence_gap_run_lineage`, run-owned EvidenceGap
+  persistence and a closed persisted report endpoint containing thesis, independent opinion,
+  evidence/claim lineage, gaps, decision pins and deterministic diff. Task 2 (`e97676d`) added the
+  server-only idempotent run client/action. Task 3 (`51e2cad`) added the accessible Research run
+  control and success-only navigation. Task 4 (`6b6e74b`) added the streaming same-origin SSE
+  route plus incremental parser. Task 5 (`a3fb4b2`) added the durable live trace and terminal
+  persisted report. Terminal pages now replay their historical event stream once after refresh;
+  active terminal events refresh server report data without duplicating rows.
+- Task 4 RED/GREEN: the absent proxy/parser cases failed first; the completed focused command for
+  `tests/sse.test.ts` and `tests/sse-route.test.ts` exited 0 with 8 passed, followed by successful
+  TypeScript checking. Task 5 RED/GREEN: trace/report tests initially failed against the metadata-
+  only page; the completed focused command exited 0 with 24 passed. TypeScript, ESLint and a direct
+  Next production build all exited 0.
+- Task 6 strengthened the real worker regression with checkpoint and exactly-one thesis/decision
+  assertions, strengthened SSE cursor exclusion, replaced hand-authored browser events with a real
+  graph run, and added duplicate HTTP admission, terminal history replay and serious/critical axe
+  checks. Initial runtime RED `./scripts/verify-agent-runtime.sh`: exit 127 before the harness
+  existed. The first implemented run exited 1 with 2 browser failures / 6 not run because the
+  runtime database had not seeded its persisted Watchlist; its page correctly exposed `0 symbols`.
+  Evidence also showed the test Broker shared Redis `/0` with an existing Beat. The harness now
+  seeds the approved security master, uses credential-free Redis `/15`, allocates a dynamic FastAPI
+  port, rejects an API child that exits before readiness, and never clears any Redis database.
+- Final `./scripts/verify-agent-runtime.sh`: exit 0. It migrated a uniquely named database from
+  empty to `0037`, recovered one queued run through actual Beat/Celery, proved strictly contiguous
+  unique AgentEvent sequences, ToolCall and LangGraph checkpoint persistence, exactly one linked
+  DecisionSnapshot, and unchanged event/tool/decision counts after duplicate task delivery. Its
+  desktop/mobile Playwright matrix passed 8/8 in 28.7s, covering persisted Watchlist success,
+  FastAPI outage/restart recovery, no Fixture substitution, all eight routes, duplicate HTTP
+  admission, same-origin `Last-Event-ID` resumption, terminal report rendering, horizontal overflow
+  and zero serious/critical axe violations. The final post-commit rerun passed 8/8 in 27.6s, and
+  backend worker/SSE integration then passed 28/28 in 14.63s. Reproducible logs are under
+  `output/agent-runtime/agent_runtime_15731_3998/`; the isolated database and child processes were
+  removed by the cleanup trap.
+- `./scripts/verify-recovery.sh`: exit 0, 9 passed in 3.00s. PostgreSQL backup/restore, Redis restart
+  and migration drift checks succeeded. `pg_dump` emitted its existing TimescaleDB continuous-
+  aggregate circular-FK warning; restore and `alembic check` still completed successfully.
+- Full-gate attempts were preserved rather than hidden. First `make verify`: exit 2 at Ruff format
+  with two new test files; mechanical formatting fixed it. Second run passed 736 backend tests with
+  5 skips, then exited 2 because three older Vitest cases lacked the new Next Router/report test
+  dependencies (168 passed / 3 failed). Focused RED/GREEN rerun after adding the minimal mocks and
+  keeping the metadata-only case nonterminal: exit 0, 2 files / 7 tests passed.
+- Final fresh `make verify`: exit 0. Ruff format/check clean for 326 files; Mypy clean for 283 source
+  files; Alembic reported no drift; backend 736 passed / 5 skipped in 79.78s; frontend 30 files /
+  171 passed; TypeScript, ESLint, dependency policy and Next.js production build passed. Expected
+  failure-path diagnostics and JSDOM `AbortSignal`/local-storage warnings remain test-run noise;
+  the real Chromium SSE path passed in both profiles.
+- Dependency recovery did not modify manifests or the lockfile: an accidental `pnpm exec` workspace
+  relink was interrupted when sandbox DNS was unavailable, then `pnpm install --frozen-lockfile`
+  restored all 468 packages from the local content-addressable store (`reused 468`, downloaded 0).
+- Remaining limitations: the workflow is deliberately labelled deterministic and does not prove
+  real model inference; optional live Provider contracts account for the five backend skips; the
+  runtime harness reserves Redis database 15 but does not delete its contents. Generated runtime
+  logs remain untracked for inspection. No push, PR, merge, Notion update or Linear transition is
+  claimed by this local checkpoint.
+- Post-commit final review also removed pre-existing trailing whitespace from the two September 6
+  plan files so `git diff main...HEAD --check` can pass. One intervening `make verify` exited 2 with
+  735 passed / 1 failed / 5 skipped because PostgreSQL `CURRENT_TIMESTAMP` lagged the host clock by
+  about 15 minutes during the migration backfill assertion. Read-only host/container/database clock
+  probes subsequently agreed to the millisecond; the unchanged failing case then passed 1/1, and
+  the full gate passed with the counts above. No timestamp assertion or migration behavior was
+  weakened to hide the Docker clock resynchronization.

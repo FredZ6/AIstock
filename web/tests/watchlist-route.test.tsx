@@ -94,7 +94,8 @@ describe('Watchlist route data boundaries', () => {
     render(await WatchlistRoute())
 
     expect(screen.getByText('Fixture Mode')).toBeInTheDocument()
-    expect(screen.getByRole('rowheader', { name: 'NVDA' })).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: 'Ranked research watchlist' }))
+      .getByRole('link', { name: 'NVDA' })).toBeInTheDocument()
     expect(screen.queryByRole('alert', { name: 'Watchlist unavailable' })).not.toBeInTheDocument()
   })
 
@@ -111,12 +112,14 @@ describe('Watchlist route data boundaries', () => {
       'degraded',
     )
     expect(screen.queryByText('Fixture Mode')).not.toBeInTheDocument()
-    const table = screen.getByRole('table', { name: 'Persisted research watchlist' })
-    expect(within(table).getByRole('rowheader', { name: 'NVDA' })).toBeInTheDocument()
-    expect(within(table).getAllByText('Unavailable')).toHaveLength(7)
-    expect(within(table).queryByText('$0.00')).not.toBeInTheDocument()
-    expect(within(table).queryByText('ABSTAIN')).not.toBeInTheDocument()
-    expect(within(table).queryByText('NO_ACTION')).not.toBeInTheDocument()
+    const list = screen.getByRole('list', { name: 'Ranked research watchlist' })
+    expect(within(list).getByRole('link', { name: 'NVDA' })).toBeInTheDocument()
+    expect(within(list).getByText('Price unavailable')).toBeInTheDocument()
+    expect(within(list).getByText('Trend unavailable')).toBeInTheDocument()
+    expect(within(list).getByText('Change unavailable')).toBeInTheDocument()
+    expect(within(list).queryByText('$0.00')).not.toBeInTheDocument()
+    expect(within(list).queryByText('ABSTAIN')).not.toBeInTheDocument()
+    expect(within(list).queryByText('NO_ACTION')).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'NVDA current market chart' })).not.toBeInTheDocument()
   })
 
@@ -156,5 +159,42 @@ describe('Watchlist route data boundaries', () => {
     expect(screen.getByRole('checkbox', { name: 'NVDA daily research' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'NVDA intraday monitoring' })).not.toBeChecked()
     expect(screen.getByRole('textbox', { name: 'NVDA alert threshold' })).toHaveValue('0.025')
+  })
+
+  it('presents persisted symbols as one ranked quote list with honest missing trend facts', () => {
+    render(<ApiWatchlistPage
+      asOf="2026-08-29T09:30:00Z"
+      items={[apiRow]}
+      quotes={[{
+        availableAt: '2026-08-29T09:20:00Z',
+        close: '217.545',
+        coverage: 'IEX',
+        eventTime: '2026-08-28T04:00:00Z',
+        provider: 'ALPACA',
+        symbol: 'NVDA',
+      }]}
+    />)
+
+    const list = screen.getByRole('list', { name: 'Ranked research watchlist' })
+    const row = within(list).getByRole('listitem')
+    expect(row).toHaveTextContent('NVDA')
+    expect(row).toHaveTextContent('NVIDIA Corporation')
+    expect(row).toHaveTextContent('USD 217.55')
+    expect(row).toHaveTextContent('Trend unavailable')
+    expect(row).toHaveTextContent('Change unavailable')
+    expect(row).toHaveTextContent('ALPACA · IEX')
+    expect(row).toHaveTextContent('Persisted Aug 29, 2026')
+  })
+
+  it('keeps all persisted watchlist mutations in one labelled configuration region', () => {
+    render(<ApiWatchlistPage asOf="2026-08-29T09:30:00Z" items={[apiRow]} quotes={[]} />)
+
+    const configuration = screen.getByRole('region', { name: 'Watchlist configuration' })
+    expect(within(configuration).getByRole('button', { name: 'Add to watchlist' })).toBeInTheDocument()
+    expect(within(configuration).getByRole('button', { name: 'Delete NVDA' })).toBeInTheDocument()
+    expect(within(configuration).getByRole('checkbox', { name: 'NVDA daily research' })).toBeInTheDocument()
+    expect(within(configuration).getByRole('checkbox', { name: 'NVDA intraday monitoring' })).toBeInTheDocument()
+    expect(within(configuration).getByRole('textbox', { name: 'NVDA alert threshold' })).toBeInTheDocument()
+    expect(within(configuration).getByText('Earnings schedule unavailable')).toBeInTheDocument()
   })
 })

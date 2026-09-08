@@ -115,6 +115,7 @@ describe('TodayPage', () => {
     expect(screen.getByRole('status', { name: 'Provider coverage degraded' })).toHaveClass(
       'state-compact',
     )
+    expect(screen.getByText('1 unavailable fact').closest('details')).not.toHaveAttribute('open')
   })
 
   it('renders a non-color-only watchlist heatmap with distinct decisions and raw quality facts', () => {

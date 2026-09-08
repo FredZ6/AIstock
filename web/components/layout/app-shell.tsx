@@ -24,11 +24,21 @@ type AppShellProps = {
 export function AppShell({ children, currentPath }: AppShellProps) {
   const currentLabel = navigation.find((item) => item.href === currentPath)?.label ?? 'Research'
   const [dark, setDark] = useState<boolean | null>(null)
+  const [navigationOpen, setNavigationOpen] = useState(false)
 
   useEffect(() => {
     const storedDark = window.localStorage?.getItem?.('theme') === 'dark'
     setDark(storedDark)
     document.documentElement.dataset.theme = storedDark ? 'dark' : 'light'
+  }, [])
+
+  useEffect(() => {
+    function dismissNavigation(event: KeyboardEvent) {
+      if (event.key === 'Escape') setNavigationOpen(false)
+    }
+
+    document.addEventListener('keydown', dismissNavigation)
+    return () => document.removeEventListener('keydown', dismissNavigation)
   }, [])
 
   function toggleTheme() {
@@ -49,7 +59,26 @@ export function AppShell({ children, currentPath }: AppShellProps) {
         </div>
         <span aria-hidden="true" className="mobile-current">Current · {currentLabel}</span>
         <div className="chrome-actions">
-          <nav aria-label="Primary" className="primary-nav">
+          <button
+            aria-controls="primary-navigation"
+            aria-expanded={navigationOpen}
+            aria-label={`${navigationOpen ? 'Close' : 'Open'} navigation`}
+            className="navigation-toggle"
+            onClick={() => setNavigationOpen((open) => !open)}
+            type="button"
+          >
+            <span aria-hidden="true" className="navigation-toggle-icon">
+              <span />
+              <span />
+              <span />
+            </span>
+          </button>
+          <nav
+            aria-label="Primary"
+            className="primary-nav"
+            data-open={navigationOpen}
+            id="primary-navigation"
+          >
             {navigation.map((item) => (
               <Link
                 aria-current={currentPath === item.href ? 'page' : undefined}
@@ -57,6 +86,7 @@ export function AppShell({ children, currentPath }: AppShellProps) {
                 data-current={currentPath === item.href ? 'true' : undefined}
                 href={item.href}
                 key={item.href}
+                onClick={() => setNavigationOpen(false)}
               >
                 {item.label}
               </Link>
@@ -73,7 +103,7 @@ export function AppShell({ children, currentPath }: AppShellProps) {
           </button>
         </div>
       </header>
-      <main className={`app-main${currentPath === '/' ? ' app-main-today' : ''}`} id="main-content">{children}</main>
+      <main className={`app-main${currentPath === '/' ? ' app-main-today' : ''}`} id="main-content" tabIndex={-1}>{children}</main>
       <footer className="app-footer">
         <p>Paper Trading only · Not investment advice</p>
       </footer>

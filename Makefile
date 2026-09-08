@@ -1,4 +1,4 @@
-.PHONY: bootstrap up down seed clean-fixtures verify evaluate smoke alpaca-stream
+.PHONY: bootstrap up down seed clean-fixtures verify verify-agent-runtime evaluate smoke alpaca-stream
 
 bootstrap:
 	./scripts/bootstrap.sh
@@ -19,6 +19,9 @@ clean-fixtures:
 
 verify:
 	./scripts/verify.sh
+
+verify-agent-runtime:
+	./scripts/verify-agent-runtime.sh
 
 evaluate:
 	PYTHONPATH="$(CURDIR)/backend/src" UV_CACHE_DIR="$(CURDIR)/.uv-cache" uv run python scripts/run_offline_eval.py --dataset evals/datasets --baseline evals/baselines/eval-v0.2.0.json --output evals/reports/latest

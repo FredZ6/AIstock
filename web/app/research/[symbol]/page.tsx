@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import { ApiFailurePage, ApiResearchPage } from '../../../components/live/api-pages'
 import { ResearchPage } from '../../../components/research/research-page'
 import { MissingFixturePage } from '../../../components/states/missing-fixture-page'
@@ -41,6 +43,7 @@ export default async function ResearchRoute({ params }: { params: Promise<{ symb
         ...factsQuality,
       ]}
       financialFacts={recordsResult.status === 'fulfilled' ? recordsResult.value.financialFacts : []}
+      idempotencyKey={`research-form:${normalized}:${randomUUID()}`}
       quote={quotesResult.status === 'fulfilled' ? quotesResult.value.items[0] ?? null : null}
       records={recordsResult.status === 'fulfilled' ? recordsResult.value.records : []}
       secFilings={recordsResult.status === 'fulfilled' ? recordsResult.value.secFilings : []}

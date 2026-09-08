@@ -1,7 +1,11 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { render, screen, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 
-import { ApiPortfolioPage, ApiResearchPage, ApiTodayPage, ApiWeeklyReviewPage } from '../components/live/api-pages'
+import { ApiPortfolioPage, ApiResearchPage, ApiRunMetadataPage, ApiTodayPage, ApiWeeklyReviewPage } from '../components/live/api-pages'
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}))
 
 const quote = {
   availableAt: '2026-08-29T09:20:00Z',
@@ -34,6 +38,30 @@ const emptyPortfolio = {
 }
 
 describe('API mode pages', () => {
+  it('renders the closed persisted report with lineage, gaps, pins, and deterministic diff', () => {
+    render(<ApiRunMetadataPage run={{
+      dataCutoff: '2026-09-06T14:00:00Z', decisionTime: '2026-09-06T14:00:00Z',
+      runId: 'run-1', runType: 'RESEARCH', status: 'COMPLETED', symbol: 'NVDA',
+    }} report={{
+      runId: 'run-1',
+      thesis: { id: 'thesis-1', symbol: 'NVDA', asOf: '2026-09-06T14:00:00Z', direction: 'UP', summary: 'Demand remains durable.', catalysts: ['Blackwell'], risks: ['Supply'], invalidationConditions: ['Margin decline'], horizon: '12M', confidence: '0.82', supersedesThesisId: null, createdAt: '2026-09-06T14:00:02Z' },
+      opinion: { id: 'opinion-1', value: 'BULLISH', createdAt: '2026-09-06T14:00:02Z' },
+      decision: { id: 'decision-1', dataCutoff: '2026-09-06T14:00:00Z', availableAt: '2026-09-06T14:00:02Z', promptVersion: 'prompt-v1', modelVersion: 'deterministic-v1', policyVersions: { researchScoring: 'score-v1', risk: 'risk-v1', execution: 'paper-v1', confidence: 'confidence-v1' }, createdAt: '2026-09-06T14:00:02Z' },
+      evidence: [{ id: 'evidence-1', relation: 'SUPPORTS', weight: '0.9', rationale: 'Revenue acceleration.', claims: ['Revenue grew'], provider: 'SEC', feedType: 'FINANCIALS', eventTime: '2026-09-05T20:00:00Z', availableAt: '2026-09-05T20:01:00Z', ingestedAt: '2026-09-05T20:02:00Z', contentHash: 'abc123', rawObjectKey: 'sec/raw/abc.json' }],
+      evidenceGaps: [{ id: 'gap-1', runId: 'run-1', kind: 'UNAVAILABLE', field: 'options', domain: 'DERIVATIVES', reason: 'Provider not configured', provider: null, observedAt: '2026-09-06T14:00:01Z', createdAt: '2026-09-06T14:00:02Z' }],
+      decisionDiff: { id: 'diff-1', decisionId: 'decision-1', previousDecisionId: null, generator: 'DETERMINISTIC_CODE', changes: { opinion: { after: 'BULLISH' } }, createdAt: '2026-09-06T14:00:02Z' },
+    }} />)
+
+    expect(screen.getByRole('heading', { name: 'Deterministic Research Workflow' })).toBeInTheDocument()
+    expect(screen.getByText('Demand remains durable.')).toBeInTheDocument()
+    expect(screen.getByText('82.00%')).toBeInTheDocument()
+    expect(screen.getByText('sec/raw/abc.json')).toBeInTheDocument()
+    expect(screen.getByText('Provider not configured')).toBeInTheDocument()
+    expect(screen.getByText('prompt-v1')).toBeInTheDocument()
+    expect(screen.getByText('deterministic-v1')).toBeInTheDocument()
+    expect(screen.getByText('DETERMINISTIC_CODE')).toBeInTheDocument()
+  })
+
   it('shows real Today facts and explicit degraded domains without a Fixture notice', () => {
     render(<ApiTodayPage asOf="2026-08-29T09:30:00Z" health={health} portfolio={emptyPortfolio} quotes={[quote]} />)
 
@@ -50,11 +78,16 @@ describe('API mode pages', () => {
   })
 
   it('keeps current quote visible when persisted research is empty', () => {
-    render(<ApiResearchPage asOf="2026-08-29T09:30:00Z" dataQuality={[]} financialFacts={[]} quote={quote} records={[]} secFilings={[]} symbol="NVDA" />)
+    render(<ApiResearchPage asOf="2026-08-29T09:30:00Z" dataQuality={[]} financialFacts={[]} idempotencyKey="research-form-1" quote={quote} records={[]} secFilings={[]} symbol="NVDA" />)
 
     expect(screen.getByRole('heading', { name: 'NVDA research' })).toBeInTheDocument()
     expect(screen.getByRole('status', { name: 'Research evidence unavailable' })).toBeInTheDocument()
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Research symbol' })).toHaveValue('NVDA')
+    expect(screen.getByRole('button', { name: 'Run deterministic research' })).toBeInTheDocument()
+    expect(screen.getByDisplayValue('research-form-1')).toHaveAttribute('type', 'hidden')
+    expect(screen.queryByText(/run with (openai|anthropic|llm)/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /broker|trade|order/i })).not.toBeInTheDocument()
     expect(screen.queryByText(/frozen fixture/i)).not.toBeInTheDocument()
   })
 
@@ -72,6 +105,7 @@ describe('API mode pages', () => {
         periodEnd: '2026-07-31', periodStart: '2026-05-01', provider: 'SEC',
         sourceConcept: 'Revenues', taxonomy: 'us-gaap', unit: 'USD', value: '9007199254740993',
       }]}
+      idempotencyKey="research-form-2"
       quote={quote}
       records={[]}
       secFilings={[{
@@ -112,6 +146,20 @@ describe('API mode pages', () => {
     expect(screen.getByRole('status', { name: 'Portfolio evidence is partial' })).toBeInTheDocument()
   })
 
+  it('labels the persisted API portfolio snapshot and evidence availability explicitly', () => {
+    render(<ApiPortfolioPage
+      asOf="2026-08-29T09:30:00Z"
+      portfolio={{ ...emptyPortfolio, cash: { balance: '100000', currency: 'USD' }, initializedAt: '2026-08-29T09:00:00Z', status: 'SUCCESS' }}
+    />)
+
+    const summary = screen.getByRole('region', { name: 'Portfolio snapshot' })
+    expect(within(summary).getByText('Net asset value').parentElement).toHaveTextContent('Unavailable')
+    expect(within(summary).getByText('Available cash').parentElement).toHaveTextContent('USD 100,000.00')
+    expect(summary).toHaveTextContent('As of')
+    const evidence = screen.getByRole('region', { name: 'Paper trading evidence availability' })
+    expect(within(evidence).getByText('Positions').parentElement).toHaveTextContent('0')
+  })
+
   it('renders persisted weekly outcomes, calibration, attribution, and lessons', () => {
     render(<ApiWeeklyReviewPage asOf="2026-08-29T09:30:00Z" detail={{
       approvals: [],
@@ -128,5 +176,24 @@ describe('API mode pages', () => {
     expect(screen.getByText('Late entry.')).toBeInTheDocument()
     expect(screen.getByText('Wait for confirmation.')).toBeInTheDocument()
     expect(screen.getAllByText('80.00%')).toHaveLength(2)
+  })
+
+  it('keeps API weekly benchmarks honest and replays ahead of candidate lessons', () => {
+    render(<ApiWeeklyReviewPage asOf="2026-08-29T09:30:00Z" detail={{
+      approvals: [],
+      attributions: [],
+      calibration: [],
+      lessons: [{ confidence: '0.7', id: 'l1', replayDelta: '0.1', statement: 'Wait.', status: 'CANDIDATE' }],
+      outcomes: [],
+      replays: [{ dataCutoff: '2026-08-21T20:00:00Z', delta: '0.05', id: 'p1', lessonId: 'l1' }],
+      review: { dataCutoff: '2026-08-21T20:00:00Z', id: 'r1', status: 'COMPLETED' },
+    }} />)
+
+    const outcomes = screen.getByRole('region', { name: 'Weekly outcome summary' })
+    const replay = screen.getByRole('region', { name: 'Point-in-time replays' })
+    const lessons = screen.getByRole('region', { name: 'Candidate lessons' })
+    expect(outcomes).toHaveTextContent('Benchmark comparison unavailable')
+    expect(replay).toHaveTextContent('Aug 21, 2026')
+    expect(replay.compareDocumentPosition(lessons) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
