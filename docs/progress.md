@@ -3410,3 +3410,29 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   326 files, Mypy clean for 283 source files, no Alembic drift, OpenAPI/MCP/dependency checks passed,
   backend 737 passed / 5 optional live-provider tests skipped, frontend 30 files / 178 passed, and
   TypeScript, ESLint and Next.js production build passed. `git diff --check` exited 0.
+
+## 2026-09-09 — M8.1 frontend product closure, FRE-29 Alerts checkpoint
+
+- Linear milestone `M8.1 Frontend Product Closure` now tracks FRE-29, FRE-30, FRE-31, FRE-32,
+  FRE-33, FRE-34, FRE-35, FRE-36, FRE-37, FRE-38 and FRE-39. FRE-29 is the active issue; the
+  implementation sequence and locked boundaries are recorded in
+  `docs/plans/2026-09-09-frontend-product-closure.md`.
+- Alert API contract RED: `npm test -- --run tests/live-data-api.test.ts` exited 1 with 11 passed /
+  2 failed because the client returned unchecked snake-case records and accepted numeric money-like
+  materiality plus a naive timestamp. GREEN: the typed parser validates the full Pydantic response,
+  including Decimal strings, aware instants, symbol and enum constraints, conditions, metrics, data
+  quality, acknowledgement and correlation provenance. The rerun exited 0 with 13/13 passed.
+- Alert page RED: `npm test -- --run tests/api-pages.test.tsx
+  tests/api-boundary-routing.test.tsx` exited 1 with 17 passed / 2 failed because API mode rendered
+  only a count placeholder. GREEN: the API surface now renders severity, symbol/research destination,
+  materiality, rule/version, event and recorded time, acknowledgement, deterministic condition/
+  metric/data-quality evidence, correlation ID and a clearly labelled latest-run audit destination.
+  The rerun exited 0 with 2 files / 19 tests passed. Empty results remain explicit and API mode never
+  imports Fixture data.
+- Focused verification exited 0 with 3 files / 32 tests passed. ESLint exited 0. The Next.js
+  production build exited 0 and generated all routes. Complete frontend Vitest exited 0 with 30
+  files / 182 tests passed and no skips. Existing jsdom local-storage and cross-realm AbortSignal
+  diagnostics remain non-failing test noise tracked for the later FRE-38 console-quality task.
+- This is a local FRE-29 implementation checkpoint. `make verify`, commit, push, PR, Linear review
+  transition and Notion completion update are not yet claimed; Eval API persistence remains a
+  separate contract-review task within FRE-29.

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   createResearchRun,
+  getAlerts,
   getDataQuality,
   getMarketQuotes,
   getLatestResearchRun,
@@ -24,6 +25,69 @@ function jsonResponse(value: unknown, status = 200) {
 const options = { baseUrl: 'http://api.test', decisionTime: '2026-08-29T09:30:00Z' }
 
 describe('live data API client', () => {
+  it('parses the locked point-in-time Alert contract without weakening Decimal or timestamp fields', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      decision_time: options.decisionTime,
+      items: [{
+        acknowledged_at: null,
+        acknowledged_by: null,
+        alert_key: 'NVDA:price-gap:2026-08-29',
+        conditions: [{ operator: 'gte', threshold: '0.05' }],
+        correlation_id: '10000000-0000-0000-0000-000000000099',
+        created_at: '2026-08-29T09:21:00Z',
+        data_quality: { coverage: 'IEX', freshness: 'PT1M' },
+        event_time: '2026-08-29T09:20:00Z',
+        id: '10000000-0000-0000-0000-000000000001',
+        materiality: '0.075',
+        metrics: { move: '0.081' },
+        rule_id: 'price-gap',
+        rule_version: 'price-gap-v2',
+        severity: 'HIGH',
+        symbol: 'NVDA',
+      }],
+      next_cursor: null,
+    }))
+
+    await expect(getAlerts({ ...options, fetchImpl })).resolves.toEqual({
+      items: [expect.objectContaining({
+        alertKey: 'NVDA:price-gap:2026-08-29',
+        correlationId: '10000000-0000-0000-0000-000000000099',
+        createdAt: '2026-08-29T09:21:00Z',
+        dataQuality: { coverage: 'IEX', freshness: 'PT1M' },
+        eventTime: '2026-08-29T09:20:00Z',
+        materiality: '0.075',
+        ruleId: 'price-gap',
+        ruleVersion: 'price-gap-v2',
+        severity: 'HIGH',
+        symbol: 'NVDA',
+      })],
+      nextCursor: null,
+    })
+  })
+
+  it('rejects malformed Alert Decimal and naive datetime values', async () => {
+    const invalid = {
+      acknowledged_at: null,
+      acknowledged_by: null,
+      alert_key: 'NVDA:price-gap:2026-08-29',
+      conditions: [],
+      correlation_id: '10000000-0000-0000-0000-000000000099',
+      created_at: '2026-08-29T09:21:00Z',
+      data_quality: {},
+      event_time: '2026-08-29T09:20:00',
+      id: '10000000-0000-0000-0000-000000000001',
+      materiality: 0.075,
+      metrics: {},
+      rule_id: 'price-gap',
+      rule_version: 'price-gap-v2',
+      severity: 'HIGH',
+      symbol: 'NVDA',
+    }
+    const fetchImpl = vi.fn(async () => jsonResponse({ items: [invalid], next_cursor: null }))
+
+    await expect(getAlerts({ ...options, fetchImpl })).rejects.toMatchObject({ kind: 'contract' })
+  })
+
   it('loads the latest research run at the requested point-in-time cutoff', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       data_cutoff: options.decisionTime,

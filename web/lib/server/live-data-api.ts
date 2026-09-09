@@ -7,6 +7,26 @@ type JsonRecord = Record<string, unknown>
 
 export type LiveDataStatus = 'SUCCESS' | 'DEGRADED' | 'FAILURE'
 
+export type AlertRecord = {
+  acknowledgedAt: string | null
+  acknowledgedBy: string | null
+  alertKey: string
+  conditions: unknown[]
+  correlationId: string
+  createdAt: string
+  dataQuality: JsonRecord
+  eventTime: string
+  id: string
+  materiality: string
+  metrics: JsonRecord
+  ruleId: string
+  ruleVersion: string
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  symbol: string
+}
+
+export type AlertPage = { items: AlertRecord[]; nextCursor: string | null }
+
 export type MarketQuote = {
   availableAt: string
   close: string
@@ -285,9 +305,41 @@ function pagedRecords(value: unknown, path: string): PagedRecords {
   })
 }
 
-export async function getAlerts(options: LiveDataClientOptions): Promise<PagedRecords> {
+export async function getAlerts(options: LiveDataClientOptions): Promise<AlertPage> {
   const query = new URLSearchParams({ decision_time: options.decisionTime, limit: '50' })
-  return pagedRecords(await requestJson(options, `/api/v1/alerts?${query}`), 'alerts')
+  const value = await requestJson(options, `/api/v1/alerts?${query}`)
+  return contract(() => {
+    const source = record(value, 'alerts')
+    if (!Array.isArray(source.items)) throw new TypeError('alerts.items must be an array')
+    const nextCursor = source.next_cursor
+    if (nextCursor !== null && typeof nextCursor !== 'string') throw new TypeError('alerts.next_cursor is invalid')
+    return {
+      items: source.items.map((item, index) => {
+        const row = record(item, `alerts.items[${index}]`)
+        const symbol = text(row.symbol, `alerts.items[${index}].symbol`)
+        if (!symbolPattern.test(symbol)) throw new TypeError(`alerts.items[${index}].symbol is invalid`)
+        if (!Array.isArray(row.conditions)) throw new TypeError(`alerts.items[${index}].conditions must be an array`)
+        return {
+          id: text(row.id, `alerts.items[${index}].id`),
+          correlationId: text(row.correlation_id, `alerts.items[${index}].correlation_id`),
+          alertKey: text(row.alert_key, `alerts.items[${index}].alert_key`),
+          symbol,
+          eventTime: instant(row.event_time, `alerts.items[${index}].event_time`),
+          ruleId: text(row.rule_id, `alerts.items[${index}].rule_id`),
+          ruleVersion: text(row.rule_version, `alerts.items[${index}].rule_version`),
+          severity: enumeration(row.severity, ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const, `alerts.items[${index}].severity`),
+          materiality: decimal(row.materiality, `alerts.items[${index}].materiality`),
+          conditions: row.conditions,
+          metrics: record(row.metrics, `alerts.items[${index}].metrics`),
+          dataQuality: record(row.data_quality, `alerts.items[${index}].data_quality`),
+          acknowledgedAt: row.acknowledged_at === null ? null : instant(row.acknowledged_at, `alerts.items[${index}].acknowledged_at`),
+          acknowledgedBy: row.acknowledged_by === null ? null : text(row.acknowledged_by, `alerts.items[${index}].acknowledged_by`),
+          createdAt: instant(row.created_at, `alerts.items[${index}].created_at`),
+        }
+      }),
+      nextCursor,
+    }
+  })
 }
 
 export async function getWeeklyReviews(options: LiveDataClientOptions): Promise<PagedRecords> {

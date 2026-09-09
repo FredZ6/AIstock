@@ -27,6 +27,29 @@ describe('API mode fixture boundary', () => {
     expect(screen.queryByText(/fixture mode|frozen synthetic/i)).not.toBeInTheDocument()
   })
 
+  it('routes persisted Alert records into the usable API Alerts surface', async () => {
+    apiMode()
+    vi.doMock('../lib/server/live-data-api', () => ({
+      getAlerts: vi.fn(async () => ({
+        items: [{
+          acknowledgedAt: null, acknowledgedBy: null, alertKey: 'NVDA:price-gap', conditions: [],
+          correlationId: '10000000-0000-0000-0000-000000000099', createdAt: '2026-08-29T09:21:00Z',
+          dataQuality: { coverage: 'IEX' }, eventTime: '2026-08-29T09:20:00Z',
+          id: '10000000-0000-0000-0000-000000000001', materiality: '0.075', metrics: { move: '0.081' },
+          ruleId: 'price-gap', ruleVersion: 'price-gap-v2', severity: 'HIGH', symbol: 'NVDA',
+        }],
+        nextCursor: null,
+      })),
+    }))
+    const { default: AlertsRoute } = await import('../app/alerts/page')
+
+    render(await AlertsRoute())
+
+    expect(screen.getByRole('link', { name: 'NVDA research' })).toBeInTheDocument()
+    expect(screen.getByText('price-gap · price-gap-v2')).toBeInTheDocument()
+    expect(screen.queryByText(/Detailed presentation remains constrained/)).not.toBeInTheDocument()
+  })
+
   it('renders an honest empty Weekly Review state without Fixture facts', async () => {
     apiMode()
     vi.doMock('../lib/server/live-data-api', () => ({ getWeeklyReviews: vi.fn(async () => ({ items: [], nextCursor: null })) }))

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { initializePortfolioAction } from '../../app/portfolio/actions'
 import { formatDecimal, formatMoney, formatPercent } from '../../lib/format'
 import type {
+  AlertRecord,
   DataQuality,
   FinancialFact,
   MarketQuote,
@@ -22,6 +23,67 @@ import { ResearchRunControl } from '../research/research-run-control'
 import { StateBoundary } from '../states/state-boundary'
 import { LiveRunTrace } from '../trace/live-run-trace'
 import { PageHeading, Signal } from '../ui/product-ui'
+
+function alertEvidence(value: unknown) {
+  return JSON.stringify(value, null, 2)
+}
+
+export function ApiAlertsPage({ alerts, asOf }: { alerts: AlertRecord[]; asOf: string }) {
+  return (
+    <AppShell currentPath="/alerts">
+      <PageHeading
+        asOf={asOf}
+        eyebrow="Monitor · API Mode"
+        title="Alerts"
+        summary="Persisted point-in-time alert facts. No Fixture data was substituted."
+      />
+      <StateBoundary state={alerts.length === 0 ? {
+        kind: 'empty',
+        title: 'No persisted alerts',
+        message: 'The authoritative backend returned no alert records at this point-in-time cutoff.',
+        actionHref: '/watchlist',
+        actionLabel: 'Review watchlist',
+      } : { kind: 'success' }}>
+        <section className="terminal-section first-section" aria-labelledby="persisted-alerts-title">
+          <div className="section-heading">
+            <div><p className="section-kicker">Persisted records</p><h2 id="persisted-alerts-title">Alert stream</h2></div>
+            <span className="muted-copy">PIT cutoff · {formatDualTime(asOf).newYork}</span>
+          </div>
+          <ul className="lineage-list" aria-label="Persisted alerts">
+            {alerts.map((alert) => <li key={alert.id} id={`alert-${alert.id}`}>
+              <div className="section-heading">
+                <div>
+                  <Signal tone={alert.severity}>{alert.severity}</Signal>
+                  <h3><Link href={`/research/${alert.symbol}`} aria-label={`${alert.symbol} research`}>{alert.symbol}</Link></h3>
+                </div>
+                <strong>{formatPercent(alert.materiality, { signed: false })}</strong>
+              </div>
+              <p>{alert.ruleId} · {alert.ruleVersion}</p>
+              <dl className="decision-facts">
+                <div><dt>Event time</dt><dd><time dateTime={alert.eventTime}>{formatDualTime(alert.eventTime).newYork}</time></dd></div>
+                <div><dt>Recorded</dt><dd><time dateTime={alert.createdAt}>{formatDualTime(alert.createdAt).newYork}</time></dd></div>
+                <div><dt>Acknowledgement</dt><dd>{alert.acknowledgedAt
+                  ? <><time dateTime={alert.acknowledgedAt}>{formatDualTime(alert.acknowledgedAt).newYork}</time> · {alert.acknowledgedBy}</>
+                  : 'Not acknowledged'}</dd></div>
+                <div><dt>Alert key</dt><dd><code>{alert.alertKey}</code></dd></div>
+              </dl>
+              <details>
+                <summary>Conditions, metrics, and data quality</summary>
+                <div className="decision-facts">
+                  <div><dt>Conditions</dt><dd><pre>{alertEvidence(alert.conditions)}</pre></dd></div>
+                  <div><dt>Metrics</dt><dd><pre>{alertEvidence(alert.metrics)}</pre></dd></div>
+                  <div><dt>Data quality</dt><dd><pre>{alertEvidence(alert.dataQuality)}</pre></dd></div>
+                </div>
+              </details>
+              <p><small>Correlation ID · <code>{alert.correlationId}</code></small></p>
+              <p><Link href="/runs/latest">Open latest run trace</Link></p>
+            </li>)}
+          </ul>
+        </section>
+      </StateBoundary>
+    </AppShell>
+  )
+}
 
 export function ApiCollectionPage({
   asOf,

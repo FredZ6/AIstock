@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ApiPortfolioPage, ApiResearchPage, ApiRunMetadataPage, ApiTodayPage, ApiWeeklyReviewPage } from '../components/live/api-pages'
+import { ApiAlertsPage, ApiPortfolioPage, ApiResearchPage, ApiRunMetadataPage, ApiTodayPage, ApiWeeklyReviewPage } from '../components/live/api-pages'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -38,6 +38,38 @@ const emptyPortfolio = {
 }
 
 describe('API mode pages', () => {
+  it('renders persisted Alerts as actionable point-in-time evidence instead of a count placeholder', () => {
+    render(<ApiAlertsPage asOf="2026-08-29T09:30:00Z" alerts={[{
+      acknowledgedAt: null,
+      acknowledgedBy: null,
+      alertKey: 'NVDA:price-gap:2026-08-29',
+      conditions: [{ operator: 'gte', threshold: '0.05' }],
+      correlationId: '10000000-0000-0000-0000-000000000099',
+      createdAt: '2026-08-29T09:21:00Z',
+      dataQuality: { coverage: 'IEX', freshness: 'PT1M' },
+      eventTime: '2026-08-29T09:20:00Z',
+      id: '10000000-0000-0000-0000-000000000001',
+      materiality: '0.075',
+      metrics: { move: '0.081' },
+      ruleId: 'price-gap',
+      ruleVersion: 'price-gap-v2',
+      severity: 'HIGH',
+      symbol: 'NVDA',
+    }]} />)
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Alerts' })).toBeInTheDocument()
+    expect(screen.getByText('HIGH')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'NVDA research' })).toHaveAttribute('href', '/research/NVDA')
+    expect(screen.getByText('7.50%')).toBeInTheDocument()
+    expect(screen.getByText('price-gap · price-gap-v2')).toBeInTheDocument()
+    expect(screen.getByText('Not acknowledged')).toBeInTheDocument()
+    expect(screen.getByText(/10000000-0000-0000-0000-000000000099/)).toBeInTheDocument()
+    expect(screen.getByText(/"coverage": "IEX"/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open latest run trace' })).toHaveAttribute('href', '/runs/latest')
+    expect(screen.queryByText(/Detailed presentation remains constrained/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Fixture Mode/)).not.toBeInTheDocument()
+  })
+
   it('renders the closed persisted report with lineage, gaps, pins, and deterministic diff', () => {
     render(<ApiRunMetadataPage run={{
       dataCutoff: '2026-09-06T14:00:00Z', decisionTime: '2026-09-06T14:00:00Z',
