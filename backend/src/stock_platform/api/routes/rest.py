@@ -85,6 +85,7 @@ from stock_platform.infrastructure.db.models.tables import (
     decision_outcome,
     decision_snapshot,
     derived_metric,
+    earnings_event,
     error_attribution,
     eval_metric,
     eval_run,
@@ -97,7 +98,9 @@ from stock_platform.infrastructure.db.models.tables import (
     lesson_approval,
     lesson_attribution_link,
     market_bar,
+    news_article,
     normalized_record,
+    option_snapshot,
     paper_fill,
     paper_order,
     paper_portfolio_config,
@@ -885,6 +888,7 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
 def get_stock_research(
     symbol: str,
     connection: ConnectionDependency,
+    settings: SettingsDependency,
     decision_time: datetime,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     cursor: str | None = None,
@@ -1001,11 +1005,115 @@ def get_stock_research(
         .mappings()
         .all()
     )
+    news_raw = raw_data_object.alias("news_raw")
+    news_rows = (
+        connection.execute(
+            select(
+                news_article.c.id,
+                news_article.c.provider,
+                news_article.c.headline,
+                news_article.c.source,
+                news_article.c.summary,
+                news_article.c.published_at.label("event_time"),
+                news_article.c.available_at,
+                news_raw.c.content_hash,
+                news_raw.c.raw_object_key,
+            )
+            .join(news_raw, news_raw.c.id == news_article.c.raw_data_object_id)
+            .where(
+                news_article.c.provider != "FIXTURE",
+                news_raw.c.provider != "FIXTURE",
+                news_article.c.symbols.contains([_symbol(symbol)]),
+                news_article.c.pit_eligible.is_(True),
+                news_article.c.observed_at <= cutoff,
+                news_article.c.available_at <= cutoff,
+                news_raw.c.available_at <= cutoff,
+            )
+            .order_by(news_article.c.published_at.desc(), news_article.c.id.desc())
+            .limit(20)
+        )
+        .mappings()
+        .all()
+    )
+    earnings_raw = raw_data_object.alias("earnings_raw")
+    newer_earnings = earnings_event.alias("newer_earnings")
+    has_visible_earnings_revision = (
+        select(newer_earnings.c.id)
+        .where(
+            newer_earnings.c.supersedes_id == earnings_event.c.id,
+            newer_earnings.c.available_at <= cutoff,
+        )
+        .exists()
+    )
+    earnings_rows = (
+        connection.execute(
+            select(
+                earnings_event.c.id,
+                earnings_event.c.provider,
+                earnings_event.c.event_date,
+                earnings_event.c.fiscal_date_end,
+                earnings_event.c.estimate,
+                earnings_event.c.currency,
+                earnings_raw.c.event_time,
+                earnings_event.c.available_at,
+                earnings_raw.c.content_hash,
+                earnings_raw.c.raw_object_key,
+            )
+            .join(earnings_raw, earnings_raw.c.id == earnings_event.c.raw_data_object_id)
+            .where(
+                earnings_event.c.provider != "FIXTURE",
+                earnings_raw.c.provider != "FIXTURE",
+                earnings_event.c.security_id == visible_security,
+                earnings_event.c.available_at <= cutoff,
+                earnings_raw.c.available_at <= cutoff,
+                ~has_visible_earnings_revision,
+            )
+            .order_by(earnings_event.c.event_date, earnings_event.c.id.desc())
+            .limit(20)
+        )
+        .mappings()
+        .all()
+    )
+    option_rows = (
+        connection.execute(
+            select(
+                option_snapshot.c.id,
+                option_snapshot.c.provider,
+                option_snapshot.c.feed_type,
+                option_snapshot.c.event_time,
+                option_snapshot.c.available_at,
+                option_snapshot.c.content_hash,
+                option_snapshot.c.raw_object_key,
+                option_snapshot.c.payload,
+            )
+            .where(
+                option_snapshot.c.provider != "FIXTURE",
+                option_snapshot.c.symbol == _symbol(symbol),
+                option_snapshot.c.event_time <= cutoff,
+                option_snapshot.c.available_at <= cutoff,
+            )
+            .order_by(option_snapshot.c.event_time.desc(), option_snapshot.c.id.desc())
+            .limit(20)
+        )
+        .mappings()
+        .all()
+    )
+    unavailable_domains = ["ANALYST_TARGETS"]
+    if not news_rows and not (settings.alpaca_data_key and settings.alpaca_data_secret):
+        unavailable_domains.append("NEWS")
+    if not earnings_rows and not settings.alpha_vantage_api_key:
+        unavailable_domains.append("EARNINGS")
+    if not option_rows and not (settings.alpaca_data_key and settings.alpaca_data_secret):
+        unavailable_domains.append("OPTIONS")
     return {
         "decision_time": cutoff,
         "items": items,
         "sec_filings": [_row(row) for row in filing_rows],
         "financial_facts": [_row(row) for row in fact_rows],
+        "news_articles": [_row(row) for row in news_rows],
+        "earnings_events": [_row(row) for row in earnings_rows],
+        "option_snapshots": [_row(row) for row in option_rows],
+        "unavailable_domains": unavailable_domains,
         "next_cursor": next_cursor,
     }
 

@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,12 +14,15 @@ from stock_platform.infrastructure.db.models.tables import (
     data_quality_observation,
     decision_diff,
     decision_snapshot,
+    earnings_event,
     execution_policy_version,
     financial_fact,
     ingestion_job,
     investment_thesis,
     market_bar,
+    news_article,
     normalized_record,
+    option_snapshot,
     raw_data_object,
     research_opinion,
     research_scoring_policy_version,
@@ -704,6 +707,164 @@ def test_research_read_includes_only_point_in_time_sec_facts(
     assert {item["accession_number"] for item in response.json()["financial_facts"]} == {
         "0001045810-26-000001"
     }
+
+
+def test_research_read_exposes_only_pit_eligible_persisted_research_domains(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    cutoff = datetime(2026, 8, 21, 20, tzinfo=UTC)
+    available_at = cutoff - timedelta(hours=1)
+    security_id = uuid4()
+    connection.execute(security.insert().values(id=security_id, instrument_type="COMMON_STOCK"))
+    connection.execute(
+        security_identifier_version.insert().values(
+            security_id=security_id,
+            identifier_type="PRIMARY_SYMBOL",
+            identifier_value="NVDA",
+            provider_identifiers={},
+            effective_from=cutoff - timedelta(days=10),
+            available_at=cutoff - timedelta(days=10),
+        )
+    )
+
+    raw_ids: dict[str, UUID] = {}
+    normalized_ids: dict[str, UUID] = {}
+    for index, feed_type in enumerate(("company_news", "earnings_calendar", "option_snapshot")):
+        raw_id = uuid4()
+        raw_ids[feed_type] = raw_id
+        connection.execute(
+            raw_data_object.insert().values(
+                id=raw_id,
+                provider="ALPACA" if feed_type != "earnings_calendar" else "ALPHA_VANTAGE",
+                feed_type=feed_type,
+                event_time=cutoff - timedelta(hours=2),
+                available_at=available_at,
+                ingested_at=available_at,
+                content_hash=str(index + 4) * 64,
+                raw_object_key=f"live/{feed_type}/{index}.json",
+            )
+        )
+        if feed_type != "option_snapshot":
+            normalized_id = uuid4()
+            normalized_ids[feed_type] = normalized_id
+            connection.execute(
+                normalized_record.insert().values(
+                    id=normalized_id,
+                    raw_data_object_id=raw_id,
+                    record_type=feed_type,
+                    record_key=f"NVDA:{feed_type}",
+                    normalization_version="test-v1",
+                    payload={},
+                )
+            )
+
+    connection.execute(
+        news_article.insert().values(
+            raw_data_object_id=raw_ids["company_news"],
+            normalized_record_id=normalized_ids["company_news"],
+            provider="ALPACA",
+            article_id="article-1",
+            symbols=["NVDA"],
+            headline="Persisted headline",
+            source="wire",
+            summary="Persisted summary",
+            published_at=cutoff - timedelta(hours=3),
+            observed_at=cutoff - timedelta(hours=2),
+            available_at=available_at,
+            ingested_at=available_at,
+            pit_eligible=True,
+            payload={},
+        )
+    )
+    connection.execute(
+        earnings_event.insert().values(
+            security_id=security_id,
+            raw_data_object_id=raw_ids["earnings_calendar"],
+            normalized_record_id=normalized_ids["earnings_calendar"],
+            provider="ALPHA_VANTAGE",
+            provider_symbol="NVDA",
+            symbol="NVDA",
+            event_date=(cutoff + timedelta(days=30)).date(),
+            fiscal_date_end=cutoff.date(),
+            estimate=Decimal("0.95"),
+            currency="USD",
+            available_at=available_at,
+            payload={},
+        )
+    )
+    connection.execute(
+        option_snapshot.insert().values(
+            event_time=cutoff - timedelta(hours=2),
+            symbol="NVDA",
+            raw_data_object_id=raw_ids["option_snapshot"],
+            provider="ALPACA",
+            feed_type="option_snapshot",
+            content_hash="6" * 64,
+            raw_object_key="live/option_snapshot/2.json",
+            available_at=available_at,
+            ingested_at=available_at,
+            payload={"put_call_ratio": "0.72"},
+        )
+    )
+    fixture_option_raw_id = uuid4()
+    connection.execute(
+        raw_data_object.insert().values(
+            id=fixture_option_raw_id,
+            provider="FIXTURE",
+            feed_type="option_snapshot",
+            event_time=cutoff - timedelta(hours=2),
+            available_at=available_at,
+            ingested_at=available_at,
+            content_hash="7" * 64,
+            raw_object_key="fixture/options.json",
+        )
+    )
+    connection.execute(
+        option_snapshot.insert().values(
+            event_time=cutoff - timedelta(hours=2),
+            symbol="NVDA",
+            raw_data_object_id=fixture_option_raw_id,
+            provider="FIXTURE",
+            feed_type="option_snapshot",
+            content_hash="7" * 64,
+            raw_object_key="fixture/options.json",
+            available_at=available_at,
+            ingested_at=available_at,
+            payload={"fixture": True},
+        )
+    )
+
+    before = client.get(
+        "/api/v1/stocks/NVDA/research",
+        params={"decision_time": (available_at - timedelta(seconds=1)).isoformat()},
+    )
+    assert before.status_code == 200
+    assert before.json()["news_articles"] == []
+    assert before.json()["earnings_events"] == []
+    assert before.json()["option_snapshots"] == []
+
+    response = client.get(
+        "/api/v1/stocks/NVDA/research", params={"decision_time": cutoff.isoformat()}
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["news_articles"][0] == {
+        "id": payload["news_articles"][0]["id"],
+        "provider": "ALPACA",
+        "headline": "Persisted headline",
+        "source": "wire",
+        "summary": "Persisted summary",
+        "event_time": "2026-08-21T17:00:00Z",
+        "available_at": "2026-08-21T19:00:00Z",
+        "content_hash": "4" * 64,
+        "raw_object_key": "live/company_news/0.json",
+    }
+    assert payload["earnings_events"][0]["estimate"] == "0.95"
+    assert payload["earnings_events"][0]["event_time"] == "2026-08-21T18:00:00Z"
+    assert [item["provider"] for item in payload["option_snapshots"]] == ["ALPACA"]
+    assert payload["option_snapshots"][0]["payload"] == {"put_call_ratio": "0.72"}
+    assert payload["unavailable_domains"] == ["ANALYST_TARGETS"]
 
 
 def test_research_read_excludes_a_decision_superseded_by_append_only_diff(

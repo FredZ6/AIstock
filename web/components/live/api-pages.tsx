@@ -6,9 +6,12 @@ import { formatDecimal, formatMoney, formatPercent } from '../../lib/format'
 import type {
   AlertRecord,
   DataQuality,
+  EarningsEvent,
   EvalRunDetail,
   FinancialFact,
   MarketQuote,
+  NewsArticle,
+  OptionSnapshot,
   PortfolioSummary,
   ProviderHealth,
   ResearchRecord,
@@ -28,6 +31,10 @@ import { PageHeading, Signal } from '../ui/product-ui'
 
 function alertEvidence(value: unknown) {
   return JSON.stringify(value, null, 2)
+}
+
+function unique(items: string[]) {
+  return [...new Set(items)]
 }
 
 export function ApiEvalPage({ detail, asOf }: { detail: EvalRunDetail; asOf: string }) {
@@ -194,7 +201,6 @@ export function ApiTodayPage({
   const unavailableProviders = health ? Object.entries(health.providers)
     .filter(([, provider]) => !provider.configured || provider.status === 'FAILURE' || provider.status === 'UNAVAILABLE')
     .map(([name]) => name.toUpperCase()) : ['Provider health']
-  const unique = (items: string[]) => [...new Set(items)]
   const providerDomains = unavailableDomains.filter((domain) => /provider/i.test(domain))
   const marketDomains = unavailableDomains.filter((domain) => /market|quote/i.test(domain))
   const decisionDomains = unavailableDomains.filter(
@@ -263,8 +269,11 @@ export function ApiTodayPage({
 export function ApiResearchPage({
   asOf,
   dataQuality,
+  earningsEvents = [],
   financialFacts,
   idempotencyKey,
+  newsArticles = [],
+  optionSnapshots = [],
   quote,
   records,
   secFilings,
@@ -273,8 +282,11 @@ export function ApiResearchPage({
 }: {
   asOf: string
   dataQuality: DataQuality[]
+  earningsEvents?: EarningsEvent[]
   financialFacts: FinancialFact[]
   idempotencyKey: string
+  newsArticles?: NewsArticle[]
+  optionSnapshots?: OptionSnapshot[]
   quote: MarketQuote | null
   records: ResearchRecord[]
   secFilings: SecFiling[]
@@ -283,14 +295,13 @@ export function ApiResearchPage({
 }) {
   const latestRecord = records[0]
   const previousRecords = records.slice(1)
-  const missing = [
+  const missing = unique([
     ...unavailableDomains,
     ...(!quote ? ['Current market reference'] : []),
     ...(!records.length ? ['Research'] : []),
     ...(!secFilings.length ? ['SEC filings'] : []),
     ...(!financialFacts.length ? ['Fundamentals'] : []),
-    'Earnings', 'News', 'Options', 'Analyst targets',
-  ]
+  ])
   const state = missing.length ? {
     kind: 'degraded' as const,
     title: records.length && !quote ? 'Current market reference unavailable' : 'Research evidence unavailable',
@@ -337,6 +348,21 @@ export function ApiResearchPage({
           <div className="table-scroll" tabIndex={0}><table aria-label="Persisted financial facts"><thead><tr><th>Concept</th><th>Value</th><th>Period</th><th>Mapping</th><th>Accession</th><th>Available</th></tr></thead><tbody>
             {financialFacts.map((fact) => <tr key={fact.id}><td>{fact.canonicalConcept ?? fact.sourceConcept}</td><td>{formatDecimal(fact.value)} {fact.currency ?? fact.unit}</td><td>{fact.periodStart} — {fact.periodEnd}</td><td>{fact.mappingStatus}</td><td>{fact.accessionNumber}</td><td>{formatDualTime(fact.availableAt).newYork}</td></tr>)}
           </tbody></table></div>
+        </details> : null}
+        {earningsEvents.length ? <details className="terminal-section research-disclosure">
+          <summary>Earnings events · {earningsEvents.length}</summary>
+          <h2>Earnings events</h2>
+          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted earnings events"><thead><tr><th>Event date</th><th>Fiscal end</th><th>Estimate</th><th>Provider</th><th>Event time</th><th>Available</th><th>Provenance</th></tr></thead><tbody>{earningsEvents.map((event) => <tr key={event.id}><td>{event.eventDate}</td><td>{event.fiscalDateEnd}</td><td>{event.estimate ? `${formatDecimal(event.estimate)} ${event.currency ?? ''}` : 'Unavailable'}</td><td>{event.provider}</td><td><time dateTime={event.eventTime}>{formatDualTime(event.eventTime).newYork}</time></td><td><time dateTime={event.availableAt}>{formatDualTime(event.availableAt).newYork}</time></td><td><code>{event.rawObjectKey}</code><small>{event.contentHash}</small></td></tr>)}</tbody></table></div>
+        </details> : null}
+        {newsArticles.length ? <details className="terminal-section research-disclosure">
+          <summary>News · {newsArticles.length}</summary>
+          <h2>News</h2>
+          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted news articles"><thead><tr><th>Headline</th><th>Source</th><th>Summary</th><th>Provider</th><th>Event time</th><th>Available</th><th>Provenance</th></tr></thead><tbody>{newsArticles.map((article) => <tr key={article.id}><th>{article.headline}</th><td>{article.source}</td><td>{article.summary}</td><td>{article.provider}</td><td><time dateTime={article.eventTime}>{formatDualTime(article.eventTime).newYork}</time></td><td><time dateTime={article.availableAt}>{formatDualTime(article.availableAt).newYork}</time></td><td><code>{article.rawObjectKey}</code><small>{article.contentHash}</small></td></tr>)}</tbody></table></div>
+        </details> : null}
+        {optionSnapshots.length ? <details className="terminal-section research-disclosure">
+          <summary>Options · {optionSnapshots.length}</summary>
+          <h2>Options</h2>
+          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted option snapshots"><thead><tr><th>Feed</th><th>Payload</th><th>Provider</th><th>Event time</th><th>Available</th><th>Provenance</th></tr></thead><tbody>{optionSnapshots.map((snapshot) => <tr key={snapshot.id}><td>{snapshot.feedType}</td><td><pre>{alertEvidence(snapshot.payload)}</pre></td><td>{snapshot.provider}</td><td><time dateTime={snapshot.eventTime}>{formatDualTime(snapshot.eventTime).newYork}</time></td><td><time dateTime={snapshot.availableAt}>{formatDualTime(snapshot.availableAt).newYork}</time></td><td><code>{snapshot.rawObjectKey}</code><small>{snapshot.contentHash}</small></td></tr>)}</tbody></table></div>
         </details> : null}
         {dataQuality.length ? <details className="terminal-section research-disclosure">
           <summary>SEC data quality · {dataQuality.length}</summary>

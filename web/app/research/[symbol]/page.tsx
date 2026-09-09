@@ -42,13 +42,19 @@ export default async function ResearchRoute({ params }: { params: Promise<{ symb
         ...filingQuality,
         ...factsQuality,
       ]}
+      earningsEvents={recordsResult.status === 'fulfilled' ? recordsResult.value.earningsEvents ?? [] : []}
       financialFacts={recordsResult.status === 'fulfilled' ? recordsResult.value.financialFacts : []}
       idempotencyKey={`research-form:${normalized}:${randomUUID()}`}
+      newsArticles={recordsResult.status === 'fulfilled' ? recordsResult.value.newsArticles ?? [] : []}
+      optionSnapshots={recordsResult.status === 'fulfilled' ? recordsResult.value.optionSnapshots ?? [] : []}
       quote={quotesResult.status === 'fulfilled' ? quotesResult.value.items[0] ?? null : null}
       records={recordsResult.status === 'fulfilled' ? recordsResult.value.records : []}
       secFilings={recordsResult.status === 'fulfilled' ? recordsResult.value.secFilings : []}
       symbol={normalized}
       unavailableDomains={[
+        ...(recordsResult.status === 'fulfilled' ? (recordsResult.value.unavailableDomains ?? []).map((domain) => ({
+          ANALYST_TARGETS: 'Analyst targets', EARNINGS: 'Earnings', NEWS: 'News', OPTIONS: 'Options',
+        })[domain]) : []),
         ...(quotesResult.status === 'rejected' ? ['Market quotes API'] : []),
         ...(quotesResult.status === 'fulfilled' && quotesResult.value.status !== 'SUCCESS' ? ['Market quote quality'] : []),
         ...(recordsResult.status === 'rejected' ? ['Research API'] : []),

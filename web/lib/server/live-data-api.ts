@@ -202,10 +202,50 @@ export type FinancialFact = {
   value: string
 }
 
+export type NewsArticle = {
+  availableAt: string
+  contentHash: string
+  eventTime: string
+  headline: string
+  id: string
+  provider: string
+  rawObjectKey: string
+  source: string
+  summary: string
+}
+
+export type EarningsEvent = {
+  availableAt: string
+  contentHash: string
+  currency: string | null
+  estimate: string | null
+  eventDate: string
+  eventTime: string
+  fiscalDateEnd: string
+  id: string
+  provider: string
+  rawObjectKey: string
+}
+
+export type OptionSnapshot = {
+  availableAt: string
+  contentHash: string
+  eventTime: string
+  feedType: string
+  id: string
+  payload: JsonRecord
+  provider: string
+  rawObjectKey: string
+}
+
 export type StockResearch = {
+  earningsEvents: EarningsEvent[]
   financialFacts: FinancialFact[]
+  newsArticles: NewsArticle[]
+  optionSnapshots: OptionSnapshot[]
   records: ResearchRecord[]
   secFilings: SecFiling[]
+  unavailableDomains: Array<'EARNINGS' | 'NEWS' | 'OPTIONS' | 'ANALYST_TARGETS'>
 }
 
 export type DataQuality = {
@@ -929,7 +969,43 @@ export async function getStockResearch(
         taxonomy: text(row.taxonomy, 'fact.taxonomy'), unit: text(row.unit, 'fact.unit'), value: decimal(row.value, 'fact.value'),
       }
     })
-    return { financialFacts, records, secFilings }
+    if (!Array.isArray(page.news_articles)) throw new TypeError('research.news_articles must be an array')
+    if (!Array.isArray(page.earnings_events)) throw new TypeError('research.earnings_events must be an array')
+    if (!Array.isArray(page.option_snapshots)) throw new TypeError('research.option_snapshots must be an array')
+    if (!Array.isArray(page.unavailable_domains)) throw new TypeError('research.unavailable_domains must be an array')
+    const newsArticles = page.news_articles.map((item, index) => {
+      const row = record(item, `news_articles[${index}]`)
+      return {
+        availableAt: instant(row.available_at, 'news.available_at'), contentHash: text(row.content_hash, 'news.content_hash'),
+        eventTime: instant(row.event_time, 'news.event_time'), headline: text(row.headline, 'news.headline'),
+        id: text(row.id, 'news.id'), provider: text(row.provider, 'news.provider'), rawObjectKey: text(row.raw_object_key, 'news.raw_object_key'),
+        source: text(row.source, 'news.source'), summary: text(row.summary, 'news.summary'),
+      }
+    })
+    const earningsEvents = page.earnings_events.map((item, index) => {
+      const row = record(item, `earnings_events[${index}]`)
+      return {
+        availableAt: instant(row.available_at, 'earnings.available_at'), contentHash: text(row.content_hash, 'earnings.content_hash'),
+        currency: row.currency === null ? null : text(row.currency, 'earnings.currency'),
+        estimate: row.estimate === null ? null : decimal(row.estimate, 'earnings.estimate'),
+        eventDate: text(row.event_date, 'earnings.event_date'), eventTime: instant(row.event_time, 'earnings.event_time'),
+        fiscalDateEnd: text(row.fiscal_date_end, 'earnings.fiscal_date_end'), id: text(row.id, 'earnings.id'),
+        provider: text(row.provider, 'earnings.provider'), rawObjectKey: text(row.raw_object_key, 'earnings.raw_object_key'),
+      }
+    })
+    const optionSnapshots = page.option_snapshots.map((item, index) => {
+      const row = record(item, `option_snapshots[${index}]`)
+      return {
+        availableAt: instant(row.available_at, 'options.available_at'), contentHash: text(row.content_hash, 'options.content_hash'),
+        eventTime: instant(row.event_time, 'options.event_time'), feedType: text(row.feed_type, 'options.feed_type'),
+        id: text(row.id, 'options.id'), payload: record(row.payload, 'options.payload'), provider: text(row.provider, 'options.provider'),
+        rawObjectKey: text(row.raw_object_key, 'options.raw_object_key'),
+      }
+    })
+    const unavailableDomains = page.unavailable_domains.map((item, index) => enumeration(
+      item, ['EARNINGS', 'NEWS', 'OPTIONS', 'ANALYST_TARGETS'] as const, `research.unavailable_domains[${index}]`,
+    ))
+    return { earningsEvents, financialFacts, newsArticles, optionSnapshots, records, secFilings, unavailableDomains }
   })
 }
 

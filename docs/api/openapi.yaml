@@ -384,6 +384,85 @@
         "title": "DataQualityResponse",
         "type": "object"
       },
+      "EarningsEventItem": {
+        "additionalProperties": false,
+        "properties": {
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "estimate": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate"
+          },
+          "event_date": {
+            "format": "date",
+            "title": "Event Date",
+            "type": "string"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
+            "type": "string"
+          },
+          "fiscal_date_end": {
+            "format": "date",
+            "title": "Fiscal Date End",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "raw_object_key": {
+            "title": "Raw Object Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "event_date",
+          "fiscal_date_end",
+          "estimate",
+          "currency",
+          "event_time",
+          "available_at",
+          "content_hash",
+          "raw_object_key"
+        ],
+        "title": "EarningsEventItem",
+        "type": "object"
+      },
       "EvalMetricItem": {
         "additionalProperties": false,
         "properties": {
@@ -904,6 +983,116 @@
           "items"
         ],
         "title": "MarketDataResponse",
+        "type": "object"
+      },
+      "NewsArticleItem": {
+        "additionalProperties": false,
+        "properties": {
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "raw_object_key": {
+            "title": "Raw Object Key",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "headline",
+          "source",
+          "summary",
+          "event_time",
+          "available_at",
+          "content_hash",
+          "raw_object_key"
+        ],
+        "title": "NewsArticleItem",
+        "type": "object"
+      },
+      "OptionSnapshotItem": {
+        "additionalProperties": false,
+        "properties": {
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
+            "type": "string"
+          },
+          "feed_type": {
+            "title": "Feed Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "raw_object_key": {
+            "title": "Raw Object Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "feed_type",
+          "event_time",
+          "available_at",
+          "content_hash",
+          "raw_object_key",
+          "payload"
+        ],
+        "title": "OptionSnapshotItem",
         "type": "object"
       },
       "PaperFillItem": {
@@ -1836,6 +2025,13 @@
             "title": "Decision Time",
             "type": "string"
           },
+          "earnings_events": {
+            "items": {
+              "$ref": "#/components/schemas/EarningsEventItem"
+            },
+            "title": "Earnings Events",
+            "type": "array"
+          },
           "financial_facts": {
             "items": {
               "$ref": "#/components/schemas/FinancialFactItem"
@@ -1850,6 +2046,13 @@
             "title": "Items",
             "type": "array"
           },
+          "news_articles": {
+            "items": {
+              "$ref": "#/components/schemas/NewsArticleItem"
+            },
+            "title": "News Articles",
+            "type": "array"
+          },
           "next_cursor": {
             "anyOf": [
               {
@@ -1861,11 +2064,31 @@
             ],
             "title": "Next Cursor"
           },
+          "option_snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/OptionSnapshotItem"
+            },
+            "title": "Option Snapshots",
+            "type": "array"
+          },
           "sec_filings": {
             "items": {
               "$ref": "#/components/schemas/SecFilingItem"
             },
             "title": "Sec Filings",
+            "type": "array"
+          },
+          "unavailable_domains": {
+            "items": {
+              "enum": [
+                "EARNINGS",
+                "NEWS",
+                "OPTIONS",
+                "ANALYST_TARGETS"
+              ],
+              "type": "string"
+            },
+            "title": "Unavailable Domains",
             "type": "array"
           }
         },
@@ -1874,6 +2097,10 @@
           "items",
           "sec_filings",
           "financial_facts",
+          "news_articles",
+          "earnings_events",
+          "option_snapshots",
+          "unavailable_domains",
           "next_cursor"
         ],
         "title": "ResearchPage",

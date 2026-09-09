@@ -391,11 +391,51 @@ class FinancialFactItem(StrictModel):
     mapping_status: Literal["EXACT", "DERIVED", "UNMAPPED", "AMBIGUOUS"]
 
 
+class NewsArticleItem(StrictModel):
+    id: UUID
+    provider: str
+    headline: str
+    source: str
+    summary: str
+    event_time: datetime
+    available_at: datetime
+    content_hash: str
+    raw_object_key: str
+
+
+class EarningsEventItem(StrictModel):
+    id: UUID
+    provider: str
+    event_date: date
+    fiscal_date_end: date
+    estimate: Decimal | None
+    currency: str | None
+    event_time: datetime
+    available_at: datetime
+    content_hash: str
+    raw_object_key: str
+
+
+class OptionSnapshotItem(StrictModel):
+    id: UUID
+    provider: str
+    feed_type: str
+    event_time: datetime
+    available_at: datetime
+    content_hash: str
+    raw_object_key: str
+    payload: dict[str, Any]
+
+
 class ResearchPage(StrictModel):
     decision_time: datetime
     items: list[ResearchItem]
     sec_filings: list[SecFilingItem]
     financial_facts: list[FinancialFactItem]
+    news_articles: list[NewsArticleItem]
+    earnings_events: list[EarningsEventItem]
+    option_snapshots: list[OptionSnapshotItem]
+    unavailable_domains: list[Literal["EARNINGS", "NEWS", "OPTIONS", "ANALYST_TARGETS"]]
     next_cursor: str | None
 
 

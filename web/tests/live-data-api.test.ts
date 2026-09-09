@@ -244,8 +244,9 @@ describe('live data API client', () => {
         positions: [], risk_decisions: [], status: 'EMPTY', trading: 'paper_only',
       })
       return jsonResponse({
-        decision_time: options.decisionTime, financial_facts: [], items: [],
-        next_cursor: null, sec_filings: [],
+        decision_time: options.decisionTime, earnings_events: [], financial_facts: [], items: [],
+        news_articles: [], next_cursor: null, option_snapshots: [], sec_filings: [],
+        unavailable_domains: ['ANALYST_TARGETS'],
       })
     })
 
@@ -261,7 +262,27 @@ describe('live data API client', () => {
       cash: null, latestNav: null, status: 'EMPTY', trading: 'paper_only',
     })
     await expect(getStockResearch({ ...options, fetchImpl }, 'NVDA')).resolves.toEqual({
-      financialFacts: [], records: [], secFilings: [],
+      earningsEvents: [], financialFacts: [], newsArticles: [], optionSnapshots: [], records: [],
+      secFilings: [], unavailableDomains: ['ANALYST_TARGETS'],
+    })
+  })
+
+  it('parses persisted research domains with complete provenance', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      decision_time: options.decisionTime,
+      earnings_events: [{ available_at: '2026-08-29T09:20:00Z', content_hash: 'b'.repeat(64), currency: 'USD', estimate: '0.95', event_date: '2026-09-20', event_time: '2026-08-29T09:00:00Z', fiscal_date_end: '2026-06-30', id: 'earnings-1', provider: 'ALPHA_VANTAGE', raw_object_key: 'live/earnings.csv' }],
+      financial_facts: [], items: [],
+      news_articles: [{ available_at: '2026-08-29T09:20:00Z', content_hash: 'a'.repeat(64), event_time: '2026-08-29T09:00:00Z', headline: 'Persisted headline', id: 'news-1', provider: 'ALPACA', raw_object_key: 'live/news.json', source: 'wire', summary: 'Persisted summary' }],
+      next_cursor: null,
+      option_snapshots: [{ available_at: '2026-08-29T09:20:00Z', content_hash: 'c'.repeat(64), event_time: '2026-08-29T09:00:00Z', feed_type: 'option_snapshot', id: 'options-1', payload: { put_call_ratio: '0.72' }, provider: 'ALPACA', raw_object_key: 'live/options.json' }],
+      sec_filings: [], unavailable_domains: ['ANALYST_TARGETS'],
+    }))
+
+    await expect(getStockResearch({ ...options, fetchImpl }, 'NVDA')).resolves.toMatchObject({
+      earningsEvents: [{ estimate: '0.95', rawObjectKey: 'live/earnings.csv' }],
+      newsArticles: [{ headline: 'Persisted headline', provider: 'ALPACA' }],
+      optionSnapshots: [{ contentHash: 'c'.repeat(64), payload: { put_call_ratio: '0.72' } }],
+      unavailableDomains: ['ANALYST_TARGETS'],
     })
   })
 

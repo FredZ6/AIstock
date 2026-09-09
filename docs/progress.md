@@ -3518,3 +3518,32 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   files, Alembic drift and OpenAPI checks passed, backend 742 passed / 5 optional live-provider
   tests skipped, frontend 30 files / 187 passed, and TypeScript, ESLint and the Next.js production
   build passed. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-09 — M8.1 frontend product closure, FRE-31 persisted Research domains
+
+- Research-domain REST RED: the new PIT integration test exited 1 with a missing
+  `news_articles` response key. GREEN: `/api/v1/stocks/{symbol}/research` now returns strict,
+  read-only NewsArticle, EarningsEvent and OptionSnapshot records with provider, event time,
+  availability, content hash and raw-object provenance. Queries enforce
+  `available_at <= decision_time`, exclude superseded earnings revisions and reject Fixture
+  provider rows in API mode. Analyst Targets remains explicitly unavailable because the
+  authoritative schema has no persisted analyst-target object; no synthetic substitute was added.
+- The Fixture exclusion regression passed 1/1 after the implementation. A sandboxed attempt
+  exited 1 because localhost PostgreSQL access was denied; the authorized database run exited 0.
+  The complete market-data read integration file then exited 0 with 18/18 passed.
+- Frontend RED exited 1 with 3 expected failures because the strict client exposed none of the
+  new arrays and the Research page rendered no persisted-domain tables. GREEN: the parser now
+  validates Decimal strings, aware timestamps, content hashes and provenance; the page renders
+  Earnings, News and Options evidence tables and keeps Analyst Targets visibly unavailable.
+  Focused frontend verification exited 0 with 2 files / 30 tests passed; complete frontend
+  verification exited 0 with 30 files / 189 tests passed, followed by TypeScript, ESLint and the
+  Next.js production build, all exit 0.
+- The first OpenAPI export exited 2 because the sandbox denied the user-level uv cache. Retrying
+  with repository-local `UV_CACHE_DIR=.uv-cache` exited 0 and refreshed the committed contract.
+  The first `make verify` exited 2 only at Ruff import ordering; Ruff's deterministic fix corrected
+  the two affected import blocks and its focused rerun exited 0. Final `make verify` exited 0:
+  Ruff format/check clean for 330 files, Mypy clean for 285 source files, Alembic drift and
+  OpenAPI/MCP/dependency checks passed, backend 743 passed / 5 optional live-provider tests skipped,
+  frontend 30 files / 189 passed, and TypeScript, ESLint and the Next.js production build passed.
+  Existing jsdom local-storage and cross-realm AbortSignal diagnostics remain non-failing test noise
+  tracked by FRE-38. No push, PR or merge is claimed by this checkpoint.

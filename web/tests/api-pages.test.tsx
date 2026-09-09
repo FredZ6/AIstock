@@ -161,6 +161,31 @@ describe('API mode pages', () => {
     expect(screen.queryByText('Fixture Mode')).not.toBeInTheDocument()
   })
 
+  it('renders persisted Earnings, News and Options while keeping Analyst Targets unavailable', () => {
+    render(<ApiResearchPage
+      asOf="2026-08-29T09:30:00Z"
+      dataQuality={[]}
+      earningsEvents={[{ availableAt: '2026-08-29T09:20:00Z', contentHash: 'b'.repeat(64), currency: 'USD', estimate: '0.95', eventDate: '2026-09-20', eventTime: '2026-08-29T09:00:00Z', fiscalDateEnd: '2026-06-30', id: 'earnings-1', provider: 'ALPHA_VANTAGE', rawObjectKey: 'live/earnings.csv' }]}
+      financialFacts={[]}
+      idempotencyKey="research-form-domains"
+      newsArticles={[{ availableAt: '2026-08-29T09:20:00Z', contentHash: 'a'.repeat(64), eventTime: '2026-08-29T09:00:00Z', headline: 'Persisted headline', id: 'news-1', provider: 'ALPACA', rawObjectKey: 'live/news.json', source: 'wire', summary: 'Persisted summary' }]}
+      optionSnapshots={[{ availableAt: '2026-08-29T09:20:00Z', contentHash: 'c'.repeat(64), eventTime: '2026-08-29T09:00:00Z', feedType: 'option_snapshot', id: 'options-1', payload: { put_call_ratio: '0.72' }, provider: 'ALPACA', rawObjectKey: 'live/options.json' }]}
+      quote={quote}
+      records={[]}
+      secFilings={[]}
+      symbol="NVDA"
+      unavailableDomains={['Analyst targets']}
+    />)
+
+    expect(screen.getByRole('table', { name: 'Persisted earnings events' })).toHaveTextContent('ALPHA_VANTAGE')
+    expect(screen.getByRole('table', { name: 'Persisted news articles' })).toHaveTextContent('Persisted headline')
+    expect(screen.getByRole('table', { name: 'Persisted option snapshots' })).toHaveTextContent('put_call_ratio')
+    expect(screen.getByText('live/earnings.csv')).toBeInTheDocument()
+    const degraded = screen.getByRole('status', { name: 'Research evidence unavailable' })
+    expect(degraded).toHaveTextContent('Analyst targets')
+    expect(degraded).not.toHaveTextContent('EarningsNewsOptions')
+  })
+
   it('leads with one latest conclusion and keeps older decisions subordinate', () => {
     const latest = {
       asOf: '2026-08-29T09:00:00Z', confidence: '0.82', direction: 'UP', horizon: '12M',
