@@ -384,12 +384,108 @@
         "title": "DataQualityResponse",
         "type": "object"
       },
+      "EvalMetricItem": {
+        "additionalProperties": false,
+        "properties": {
+          "case_hashes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Case Hashes",
+            "type": "array"
+          },
+          "case_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Case Ids",
+            "type": "array"
+          },
+          "metric_name": {
+            "title": "Metric Name",
+            "type": "string"
+          },
+          "metric_value": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Metric Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric_name",
+          "metric_value",
+          "case_ids",
+          "case_hashes"
+        ],
+        "title": "EvalMetricItem",
+        "type": "object"
+      },
+      "EvalRunDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "gates": {
+            "items": {
+              "$ref": "#/components/schemas/RegressionGateResultItem"
+            },
+            "title": "Gates",
+            "type": "array"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/EvalMetricItem"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "run": {
+            "$ref": "#/components/schemas/EvalRunItem"
+          }
+        },
+        "required": [
+          "decision_time",
+          "run",
+          "metrics",
+          "gates"
+        ],
+        "title": "EvalRunDetail",
+        "type": "object"
+      },
       "EvalRunItem": {
         "additionalProperties": false,
         "properties": {
+          "case_count": {
+            "title": "Case Count",
+            "type": "integer"
+          },
+          "confidence_policy_version": {
+            "title": "Confidence Policy Version",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
+            "type": "string"
+          },
+          "data_cutoff": {
+            "format": "date-time",
+            "title": "Data Cutoff",
+            "type": "string"
+          },
+          "dataset_version": {
+            "title": "Dataset Version",
+            "type": "string"
+          },
+          "execution_policy_version": {
+            "title": "Execution Policy Version",
+            "type": "string"
+          },
+          "gate_policy_version": {
+            "title": "Gate Policy Version",
             "type": "string"
           },
           "id": {
@@ -397,14 +493,60 @@
             "title": "Id",
             "type": "string"
           },
+          "mode": {
+            "const": "fixture",
+            "title": "Mode",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "research_scoring_policy_version": {
+            "title": "Research Scoring Policy Version",
+            "type": "string"
+          },
+          "risk_policy_version": {
+            "title": "Risk Policy Version",
+            "type": "string"
+          },
           "status": {
+            "enum": [
+              "PASSED",
+              "FAILED"
+            ],
             "title": "Status",
+            "type": "string"
+          },
+          "summary_hash": {
+            "title": "Summary Hash",
             "type": "string"
           }
         },
         "required": [
           "id",
           "status",
+          "passed",
+          "mode",
+          "dataset_version",
+          "case_count",
+          "data_cutoff",
+          "model_version",
+          "prompt_version",
+          "research_scoring_policy_version",
+          "risk_policy_version",
+          "execution_policy_version",
+          "confidence_policy_version",
+          "gate_policy_version",
+          "summary_hash",
           "created_at"
         ],
         "title": "EvalRunItem",
@@ -1510,6 +1652,59 @@
           "alpha_vantage"
         ],
         "title": "ProviderStates",
+        "type": "object"
+      },
+      "RegressionGateResultItem": {
+        "additionalProperties": false,
+        "properties": {
+          "comparison": {
+            "enum": [
+              "AT_LEAST",
+              "AT_MOST",
+              "LESS_THAN"
+            ],
+            "title": "Comparison",
+            "type": "string"
+          },
+          "metric_name": {
+            "title": "Metric Name",
+            "type": "string"
+          },
+          "observed": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "threshold": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Threshold",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric_name",
+          "comparison",
+          "threshold",
+          "observed",
+          "passed",
+          "reason"
+        ],
+        "title": "RegressionGateResultItem",
         "type": "object"
       },
       "ResearchItem": {
@@ -3366,6 +3561,34 @@
               "title": "Decision Time",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
           }
         ],
         "responses": {
@@ -3406,6 +3629,16 @@
               "title": "Eval Run Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3413,9 +3646,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Eval Run Api V1 Evals Runs  Eval Run Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/EvalRunDetail"
                 }
               }
             },

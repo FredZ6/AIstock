@@ -5,6 +5,7 @@ import { formatDecimal, formatMoney, formatPercent } from '../../lib/format'
 import type {
   AlertRecord,
   DataQuality,
+  EvalRunDetail,
   FinancialFact,
   MarketQuote,
   PortfolioSummary,
@@ -26,6 +27,21 @@ import { PageHeading, Signal } from '../ui/product-ui'
 
 function alertEvidence(value: unknown) {
   return JSON.stringify(value, null, 2)
+}
+
+export function ApiEvalPage({ detail, asOf }: { detail: EvalRunDetail; asOf: string }) {
+  const { run } = detail
+  return <AppShell currentPath="/eval">
+    <PageHeading asOf={asOf} eyebrow="Govern · API Mode" title="Eval & Admin" summary="Persisted, version-pinned evaluation evidence. No Fixture report was substituted." />
+    <article className="terminal-section first-section" aria-labelledby="persisted-eval-title">
+      <div className="section-heading"><div><p className="section-kicker">Measured evidence</p><h2 id="persisted-eval-title">Persisted evaluation run</h2></div><Signal tone={run.passed ? 'healthy' : 'failure'}>{run.status}</Signal></div>
+      <dl className="metric-list"><div><dt>Dataset</dt><dd>{run.datasetVersion}</dd></div><div><dt>Cases</dt><dd>{run.caseCount}</dd></div><div><dt>Data cutoff</dt><dd><time dateTime={run.dataCutoff}>{formatDualTime(run.dataCutoff).newYork}</time></dd></div><div><dt>Gate policy</dt><dd>{run.gatePolicyVersion}</dd></div></dl>
+      <section aria-label="Pinned evaluation versions"><h3>Version pins</h3><dl className="pin-list"><div><dt>Model</dt><dd>{run.modelVersion}</dd></div><div><dt>Prompt</dt><dd>{run.promptVersion}</dd></div><div><dt>Research scoring</dt><dd>{run.researchScoringPolicyVersion}</dd></div><div><dt>Risk</dt><dd>{run.riskPolicyVersion}</dd></div><div><dt>Execution</dt><dd>{run.executionPolicyVersion}</dd></div><div><dt>Confidence</dt><dd>{run.confidencePolicyVersion}</dd></div></dl></section>
+      <div className="table-scroll" tabIndex={0}><table aria-label="Persisted evaluation metrics"><thead><tr><th>Metric</th><th>Value</th><th>Cases</th></tr></thead><tbody>{detail.metrics.map((metric) => <tr key={metric.name}><th scope="row">{metric.name}</th><td>{metric.value}</td><td>{metric.caseIds.length}</td></tr>)}</tbody></table></div>
+      <div className="table-scroll" tabIndex={0}><table aria-label="Regression gates"><thead><tr><th>Gate</th><th>Observed</th><th>Threshold</th><th>Result</th></tr></thead><tbody>{detail.gates.map((gate) => <tr key={gate.name}><th scope="row">{gate.name}</th><td>{gate.observed ?? 'Unavailable'}</td><td>{gate.comparison} {gate.threshold}</td><td><Signal tone={gate.passed ? 'healthy' : 'failure'}>{gate.passed ? 'PASS' : 'FAIL'}</Signal></td></tr>)}</tbody></table></div>
+      <p className="muted-copy">Summary SHA-256 · <code>{run.summaryHash}</code></p>
+    </article>
+  </AppShell>
 }
 
 export function ApiAlertsPage({ alerts, asOf }: { alerts: AlertRecord[]; asOf: string }) {

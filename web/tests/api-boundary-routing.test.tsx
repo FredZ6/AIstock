@@ -133,4 +133,31 @@ describe('API mode fixture boundary', () => {
     expect(screen.getByRole('status', { name: 'No persisted evaluation runs' })).toBeInTheDocument()
     expect(screen.queryByText(/fixture mode|frozen synthetic/i)).not.toBeInTheDocument()
   })
+
+  it('renders the latest persisted evaluation evidence in API mode', async () => {
+    apiMode()
+    const run = {
+      id: 'eval-1', status: 'PASSED', passed: true, mode: 'fixture', datasetVersion: 'eval-v0.2.0',
+      caseCount: 200, dataCutoff: '2026-08-21T20:00:00Z', modelVersion: 'model-v1',
+      promptVersion: 'prompt-v1', researchScoringPolicyVersion: 'research-v1', riskPolicyVersion: 'risk-v1',
+      executionPolicyVersion: 'execution-v1', confidencePolicyVersion: 'confidence-v1', gatePolicyVersion: 'gates-v1',
+      summaryHash: 'a'.repeat(64), createdAt: '2026-08-29T09:20:00Z',
+    }
+    const getEvalRunDetail = vi.fn(async () => ({
+      run, metrics: [{ name: 'directional_accuracy', value: '0.91', caseIds: ['r1'], caseHashes: ['b'.repeat(64)] }],
+      gates: [{ name: 'directional_accuracy', comparison: 'AT_LEAST', threshold: '0.8', observed: '0.91', passed: true, reason: 'meets threshold' }],
+    }))
+    vi.doMock('../lib/server/live-data-api', () => ({
+      getEvalRunDetail,
+      getEvalRuns: vi.fn(async () => ({ items: [run], nextCursor: null })),
+    }))
+    const { default: EvalRoute } = await import('../app/eval/page')
+
+    render(await EvalRoute())
+
+    expect(getEvalRunDetail).toHaveBeenCalledWith(expect.objectContaining({ decisionTime: expect.any(String) }), 'eval-1')
+    expect(screen.getByRole('heading', { name: 'Persisted evaluation run' })).toBeInTheDocument()
+    expect(screen.getAllByText('directional_accuracy')).toHaveLength(2)
+    expect(screen.getByText('model-v1')).toBeInTheDocument()
+  })
 })

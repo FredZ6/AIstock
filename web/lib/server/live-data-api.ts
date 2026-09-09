@@ -27,6 +27,33 @@ export type AlertRecord = {
 
 export type AlertPage = { items: AlertRecord[]; nextCursor: string | null }
 
+export type EvalRunRecord = {
+  caseCount: number
+  confidencePolicyVersion: string
+  createdAt: string
+  dataCutoff: string
+  datasetVersion: string
+  executionPolicyVersion: string
+  gatePolicyVersion: string
+  id: string
+  mode: 'fixture'
+  modelVersion: string
+  passed: boolean
+  promptVersion: string
+  researchScoringPolicyVersion: string
+  riskPolicyVersion: string
+  status: 'PASSED' | 'FAILED'
+  summaryHash: string
+}
+
+export type EvalRunPage = { items: EvalRunRecord[]; nextCursor: string | null }
+
+export type EvalRunDetail = {
+  gates: Array<{ comparison: 'AT_LEAST' | 'AT_MOST' | 'LESS_THAN'; name: string; observed: string | null; passed: boolean; reason: string; threshold: string }>
+  metrics: Array<{ caseHashes: string[]; caseIds: string[]; name: string; value: string }>
+  run: EvalRunRecord
+}
+
 export type MarketQuote = {
   availableAt: string
   close: string
@@ -416,9 +443,71 @@ export async function getWeeklyReviewDetail(
   })
 }
 
-export async function getEvalRuns(options: LiveDataClientOptions): Promise<PagedRecords> {
+function stringArray(value: unknown, path: string): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    throw new TypeError(`${path} must be an array of strings`)
+  }
+  return value
+}
+
+function evalRun(value: unknown, path: string): EvalRunRecord {
+  const row = record(value, path)
+  if (!Number.isInteger(row.case_count) || Number(row.case_count) < 1) {
+    throw new TypeError(`${path}.case_count is invalid`)
+  }
+  const summaryHash = text(row.summary_hash, `${path}.summary_hash`)
+  if (!/^[0-9a-f]{64}$/.test(summaryHash)) throw new TypeError(`${path}.summary_hash is invalid`)
+  return {
+    id: text(row.id, `${path}.id`),
+    status: enumeration(row.status, ['PASSED', 'FAILED'] as const, `${path}.status`),
+    passed: booleanValue(row.passed, `${path}.passed`),
+    mode: enumeration(row.mode, ['fixture'] as const, `${path}.mode`),
+    datasetVersion: text(row.dataset_version, `${path}.dataset_version`),
+    caseCount: Number(row.case_count),
+    dataCutoff: instant(row.data_cutoff, `${path}.data_cutoff`),
+    modelVersion: text(row.model_version, `${path}.model_version`),
+    promptVersion: text(row.prompt_version, `${path}.prompt_version`),
+    researchScoringPolicyVersion: text(row.research_scoring_policy_version, `${path}.research_scoring_policy_version`),
+    riskPolicyVersion: text(row.risk_policy_version, `${path}.risk_policy_version`),
+    executionPolicyVersion: text(row.execution_policy_version, `${path}.execution_policy_version`),
+    confidencePolicyVersion: text(row.confidence_policy_version, `${path}.confidence_policy_version`),
+    gatePolicyVersion: text(row.gate_policy_version, `${path}.gate_policy_version`),
+    summaryHash,
+    createdAt: instant(row.created_at, `${path}.created_at`),
+  }
+}
+
+export async function getEvalRuns(options: LiveDataClientOptions): Promise<EvalRunPage> {
   const query = new URLSearchParams({ decision_time: options.decisionTime, limit: '50' })
-  return pagedRecords(await requestJson(options, `/api/v1/evals/runs?${query}`), 'eval_runs')
+  const value = await requestJson(options, `/api/v1/evals/runs?${query}`)
+  return contract(() => {
+    const source = record(value, 'eval_runs')
+    if (!Array.isArray(source.items)) throw new TypeError('eval_runs.items must be an array')
+    const nextCursor = source.next_cursor
+    if (nextCursor !== null && typeof nextCursor !== 'string') throw new TypeError('eval_runs.next_cursor is invalid')
+    return { items: source.items.map((item, index) => evalRun(item, `eval_runs.items[${index}]`)), nextCursor }
+  })
+}
+
+export async function getEvalRunDetail(options: LiveDataClientOptions, runId: string): Promise<EvalRunDetail> {
+  if (!runId) throw new LiveDataApiError('contract', 'Evaluation run id is required')
+  const query = new URLSearchParams({ decision_time: options.decisionTime })
+  const value = await requestJson(options, `/api/v1/evals/runs/${encodeURIComponent(runId)}?${query}`)
+  return contract(() => {
+    const source = record(value, 'eval_run_detail')
+    if (!Array.isArray(source.metrics) || !Array.isArray(source.gates)) throw new TypeError('evaluation evidence must be arrays')
+    return {
+      run: evalRun(source.run, 'eval_run_detail.run'),
+      metrics: source.metrics.map((item, index) => {
+        const row = record(item, `eval_run_detail.metrics[${index}]`)
+        return { name: text(row.metric_name, 'metric.name'), value: decimal(row.metric_value, 'metric.value'), caseIds: stringArray(row.case_ids, 'metric.case_ids'), caseHashes: stringArray(row.case_hashes, 'metric.case_hashes') }
+      }),
+      gates: source.gates.map((item, index) => {
+        const row = record(item, `eval_run_detail.gates[${index}]`)
+        return { name: text(row.metric_name, 'gate.name'), comparison: enumeration(row.comparison, ['AT_LEAST', 'AT_MOST', 'LESS_THAN'] as const, 'gate.comparison'), threshold: decimal(row.threshold, 'gate.threshold'), observed: row.observed === null ? null : decimal(row.observed, 'gate.observed'), passed: booleanValue(row.passed, 'gate.passed'), reason: text(row.reason, 'gate.reason') }
+      }),
+    }
+  })
 }
 
 function researchRun(value: unknown): ResearchRun {

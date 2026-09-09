@@ -30,6 +30,7 @@ class EvaluationRun:
     cases: tuple[EvalCase, ...]
     metrics: MetricReport
     release_decision: ReleaseDecision
+    evidence: Mapping[str, tuple[EvalCase, ...]]
 
 
 def _required_bool(output: Mapping[str, Any], name: str) -> bool:
@@ -243,4 +244,9 @@ def run_evaluation(
     platform_metrics.observe_evaluation(
         suite="offline", outcome="passed" if decision.passed else "failed"
     )
-    return EvaluationRun(cases=cases, metrics=metrics, release_decision=decision)
+    return EvaluationRun(
+        cases=cases,
+        metrics=metrics,
+        release_decision=decision,
+        evidence=MappingProxyType(evidence),
+    )

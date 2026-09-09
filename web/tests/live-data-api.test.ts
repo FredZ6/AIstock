@@ -4,6 +4,8 @@ import {
   createResearchRun,
   getAlerts,
   getDataQuality,
+  getEvalRunDetail,
+  getEvalRuns,
   getMarketQuotes,
   getLatestResearchRun,
   getPortfolioSummary,
@@ -25,6 +27,32 @@ function jsonResponse(value: unknown, status = 200) {
 const options = { baseUrl: 'http://api.test', decisionTime: '2026-08-29T09:30:00Z' }
 
 describe('live data API client', () => {
+  it('parses version-pinned evaluation runs, metrics, and gates', async () => {
+    const run = {
+      id: '10000000-0000-0000-0000-000000000099', status: 'PASSED', passed: true,
+      mode: 'fixture', dataset_version: 'eval-v0.2.0', case_count: 200,
+      data_cutoff: '2026-08-21T20:00:00Z', model_version: 'fixture-deterministic-v1',
+      prompt_version: 'offline-eval-v0.2', research_scoring_policy_version: 'research-v1',
+      risk_policy_version: 'risk-v1', execution_policy_version: 'execution-v1',
+      confidence_policy_version: 'confidence-v1', gate_policy_version: 'gates-v1',
+      summary_hash: 'a'.repeat(64), created_at: '2026-08-29T09:20:00Z',
+    }
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [run], next_cursor: null, decision_time: options.decisionTime }))
+      .mockResolvedValueOnce(jsonResponse({
+        decision_time: options.decisionTime, run,
+        metrics: [{ metric_name: 'directional_accuracy', metric_value: '0.91', case_ids: ['r1'], case_hashes: ['b'.repeat(64)] }],
+        gates: [{ metric_name: 'directional_accuracy', comparison: 'AT_LEAST', threshold: '0.8', observed: '0.91', passed: true, reason: 'meets threshold' }],
+      }))
+
+    const page = await getEvalRuns({ ...options, fetchImpl })
+    await expect(getEvalRunDetail({ ...options, fetchImpl }, page.items[0].id)).resolves.toMatchObject({
+      run: { caseCount: 200, modelVersion: 'fixture-deterministic-v1' },
+      metrics: [{ name: 'directional_accuracy', value: '0.91' }],
+      gates: [{ comparison: 'AT_LEAST', passed: true }],
+    })
+  })
+
   it('parses the locked point-in-time Alert contract without weakening Decimal or timestamp fields', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       decision_time: options.decisionTime,

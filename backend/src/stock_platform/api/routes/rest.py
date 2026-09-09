@@ -19,6 +19,7 @@ from stock_platform.api.schemas.errors import ApiError
 from stock_platform.api.schemas.rest import (
     AlertPage,
     DataQualityResponse,
+    EvalRunDetail,
     EvalRunPage,
     HumanAction,
     MarketDataResponse,
@@ -85,6 +86,8 @@ from stock_platform.infrastructure.db.models.tables import (
     decision_snapshot,
     derived_metric,
     error_attribution,
+    eval_metric,
+    eval_run,
     evidence_gap,
     evidence_item,
     execution_policy_version,
@@ -101,6 +104,7 @@ from stock_platform.infrastructure.db.models.tables import (
     portfolio_initialization_request,
     portfolio_nav,
     raw_data_object,
+    regression_gate_result,
     replay_run,
     research_opinion,
     research_scoring_policy_version,
@@ -1723,11 +1727,80 @@ def rollback_policy(
 
 
 @router.get("/evals/runs", response_model=EvalRunPage)
-def list_eval_runs(decision_time: datetime) -> dict[str, Any]:
+def list_eval_runs(
+    decision_time: datetime,
+    connection: ConnectionDependency,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: str | None = None,
+) -> dict[str, Any]:
     cutoff = _aware_query_time(decision_time, "decision_time")
-    return {"decision_time": cutoff, "items": [], "next_cursor": None}
+    rows = (
+        connection.execute(
+            select(eval_run)
+            .where(eval_run.c.created_at <= cutoff)
+            .where(_cursor_filter(eval_run.c.created_at, eval_run.c.id, cursor))
+            .order_by(eval_run.c.created_at.desc(), eval_run.c.id.desc())
+            .limit(limit + 1)
+        )
+        .mappings()
+        .all()
+    )
+    items, next_cursor = _page(rows, limit, "created_at")
+    return {"decision_time": cutoff, "items": items, "next_cursor": next_cursor}
 
 
-@router.get("/evals/runs/{eval_run_id}")
-def get_eval_run(eval_run_id: UUID) -> dict[str, Any]:
-    raise ApiError(404, "NOT_FOUND", f"Evaluation run {eval_run_id} not found")
+@router.get("/evals/runs/{eval_run_id}", response_model=EvalRunDetail)
+def get_eval_run(
+    eval_run_id: UUID,
+    decision_time: datetime,
+    connection: ConnectionDependency,
+) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
+    run = (
+        connection.execute(
+            select(eval_run).where(
+                eval_run.c.id == eval_run_id,
+                eval_run.c.created_at <= cutoff,
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if run is None:
+        raise ApiError(404, "NOT_FOUND", f"Evaluation run {eval_run_id} not found")
+    metrics = (
+        connection.execute(
+            select(
+                eval_metric.c.metric_name,
+                eval_metric.c.metric_value,
+                eval_metric.c.case_ids,
+                eval_metric.c.case_hashes,
+            )
+            .where(eval_metric.c.eval_run_id == eval_run_id)
+            .order_by(eval_metric.c.metric_name)
+        )
+        .mappings()
+        .all()
+    )
+    gates = (
+        connection.execute(
+            select(
+                regression_gate_result.c.metric_name,
+                regression_gate_result.c.comparison,
+                regression_gate_result.c.threshold,
+                regression_gate_result.c.observed,
+                regression_gate_result.c.passed,
+                regression_gate_result.c.reason,
+            )
+            .where(regression_gate_result.c.eval_run_id == eval_run_id)
+            .order_by(regression_gate_result.c.metric_name)
+        )
+        .mappings()
+        .all()
+    )
+    return {
+        "decision_time": cutoff,
+        "run": _row(run),
+        "metrics": [_row(row) for row in metrics],
+        "gates": [_row(row) for row in gates],
+    }

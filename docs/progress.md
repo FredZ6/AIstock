@@ -3436,3 +3436,39 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
 - This is a local FRE-29 implementation checkpoint. `make verify`, commit, push, PR, Linear review
   transition and Notion completion update are not yet claimed; Eval API persistence remains a
   separate contract-review task within FRE-29.
+
+## 2026-09-09 — M8.1 frontend product closure, FRE-29 Eval persistence
+
+- Eval persistence RED: the new integration test first failed during collection because no
+  persistence module existed. The first implementation then correctly exposed an idempotency bug:
+  psycopg did not provide a reliable `rowcount` for `ON CONFLICT DO NOTHING`, so a replay attempted
+  duplicate child metrics. GREEN: the write path now uses `RETURNING id`, atomically persists one
+  version-pinned run with 38 normalized metrics and 18 gate results, rejects naive timestamps and
+  conflicting evidence hashes, and makes all three tables database-level append-only. Related
+  persistence/schema/append-only testing exited 0 with 15 passed.
+- CLI persistence RED: the explicit persistence contract failed with unrecognized arguments.
+  GREEN: `scripts/run_offline_eval.py` accepts paired `--persist-database-url` and `--run-id`
+  arguments, hashes the generated summary, and commits the run and normalized evidence in one
+  transaction. The runner remains side-effect free unless both arguments are supplied.
+- REST contract RED: the locked Eval endpoints returned an empty page and 404 placeholder. GREEN:
+  list and detail now enforce `created_at <= decision_time`; list is deterministically cursor
+  paginated, while detail returns exact dataset/model/prompt/four policy/gate versions, cutoff,
+  summary hash, raw metric evidence and regression-gate outcomes. The OpenAPI snapshot was
+  regenerated from FastAPI. Focused backend persistence and REST tests exited 0 with 5 passed.
+- API-mode frontend RED: focused Vitest exited 1 because no typed detail client existed and the
+  route still rendered a count placeholder. GREEN: strict parsers reject numeric Decimal values,
+  naive timestamps, malformed hashes and invalid enums; the latest persisted run now renders its
+  status, cutoff, version pins, metric table, gate table and summary digest. Empty/failure behavior
+  stays explicit and does not import Fixture reports. Focused frontend testing exited 0 with 2
+  files / 22 passed; complete frontend Vitest exited 0 with 30 files / 184 passed; ESLint and the
+  Next.js production build exited 0.
+- Migration verification initially found constraint names that had been prefixed twice. A destructive
+  local downgrade was rejected to protect possibly valuable Eval rows, so migration 0039 performs
+  an idempotent, data-preserving compatibility rename only when legacy names exist. Fresh databases
+  receive the canonical names directly from 0038. `alembic upgrade head` and `alembic check` exited
+  0 with no new operations; the head downgrade-to-0024-and-upgrade regression passed 1/1.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI checks passed, backend 742 passed / 5 optional live-provider
+  tests skipped, frontend 30 files / 184 passed, and TypeScript, ESLint and the Next.js production
+  build passed. Existing jsdom local-storage and cross-realm AbortSignal diagnostics remain
+  non-failing test noise tracked by FRE-38. No push, PR or merge is claimed by this checkpoint.
