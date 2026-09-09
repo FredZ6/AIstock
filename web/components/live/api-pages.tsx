@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { initializePortfolioAction } from '../../app/portfolio/actions'
+import { compareDecimals, decimalChange, normalizeDecimalSeries } from '../../lib/decimal'
 import { formatDecimal, formatMoney, formatPercent } from '../../lib/format'
 import type {
   AlertRecord,
@@ -350,6 +351,21 @@ export function ApiResearchPage({
 }
 
 export function ApiPortfolioPage({ asOf, portfolio }: { asOf: string; portfolio: PortfolioSummary }) {
+  const history = portfolio.performanceHistory
+  const current = history.at(-1) ?? portfolio.latestNav
+  const previous = history.at(-2)
+  const peak = history.reduce<typeof current>((highest, point) => (
+    !highest || compareDecimals(point.nav, highest.nav) > 0 ? point : highest
+  ), null)
+  const dayReturn = current && previous ? decimalChange(current.nav, previous.nav) : null
+  const drawdown = current && peak ? decimalChange(current.nav, peak.nav) : null
+  const normalizedNav = normalizeDecimalSeries(history.map((point) => point.nav))
+  const coordinates = normalizedNav.map((value, index) => ({
+    x: history.length === 1 ? 500 : index * 1000 / (history.length - 1),
+    y: 210 - value * 170,
+  }))
+  const navLine = coordinates.map((point, index) => `${index ? 'L' : 'M'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
+  const navArea = coordinates.length ? `${navLine} L 1000 220 L 0 220 Z` : ''
   const missing = [
     ...(!portfolio.latestNav ? ['NAV history'] : []),
   ]
@@ -375,11 +391,23 @@ export function ApiPortfolioPage({ asOf, portfolio }: { asOf: string; portfolio:
         </form> : <>
           <section className="portfolio-snapshot" aria-label="Portfolio snapshot">
             <div><p className="section-kicker">Paper portfolio</p><h2>Persisted snapshot</h2><p>As of <time dateTime={asOf}>{formatDualTime(asOf).newYork}</time></p></div>
-            <dl><div><dt>Net asset value</dt><dd>{portfolio.latestNav ? formatMoney(portfolio.latestNav.nav, 'USD') : <span className="unavailable-value">Unavailable</span>}</dd></div><div><dt>Day return</dt><dd className="unavailable-value">Unavailable</dd></div><div><dt>Current drawdown</dt><dd className="unavailable-value">Unavailable</dd></div><div><dt>Available cash</dt><dd>{portfolio.cash ? formatMoney(portfolio.cash.balance, portfolio.cash.currency) : <span className="unavailable-value">Unavailable</span>}</dd></div></dl>
+            <dl><div><dt>Net asset value</dt><dd>{portfolio.latestNav ? formatMoney(portfolio.latestNav.nav, 'USD') : <span className="unavailable-value">Unavailable</span>}</dd></div><div><dt>Day return</dt><dd className={dayReturn ? undefined : 'unavailable-value'}>{dayReturn ? formatPercent(dayReturn) : 'Unavailable'}</dd></div><div><dt>Current drawdown</dt><dd className={drawdown ? undefined : 'unavailable-value'}>{drawdown ? formatPercent(drawdown) : 'Unavailable'}</dd></div><div><dt>Available cash</dt><dd>{portfolio.cash ? formatMoney(portfolio.cash.balance, portfolio.cash.currency) : <span className="unavailable-value">Unavailable</span>}</dd></div></dl>
           </section>
+          {history.length ? <section className="terminal-section" aria-labelledby="portfolio-history-title">
+            <div className="section-heading"><div><p className="section-kicker">Decimal-derived history</p><h2 id="portfolio-history-title">NAV performance</h2></div><span className="muted-copy">{history.length} persisted snapshots</span></div>
+            <figure className="api-performance-chart"><svg aria-label="Net asset value history" preserveAspectRatio="none" role="img" viewBox="0 0 1000 240"><defs><linearGradient id="api-nav-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopOpacity="0.25" /><stop offset="100%" stopOpacity="0" /></linearGradient></defs><line className="chart-baseline" x1="0" x2="1000" y1="220" y2="220" /><path className="chart-area" d={navArea} /><path className="chart-line" d={navLine} /></svg><figcaption>Persisted paper NAV through <time dateTime={history.at(-1)?.availableAt}>{formatDualTime(history.at(-1)!.availableAt).newYork}</time></figcaption></figure>
+          </section> : null}
           <section className="terminal-section" aria-label="Paper trading evidence availability">
-            <p className="section-kicker">Persisted evidence</p><h2>Evidence availability</h2>
+            <p className="section-kicker">Persisted evidence</p><h2>Audit evidence</h2>
             <dl className="evidence-counts"><div><dt>Positions</dt><dd>{portfolio.positions.length}</dd></div><div><dt>Risk decisions</dt><dd>{portfolio.riskDecisions.length}</dd></div><div><dt>Paper fills</dt><dd>{portfolio.fills.length}</dd></div><div><dt>Cash ledger entries</dt><dd>{portfolio.cashLedger.length}</dd></div></dl>
+            <h3>Positions and P&amp;L</h3>
+            {portfolio.positions.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Paper positions"><thead><tr><th>Symbol</th><th>Quantity</th><th>Average cost</th><th>Market price</th><th>Market value</th><th>Unrealized P&amp;L</th><th>Price available</th></tr></thead><tbody>{portfolio.positions.map((position) => <tr key={position.symbol}><th>{position.symbol}</th><td>{formatDecimal(position.quantity)}</td><td>{formatMoney(position.averageCost, 'USD')}</td><td>{position.marketPrice ? formatMoney(position.marketPrice, 'USD') : 'Unavailable'}</td><td>{position.marketValue ? formatMoney(position.marketValue, 'USD') : 'Unavailable'}</td><td>{position.unrealizedPnl ? formatMoney(position.unrealizedPnl, 'USD') : 'Unavailable'}</td><td>{position.priceAvailableAt ? <time dateTime={position.priceAvailableAt}>{formatDualTime(position.priceAvailableAt).newYork}</time> : 'Unavailable'}</td></tr>)}</tbody></table></div> : <p className="unavailable-value">No positions persisted at this cutoff.</p>}
+            <h3>Risk decisions</h3>
+            {portfolio.riskDecisions.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Risk decisions"><thead><tr><th>Symbol</th><th>Status</th><th>Requested</th><th>Approved</th><th>Side</th><th>Reasons</th><th>Policy</th><th>Decided</th></tr></thead><tbody>{portfolio.riskDecisions.map((decision) => <tr key={decision.id}><th>{decision.symbol}</th><td><Signal tone={decision.status}>{decision.status}</Signal></td><td>{formatPercent(decision.requestedWeight, { signed: false })}</td><td>{formatPercent(decision.approvedWeight, { signed: false })}</td><td>{decision.authorizedSide ?? 'None'}</td><td>{decision.reasonCodes.join(', ') || 'None'}</td><td>{decision.riskPolicyVersionId}</td><td><time dateTime={decision.decidedAt}>{formatDualTime(decision.decidedAt).newYork}</time></td></tr>)}</tbody></table></div> : <p className="unavailable-value">No risk decisions persisted at this cutoff.</p>}
+            <h3>Paper fills</h3>
+            {portfolio.fills.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Paper fills"><thead><tr><th>Symbol</th><th>Side</th><th>Quantity</th><th>Price</th><th>Fee</th><th>Filled</th><th>Policy</th></tr></thead><tbody>{portfolio.fills.map((fill) => <tr key={fill.id}><th>{fill.symbol}</th><td>{fill.side}</td><td>{formatDecimal(fill.quantity)}</td><td>{formatMoney(fill.price, 'USD')}</td><td>{formatMoney(fill.fee, 'USD')}</td><td><time dateTime={fill.filledAt}>{formatDualTime(fill.filledAt).newYork}</time></td><td>{fill.executionPolicyVersionId}</td></tr>)}</tbody></table></div> : <p className="unavailable-value">No paper fills persisted at this cutoff.</p>}
+            <h3>Cash ledger</h3>
+            {portfolio.cashLedger.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Cash ledger"><thead><tr><th>Account</th><th>Debit</th><th>Credit</th><th>Transaction</th><th>Occurred</th><th>Reversal</th></tr></thead><tbody>{portfolio.cashLedger.map((entry) => <tr key={entry.id}><th>{entry.account}</th><td>{formatMoney(entry.debit, 'USD')}</td><td>{formatMoney(entry.credit, 'USD')}</td><td>{entry.transactionId}</td><td><time dateTime={entry.occurredAt}>{formatDualTime(entry.occurredAt).newYork}</time></td><td>{entry.reversalOfId ?? 'None'}</td></tr>)}</tbody></table></div> : <p className="unavailable-value">No cash ledger entries persisted at this cutoff.</p>}
           </section>
         </>}
       </StateBoundary>

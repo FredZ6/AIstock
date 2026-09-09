@@ -3496,3 +3496,25 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   files, Alembic drift and OpenAPI checks passed, backend 742 passed / 5 optional live-provider
   tests skipped, frontend 30 files / 185 passed, and TypeScript, ESLint and the Next.js production
   build passed. `git diff --check` exited 0. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-09 — M8.1 frontend product closure, FRE-33 paper Portfolio evidence
+
+- Portfolio contract RED: `npm test -- --run tests/live-data-api.test.ts
+  tests/api-pages.test.tsx` exited 1 with 2 failures. The server client returned Position fields in
+  raw snake case, omitted normalized timestamps and policy fields for the audit records, and the page
+  hard-coded day return and drawdown as unavailable despite persisted NAV history.
+- GREEN: the API boundary now validates and normalizes every Position, RiskDecision, PaperFill,
+  CashLedger and PortfolioNav field. Decimal values must remain strings, timestamps must remain aware,
+  and nullable market facts remain explicit. The page derives day return and current drawdown with
+  scaled BigInt Decimal arithmetic, using floating-point values only for normalized SVG coordinates,
+  and renders persisted NAV history plus horizontally contained audit tables for positions/P&L, risk
+  decisions, paper fills and cash ledger entries. Empty arrays are labelled as authoritative empty
+  history, while nullable values display Unavailable. No live-broker control or path was added.
+- Focused verification exited 0 with 2 files / 28 tests passed, followed by TypeScript exit 0.
+  Complete frontend verification exited 0 with 30 files / 187 tests passed; ESLint and the Next.js
+  production build also exited 0. Existing jsdom local-storage and cross-realm AbortSignal diagnostics
+  remain expected non-failing test noise tracked by FRE-38.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI checks passed, backend 742 passed / 5 optional live-provider
+  tests skipped, frontend 30 files / 187 passed, and TypeScript, ESLint and the Next.js production
+  build passed. No push, PR or merge is claimed by this checkpoint.

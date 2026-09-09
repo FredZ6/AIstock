@@ -75,17 +75,82 @@ export type ProviderHealth = {
 
 export type PortfolioSummary = {
   cash: null | { balance: string; currency: 'USD' }
-  cashLedger: JsonRecord[]
+  cashLedger: Array<{
+    account: string
+    createdAt: string
+    credit: string
+    currency: 'USD'
+    debit: string
+    id: string
+    idempotencyKey: string
+    occurredAt: string
+    reversalOfId: string | null
+    sourceId: string
+    transactionId: string
+  }>
   configuration: null | { currency: 'USD'; id: string; initialCash: string; name: string }
-  fills: JsonRecord[]
+  fills: Array<{
+    createdAt: string
+    currency: 'USD'
+    executionPolicyVersionId: string
+    fee: string
+    filledAt: string
+    id: string
+    idempotencyKey: string
+    orderId: string
+    portfolioId: string
+    price: string
+    quantity: string
+    reversalOfId: string | null
+    side: 'BUY' | 'SELL'
+    sourceBarTime: string
+    symbol: string
+  }>
   initializedAt: string | null
-  latestNav: null | { eventTime: string; nav: string; portfolioId: string }
+  latestNav: null | PortfolioNav
   orders: JsonRecord[]
-  performanceHistory: JsonRecord[]
-  positions: JsonRecord[]
-  riskDecisions: JsonRecord[]
+  performanceHistory: PortfolioNav[]
+  positions: Array<{
+    averageCost: string
+    marketPrice: string | null
+    marketValue: string | null
+    priceAvailableAt: string | null
+    quantity: string
+    symbol: string
+    unrealizedPnl: string | null
+  }>
+  riskDecisions: Array<{
+    approvedDelta: string
+    approvedWeight: string
+    authorizationSource: string
+    authorizedSide: 'BUY' | 'SELL' | null
+    createdAt: string
+    currentWeight: string
+    decidedAt: string
+    id: string
+    marketContextSnapshotId: string
+    maxOrderQuantity: string
+    portfolioId: string
+    proposalId: string
+    reasonCodes: string[]
+    referenceNav: string | null
+    referencePrice: string | null
+    researchDecisionId: string | null
+    requestedWeight: string
+    riskPolicyVersionId: string
+    status: 'APPROVED' | 'CLIPPED' | 'REJECTED'
+    symbol: string
+  }>
   status: 'EMPTY' | 'SUCCESS'
   trading: 'paper_only'
+}
+
+export type PortfolioNav = {
+  availableAt: string
+  eventTime: string
+  id: string
+  nav: string
+  portfolioId: string
 }
 
 export type PortfolioInitialization = {
@@ -701,6 +766,92 @@ export async function getPortfolioSummary(options: LiveDataClientOptions): Promi
       if (!Array.isArray(value)) throw new TypeError(`portfolio.${name} must be an array`)
       return value.map((item, index) => record(item, `portfolio.${name}[${index}]`))
     }
+    const nullableText = (value: unknown, path: string) => value === null ? null : text(value, path)
+    const nullableDecimal = (value: unknown, path: string) => value === null ? null : decimal(value, path)
+    const nullableInstant = (value: unknown, path: string) => value === null ? null : instant(value, path)
+    const nav = (value: JsonRecord, path: string): PortfolioNav => ({
+      availableAt: instant(value.available_at, `${path}.available_at`),
+      eventTime: instant(value.event_time, `${path}.event_time`),
+      id: text(value.id, `${path}.id`),
+      nav: decimal(value.nav, `${path}.nav`),
+      portfolioId: text(value.portfolio_id, `${path}.portfolio_id`),
+    })
+    const positions = records('positions').map((value, index) => {
+      const path = `portfolio.positions[${index}]`
+      return {
+        averageCost: decimal(value.average_cost, `${path}.average_cost`),
+        marketPrice: nullableDecimal(value.market_price, `${path}.market_price`),
+        marketValue: nullableDecimal(value.market_value, `${path}.market_value`),
+        priceAvailableAt: nullableInstant(value.price_available_at, `${path}.price_available_at`),
+        quantity: decimal(value.quantity, `${path}.quantity`),
+        symbol: text(value.symbol, `${path}.symbol`),
+        unrealizedPnl: nullableDecimal(value.unrealized_pnl, `${path}.unrealized_pnl`),
+      }
+    })
+    const riskDecisions = records('risk_decisions').map((value, index) => {
+      const path = `portfolio.risk_decisions[${index}]`
+      const reasonCodes = value.reason_codes
+      if (!Array.isArray(reasonCodes)) throw new TypeError(`${path}.reason_codes must be an array`)
+      return {
+        approvedDelta: decimal(value.approved_delta, `${path}.approved_delta`),
+        approvedWeight: decimal(value.approved_weight, `${path}.approved_weight`),
+        authorizationSource: text(value.authorization_source, `${path}.authorization_source`),
+        authorizedSide: value.authorized_side === null ? null : enumeration(value.authorized_side, ['BUY', 'SELL'] as const, `${path}.authorized_side`),
+        createdAt: instant(value.created_at, `${path}.created_at`),
+        currentWeight: decimal(value.current_weight, `${path}.current_weight`),
+        decidedAt: instant(value.decided_at, `${path}.decided_at`),
+        id: text(value.id, `${path}.id`),
+        marketContextSnapshotId: text(value.market_context_snapshot_id, `${path}.market_context_snapshot_id`),
+        maxOrderQuantity: decimal(value.max_order_quantity, `${path}.max_order_quantity`),
+        portfolioId: text(value.portfolio_id, `${path}.portfolio_id`),
+        proposalId: text(value.proposal_id, `${path}.proposal_id`),
+        reasonCodes: reasonCodes.map((reason, reasonIndex) => text(reason, `${path}.reason_codes[${reasonIndex}]`)),
+        referenceNav: nullableDecimal(value.reference_nav, `${path}.reference_nav`),
+        referencePrice: nullableDecimal(value.reference_price, `${path}.reference_price`),
+        researchDecisionId: nullableText(value.research_decision_id, `${path}.research_decision_id`),
+        requestedWeight: decimal(value.requested_weight, `${path}.requested_weight`),
+        riskPolicyVersionId: text(value.risk_policy_version_id, `${path}.risk_policy_version_id`),
+        status: enumeration(value.status, ['APPROVED', 'CLIPPED', 'REJECTED'] as const, `${path}.status`),
+        symbol: text(value.symbol, `${path}.symbol`),
+      }
+    })
+    const fills = records('fills').map((value, index) => {
+      const path = `portfolio.fills[${index}]`
+      return {
+        createdAt: instant(value.created_at, `${path}.created_at`),
+        currency: enumeration(value.currency, ['USD'] as const, `${path}.currency`),
+        executionPolicyVersionId: text(value.execution_policy_version_id, `${path}.execution_policy_version_id`),
+        fee: decimal(value.fee, `${path}.fee`),
+        filledAt: instant(value.filled_at, `${path}.filled_at`),
+        id: text(value.id, `${path}.id`),
+        idempotencyKey: text(value.idempotency_key, `${path}.idempotency_key`),
+        orderId: text(value.order_id, `${path}.order_id`),
+        portfolioId: text(value.portfolio_id, `${path}.portfolio_id`),
+        price: decimal(value.price, `${path}.price`),
+        quantity: decimal(value.quantity, `${path}.quantity`),
+        reversalOfId: nullableText(value.reversal_of_id, `${path}.reversal_of_id`),
+        side: enumeration(value.side, ['BUY', 'SELL'] as const, `${path}.side`),
+        sourceBarTime: instant(value.source_bar_time, `${path}.source_bar_time`),
+        symbol: text(value.symbol, `${path}.symbol`),
+      }
+    })
+    const cashLedger = records('cash_ledger').map((value, index) => {
+      const path = `portfolio.cash_ledger[${index}]`
+      return {
+        account: text(value.account, `${path}.account`),
+        createdAt: instant(value.created_at, `${path}.created_at`),
+        credit: decimal(value.credit, `${path}.credit`),
+        currency: enumeration(value.currency, ['USD'] as const, `${path}.currency`),
+        debit: decimal(value.debit, `${path}.debit`),
+        id: text(value.id, `${path}.id`),
+        idempotencyKey: text(value.idempotency_key, `${path}.idempotency_key`),
+        occurredAt: instant(value.occurred_at, `${path}.occurred_at`),
+        reversalOfId: nullableText(value.reversal_of_id, `${path}.reversal_of_id`),
+        sourceId: text(value.source_id, `${path}.source_id`),
+        transactionId: text(value.transaction_id, `${path}.transaction_id`),
+      }
+    })
+    const performanceHistory = records('performance_history').map((value, index) => nav(value, `portfolio.performance_history[${index}]`))
     return {
       status: enumeration(source.status, ['EMPTY', 'SUCCESS'] as const, 'portfolio.status'),
       trading: enumeration(source.trading, ['paper_only'] as const, 'portfolio.trading'),
@@ -717,17 +868,13 @@ export async function getPortfolioSummary(options: LiveDataClientOptions): Promi
         balance: decimal(cash.balance, 'portfolio.cash.balance'),
         currency: enumeration(cash.currency, ['USD'] as const, 'portfolio.cash.currency'),
       } : null,
-      latestNav: latest ? {
-        eventTime: instant(latest.event_time, 'portfolio.latest_nav.event_time'),
-        nav: decimal(latest.nav, 'portfolio.latest_nav.nav'),
-        portfolioId: text(latest.portfolio_id, 'portfolio.latest_nav.portfolio_id'),
-      } : null,
-      positions: records('positions'),
-      riskDecisions: records('risk_decisions'),
+      latestNav: latest ? nav(latest, 'portfolio.latest_nav') : null,
+      positions,
+      riskDecisions,
       orders: records('orders'),
-      fills: records('fills'),
-      cashLedger: records('cash_ledger'),
-      performanceHistory: records('performance_history'),
+      fills,
+      cashLedger,
+      performanceHistory,
     }
   })
 }

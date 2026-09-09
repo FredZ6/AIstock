@@ -235,8 +235,8 @@ describe('API mode pages', () => {
         ...emptyPortfolio,
         cash: { balance: '100000', currency: 'USD' },
         initializedAt: '2026-08-29T09:00:00Z',
-        latestNav: { eventTime: '2026-08-29T09:00:00Z', nav: '100000', portfolioId: 'portfolio-1' },
-        performanceHistory: [{ eventTime: '2026-08-29T09:00:00Z', nav: '100000', portfolioId: 'portfolio-1' }],
+        latestNav: { availableAt: '2026-08-29T09:00:00Z', eventTime: '2026-08-29T09:00:00Z', id: 'nav-1', nav: '100000', portfolioId: 'portfolio-1' },
+        performanceHistory: [{ availableAt: '2026-08-29T09:00:00Z', eventTime: '2026-08-29T09:00:00Z', id: 'nav-1', nav: '100000', portfolioId: 'portfolio-1' }],
         status: 'SUCCESS',
       }}
     />)
@@ -244,6 +244,36 @@ describe('API mode pages', () => {
     expect(screen.queryByRole('status', { name: 'Portfolio evidence is partial' })).not.toBeInTheDocument()
     expect(screen.getByText('Positions').parentElement).toHaveTextContent('0')
     expect(screen.getByText('Cash ledger entries').parentElement).toHaveTextContent('0')
+  })
+
+  it('renders Decimal-derived portfolio analytics and normalized audit evidence', () => {
+    render(<ApiPortfolioPage
+      asOf="2026-08-29T09:30:00Z"
+      portfolio={{
+        ...emptyPortfolio,
+        cash: { balance: '90500', currency: 'USD' },
+        initializedAt: '2026-08-28T09:00:00Z',
+        latestNav: { availableAt: '2026-08-29T09:21:00Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-2', nav: '100500', portfolioId: 'portfolio-1' },
+        performanceHistory: [
+          { availableAt: '2026-08-28T09:01:00Z', eventTime: '2026-08-28T09:00:00Z', id: 'nav-1', nav: '101000', portfolioId: 'portfolio-1' },
+          { availableAt: '2026-08-29T09:21:00Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-2', nav: '100500', portfolioId: 'portfolio-1' },
+        ],
+        positions: [{ averageCost: '190', marketPrice: '200', marketValue: '10000', priceAvailableAt: '2026-08-29T09:19:00Z', quantity: '50', symbol: 'NVDA', unrealizedPnl: '500' }],
+        riskDecisions: [{ approvedDelta: '0.1', approvedWeight: '0.1', authorizationSource: 'policy', authorizedSide: 'BUY', createdAt: '2026-08-29T09:18:00Z', currentWeight: '0', decidedAt: '2026-08-29T09:18:00Z', id: 'risk-1', marketContextSnapshotId: 'context-1', maxOrderQuantity: '50', portfolioId: 'portfolio-1', proposalId: 'proposal-1', reasonCodes: [], referenceNav: '100000', referencePrice: '190', researchDecisionId: 'research-1', requestedWeight: '0.1', riskPolicyVersionId: 'risk-v1', status: 'APPROVED', symbol: 'NVDA' }],
+        fills: [{ createdAt: '2026-08-29T09:20:00Z', currency: 'USD', executionPolicyVersionId: 'execution-v1', fee: '0', filledAt: '2026-08-29T09:20:00Z', id: 'fill-1', idempotencyKey: 'fill-1', orderId: 'order-1', portfolioId: 'portfolio-1', price: '190', quantity: '50', reversalOfId: null, side: 'BUY', sourceBarTime: '2026-08-29T09:19:00Z', symbol: 'NVDA' }],
+        cashLedger: [{ account: 'CASH', createdAt: '2026-08-29T09:20:00Z', credit: '0', currency: 'USD', debit: '9500', id: 'ledger-1', idempotencyKey: 'fill-1:cash', occurredAt: '2026-08-29T09:20:00Z', reversalOfId: null, sourceId: 'fill-1', transactionId: 'transaction-1' }],
+        status: 'SUCCESS',
+      }}
+    />)
+
+    expect(screen.getByText('Day return').parentElement).toHaveTextContent('-0.50%')
+    expect(screen.getByText('Current drawdown').parentElement).toHaveTextContent('-0.50%')
+    expect(screen.getByRole('img', { name: 'Net asset value history' })).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Paper positions' })).toHaveTextContent('USD 500.00')
+    expect(screen.getByRole('table', { name: 'Risk decisions' })).toHaveTextContent('APPROVED')
+    expect(screen.getByRole('table', { name: 'Paper fills' })).toHaveTextContent('BUY')
+    expect(screen.getByRole('table', { name: 'Cash ledger' })).toHaveTextContent('USD 9,500.00')
+    expect(screen.queryByRole('button', { name: /live/i })).not.toBeInTheDocument()
   })
 
   it('renders persisted weekly outcomes, calibration, attribution, and lessons', () => {

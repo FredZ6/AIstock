@@ -1,5 +1,41 @@
 const decimalPattern = /^(-?)(\d+)(?:\.(\d+))?$/
 
+function decimalInteger(value: string, scale: number): bigint {
+  const match = decimalPattern.exec(value)
+  if (!match) throw new TypeError('Value must be a Decimal string')
+  const magnitude = BigInt(`${match[2]}${(match[3] ?? '').padEnd(scale, '0')}`)
+  return match[1] === '-' ? -magnitude : magnitude
+}
+
+export function decimalChange(current: string, baseline: string, fractionDigits = 8): string {
+  const currentMatch = decimalPattern.exec(current)
+  const baselineMatch = decimalPattern.exec(baseline)
+  if (!currentMatch || !baselineMatch) throw new TypeError('Value must be a Decimal string')
+  const scale = Math.max((currentMatch[3] ?? '').length, (baselineMatch[3] ?? '').length)
+  const currentInteger = decimalInteger(current, scale)
+  const baselineInteger = decimalInteger(baseline, scale)
+  if (baselineInteger <= 0n) throw new RangeError('Baseline must be positive')
+  const targetScale = 10n ** BigInt(fractionDigits)
+  const numerator = (currentInteger - baselineInteger) * targetScale
+  const negative = numerator < 0n
+  const magnitude = negative ? -numerator : numerator
+  let quotient = magnitude / baselineInteger
+  if ((magnitude % baselineInteger) * 2n >= baselineInteger) quotient += 1n
+  const raw = quotient.toString().padStart(fractionDigits + 1, '0')
+  const formatted = `${raw.slice(0, -fractionDigits)}.${raw.slice(-fractionDigits)}`
+  return `${negative && quotient !== 0n ? '-' : ''}${formatted}`
+}
+
+export function compareDecimals(left: string, right: string): number {
+  const leftMatch = decimalPattern.exec(left)
+  const rightMatch = decimalPattern.exec(right)
+  if (!leftMatch || !rightMatch) throw new TypeError('Value must be a Decimal string')
+  const scale = Math.max((leftMatch[3] ?? '').length, (rightMatch[3] ?? '').length)
+  const leftInteger = decimalInteger(left, scale)
+  const rightInteger = decimalInteger(right, scale)
+  return leftInteger < rightInteger ? -1 : leftInteger > rightInteger ? 1 : 0
+}
+
 export function normalizeDecimalSeries(values: string[]): number[] {
   if (values.length === 0) return []
 

@@ -260,6 +260,13 @@ tbody th a { min-height: 2.75rem; display: inline-flex; align-items: center; fon
 .portfolio-evidence-grid { display: grid; gap: 1.25rem; margin-top: 1.25rem; }
 .portfolio-evidence-grid > section { padding: clamp(1.15rem, 3vw, 2rem); border: 1px solid var(--line); border-radius: 1.35rem; background: var(--ink-raised); }
 .portfolio-evidence-grid h2 { margin: 0 0 1rem; font-size: 1rem; }
+.api-performance-chart { margin: 1.25rem 0 0; color: var(--signal); }
+.api-performance-chart svg { display: block; width: 100%; height: clamp(10rem, 24vw, 16rem); }
+.api-performance-chart .chart-area { fill: url(#api-nav-fill); stroke: none; }
+.api-performance-chart .chart-line { fill: none; stroke: currentColor; stroke-width: 3; vector-effect: non-scaling-stroke; }
+.api-performance-chart .chart-baseline { stroke: var(--line-soft); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.api-performance-chart figcaption { margin-top: 0.55rem; color: var(--text-tertiary); font-size: 0.68rem; }
+.terminal-section[aria-label="Paper trading evidence availability"] h3 { margin: 2rem 0 0.75rem; font-size: 0.85rem; }
 .watchlist-heatmap { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 0.65rem; padding: 0; margin: 1.1rem 0 0; list-style: none; }
 .watchlist-heatmap li { min-width: 0; padding: 1rem; border: 1px solid var(--line-soft); border-radius: 1rem; background: var(--surface-highlight); }
 .watchlist-heatmap li[data-direction="negative"] { background: var(--surface-highlight); }

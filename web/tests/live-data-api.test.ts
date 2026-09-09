@@ -265,6 +265,42 @@ describe('live data API client', () => {
     })
   })
 
+  it('parses the complete point-in-time paper portfolio contract without numeric money', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      cash: { balance: '90500', currency: 'USD' },
+      cash_ledger: [{ account: 'CASH', created_at: '2026-08-29T09:20:00Z', credit: '0', currency: 'USD', debit: '9500', id: 'ledger-1', idempotency_key: 'fill-1:cash', occurred_at: '2026-08-29T09:20:00Z', reversal_of_id: null, source_id: 'fill-1', transaction_id: 'transaction-1' }],
+      configuration: { currency: 'USD', id: 'portfolio-1', initial_cash: '100000', name: 'default-paper' },
+      decision_time: options.decisionTime,
+      fills: [{ created_at: '2026-08-29T09:20:00Z', currency: 'USD', execution_policy_version_id: 'execution-v1', fee: '0', filled_at: '2026-08-29T09:20:00Z', id: 'fill-1', idempotency_key: 'fill-1', order_id: 'order-1', portfolio_id: 'portfolio-1', price: '190', quantity: '50', reversal_of_id: null, side: 'BUY', source_bar_time: '2026-08-29T09:19:00Z', symbol: 'NVDA' }],
+      initialized_at: '2026-08-28T09:00:00Z',
+      latest_nav: { available_at: '2026-08-29T09:21:00Z', event_time: '2026-08-29T09:20:00Z', id: 'nav-2', nav: '100500', portfolio_id: 'portfolio-1' },
+      orders: [],
+      performance_history: [
+        { available_at: '2026-08-28T09:01:00Z', event_time: '2026-08-28T09:00:00Z', id: 'nav-1', nav: '101000', portfolio_id: 'portfolio-1' },
+        { available_at: '2026-08-29T09:21:00Z', event_time: '2026-08-29T09:20:00Z', id: 'nav-2', nav: '100500', portfolio_id: 'portfolio-1' },
+      ],
+      positions: [{ average_cost: '190', market_price: '200', market_value: '10000', price_available_at: '2026-08-29T09:19:00Z', quantity: '50', symbol: 'NVDA', unrealized_pnl: '500' }],
+      risk_decisions: [{ approved_delta: '0.1', approved_weight: '0.1', authorization_source: 'policy', authorized_side: 'BUY', created_at: '2026-08-29T09:18:00Z', current_weight: '0', decided_at: '2026-08-29T09:18:00Z', id: 'risk-1', market_context_snapshot_id: 'context-1', max_order_quantity: '50', portfolio_id: 'portfolio-1', proposal_id: 'proposal-1', reason_codes: [], reference_nav: '100000', reference_price: '190', research_decision_id: 'research-1', requested_weight: '0.1', risk_policy_version_id: 'risk-v1', status: 'APPROVED', symbol: 'NVDA' }],
+      status: 'SUCCESS', trading: 'paper_only',
+    }))
+
+    await expect(getPortfolioSummary({ ...options, fetchImpl })).resolves.toMatchObject({
+      cashLedger: [{ debit: '9500', occurredAt: '2026-08-29T09:20:00Z' }],
+      fills: [{ price: '190', quantity: '50', symbol: 'NVDA' }],
+      performanceHistory: [{ nav: '101000' }, { availableAt: '2026-08-29T09:21:00Z', nav: '100500' }],
+      positions: [{ marketValue: '10000', unrealizedPnl: '500' }],
+      riskDecisions: [{ approvedWeight: '0.1', status: 'APPROVED' }],
+    })
+
+    const invalidFetch = vi.fn(async () => jsonResponse({
+      cash: null, cash_ledger: [], configuration: null, decision_time: options.decisionTime,
+      fills: [], initialized_at: null, latest_nav: null, orders: [], performance_history: [],
+      positions: [{ average_cost: 190, market_price: null, market_value: null, price_available_at: null, quantity: '50', symbol: 'NVDA', unrealized_pnl: null }],
+      risk_decisions: [], status: 'SUCCESS', trading: 'paper_only',
+    }))
+    await expect(getPortfolioSummary({ ...options, fetchImpl: invalidFetch })).rejects.toMatchObject({ kind: 'contract' })
+  })
+
   it('loads point-in-time SEC data-quality dimensions without deriving a UI grade', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       decision_time: options.decisionTime,
