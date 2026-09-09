@@ -18,6 +18,8 @@ describe('StateBoundary', () => {
           kind: 'empty',
           title: 'No watchlist symbols',
           message: 'Add a symbol to begin daily research.',
+          actionHref: '/watchlist',
+          actionLabel: 'Configure watchlist',
         }}
       />,
     )
@@ -25,6 +27,7 @@ describe('StateBoundary', () => {
     expect(screen.getByRole('status', { name: 'No watchlist symbols' })).toHaveTextContent(
       'Add a symbol to begin daily research.',
     )
+    expect(screen.getByRole('link', { name: 'Configure watchlist' })).toHaveAttribute('href', '/watchlist')
   })
 
   it('marks stale data with its exact last-updated timestamp', () => {
@@ -72,6 +75,8 @@ describe('StateBoundary', () => {
           title: 'Provider coverage degraded',
           message: 'Available evidence is shown with reduced coverage.',
           providers: ['SEC', 'Options'],
+          actionHref: '/watchlist',
+          actionLabel: 'Review provider coverage',
         }}
       >
         <p>Partial market context</p>
@@ -85,6 +90,7 @@ describe('StateBoundary', () => {
     const disclosure = screen.getByText('2 unavailable facts').closest('details')
     expect(disclosure).not.toHaveAttribute('open')
     expect(screen.getByText('Partial market context')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Review provider coverage' })).toHaveAttribute('href', '/watchlist')
   })
 
   it('keeps available records visible when a response is partial', () => {

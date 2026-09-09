@@ -9,6 +9,8 @@ type LoadingState = {
 }
 
 type MessageState = {
+  actionHref?: string
+  actionLabel?: string
   message: string
   title: string
 }
@@ -102,6 +104,11 @@ function StateMessage({ compact, state }: { compact?: boolean; state: EmptyState
       </p>
       <h2>{state.title}</h2>
       <p className="state-message">{state.message}</p>
+      {state.actionHref && state.actionLabel ? (
+        <Link className="state-retry" href={state.actionHref}>
+          {state.actionLabel}
+        </Link>
+      ) : null}
       {state.kind === 'stale' ? (
         <p className="state-timestamp">
           Last updated <time dateTime={state.lastUpdatedAt}>{state.lastUpdatedAt}</time>

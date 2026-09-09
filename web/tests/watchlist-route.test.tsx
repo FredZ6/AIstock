@@ -23,15 +23,56 @@ async function mockWatchlistRead(implementation: () => unknown | Promise<unknown
   })
 }
 
+async function mockMarketQuotes(implementation: (...args: unknown[]) => unknown | Promise<unknown>) {
+  vi.doMock('../lib/server/live-data-api', async (importOriginal) => {
+    const original = await importOriginal<typeof import('../lib/server/live-data-api')>()
+    return { ...original, getMarketQuotes: vi.fn(async (...args: unknown[]) => implementation(...args)) }
+  })
+}
+
 afterEach(() => {
   vi.doUnmock('../lib/fixtures')
   vi.doUnmock('../lib/server/watchlist-api')
+  vi.doUnmock('../lib/server/live-data-api')
+  vi.doUnmock('../lib/server/live-data-diagnostics')
   vi.resetModules()
+  vi.useRealTimers()
   delete process.env.WEB_DATA_MODE
   delete process.env.API_BASE_URL
 })
 
 describe('Watchlist route data boundaries', () => {
+  it('uses the request decision time as the page point-in-time context', async () => {
+    let queriedDecisionTime: string | undefined
+    let reportedError: unknown
+    process.env.WEB_DATA_MODE = 'api'
+    process.env.API_BASE_URL = 'http://127.0.0.1:8000'
+    await mockWatchlistRead(() => [apiRow])
+    await mockMarketQuotes((query) => {
+      queriedDecisionTime = (query as { decisionTime: string }).decisionTime
+      return { items: [], missingSymbols: ['NVDA'], status: 'FAILURE' }
+    })
+    vi.doMock('../lib/server/live-data-diagnostics', async (importOriginal) => {
+      const original = await importOriginal<typeof import('../lib/server/live-data-diagnostics')>()
+      return {
+        ...original,
+        reportLiveDataFailure: vi.fn((_route, _domain, error) => {
+          reportedError = error
+        }),
+      }
+    })
+    const { default: WatchlistRoute } = await import('../app/watchlist/page')
+
+    const { container } = render(await WatchlistRoute())
+
+    expect(reportedError).toBeUndefined()
+    expect(queriedDecisionTime).toBeDefined()
+    expect(Array.from(container.querySelectorAll('[aria-label="Snapshot time"] time'))).not.toHaveLength(0)
+    expect(Array.from(container.querySelectorAll('[aria-label="Snapshot time"] time')).every(
+      (element) => element.getAttribute('datetime') === queriedDecisionTime,
+    )).toBe(true)
+  })
+
   it('does not label persisted market quotes unavailable when they are present', () => {
     render(<ApiWatchlistPage
       asOf="2026-08-29T09:30:00Z"
@@ -51,6 +92,27 @@ describe('Watchlist route data boundaries', () => {
     )
     expect(screen.queryByRole('status', { name: 'Market and research data unavailable' })).not.toBeInTheDocument()
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
+    expect(screen.queryByText('STALE')).not.toBeInTheDocument()
+  })
+
+  it('labels a persisted quote stale relative to the visible point-in-time cutoff', () => {
+    render(<ApiWatchlistPage
+      asOf="2026-09-08T09:30:00Z"
+      items={[apiRow]}
+      quotes={[{
+        availableAt: '2026-09-03T09:20:00Z',
+        close: '217.545',
+        coverage: 'IEX',
+        eventTime: '2026-09-03T09:19:00Z',
+        provider: 'ALPACA',
+        symbol: 'NVDA',
+      }]}
+    />)
+
+    const row = within(screen.getByRole('list', { name: 'Ranked research watchlist' })).getByRole('listitem')
+    expect(within(row).getByText('STALE')).toBeInTheDocument()
+    expect(row).toHaveTextContent('Quote older than 24 hours at snapshot')
+    expect(row).toHaveTextContent('Persisted Sep 3, 2026')
   })
 
   it('does not discard a degraded quote-quality status when every symbol has a price', () => {
@@ -196,5 +258,9 @@ describe('Watchlist route data boundaries', () => {
     expect(within(configuration).getByRole('checkbox', { name: 'NVDA intraday monitoring' })).toBeInTheDocument()
     expect(within(configuration).getByRole('textbox', { name: 'NVDA alert threshold' })).toBeInTheDocument()
     expect(within(configuration).getByText('Earnings schedule unavailable')).toBeInTheDocument()
+    const disclosures = configuration.querySelectorAll('.watchlist-config-list details')
+    expect(disclosures).toHaveLength(1)
+    expect(disclosures[0]).not.toHaveAttribute('open')
+    expect(within(configuration).getByText('NVDA settings')).toBeInTheDocument()
   })
 })

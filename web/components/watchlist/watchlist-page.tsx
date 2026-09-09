@@ -40,7 +40,7 @@ export function ApiWatchlistPage({ asOf, items, missingSymbols = [], quoteStatus
           : 'Persisted schedules and thresholds remain usable. Missing facts are never replaced with Fixture data.',
         providers: missing,
       }}>
-        <WatchlistApiControls items={items} quotes={quotes} />
+        <WatchlistApiControls asOf={asOf} items={items} quotes={quotes} />
       </StateBoundary>
     </AppShell>
   )
@@ -112,11 +112,11 @@ export function WatchlistPage({ snapshot }: { snapshot: WatchlistSnapshot }) {
             <button type="submit">Add to watchlist</button>
           </form>
         </div>
-        <div className="watchlist-config-list">{symbols.map((item) => <section aria-label={`${item.symbol} settings`} key={item.symbol}><div className="watchlist-config-heading"><h4>{item.symbol}</h4><span><Signal tone={item.portfolioAction}>{item.portfolioAction}</Signal></span></div><div className="watchlist-settings">
+        <div className="watchlist-config-list">{symbols.map((item) => <section aria-label={`${item.symbol} settings`} key={item.symbol}><details><summary>{item.symbol} settings · {item.portfolioAction}</summary><div className="watchlist-config-heading"><h4>{item.symbol}</h4><span><Signal tone={item.portfolioAction}>{item.portfolioAction}</Signal></span></div><div className="watchlist-settings">
                 <label><input type="checkbox" checked={item.dailyResearch} onChange={(event) => updateSymbol(item.symbol, { dailyResearch: event.target.checked })} /> <span>{item.symbol} daily research</span></label>
                 <label><input type="checkbox" checked={item.intradayMonitoring} onChange={(event) => updateSymbol(item.symbol, { intradayMonitoring: event.target.checked })} /> <span>{item.symbol} intraday monitoring</span></label>
                 <label><span>{item.symbol} alert threshold</span><input aria-label={`${item.symbol} alert threshold`} inputMode="decimal" value={item.alertThreshold} onChange={(event) => updateSymbol(item.symbol, { alertThreshold: event.target.value })} /></label>
-              </div><p className="watchlist-setting-note">Next earnings: {item.nextEarningsAt ? <time dateTime={item.nextEarningsAt}>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(parseAwareInstant(item.nextEarningsAt))}</time> : 'Not in fixture'}</p></section>)}</div>
+              </div><p className="watchlist-setting-note">Next earnings: {item.nextEarningsAt ? <time dateTime={item.nextEarningsAt}>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(parseAwareInstant(item.nextEarningsAt))}</time> : 'Not in fixture'}</p></details></section>)}</div>
         </section>
         <TradingViewTickerList symbols={symbols.map((item) => item.symbol)} />
       </section>

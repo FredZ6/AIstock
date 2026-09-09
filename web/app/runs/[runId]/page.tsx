@@ -3,7 +3,7 @@ import { ApiFailurePage, ApiRunMetadataPage } from '../../../components/live/api
 import { MissingFixturePage } from '../../../components/states/missing-fixture-page'
 import { readWebDataConfig } from '../../../lib/server/data-mode'
 import { reportLiveDataFailure } from '../../../lib/server/live-data-diagnostics'
-import { getResearchRun, getResearchRunReport } from '../../../lib/server/live-data-api'
+import { getLatestResearchRun, getResearchRun, getResearchRunReport } from '../../../lib/server/live-data-api'
 
 export default async function RunTraceRoute({ params }: { params: Promise<{ runId: string }> }) {
   const { runId } = await params
@@ -18,8 +18,10 @@ export default async function RunTraceRoute({ params }: { params: Promise<{ runI
     }
     const asOf = new Date().toISOString()
     const options = { baseUrl: config.baseUrl, decisionTime: asOf }
-    const run = await getResearchRun(options, runId)
-    const report = run.status === 'COMPLETED' ? await getResearchRunReport(options, runId) : undefined
+    const run = runId === 'latest'
+      ? await getLatestResearchRun(options)
+      : await getResearchRun(options, runId)
+    const report = run.status === 'COMPLETED' ? await getResearchRunReport(options, run.runId) : undefined
     return <ApiRunMetadataPage report={report} run={run} />
   } catch (error) {
     reportLiveDataFailure(`/runs/${runId}`, 'research-run', error)

@@ -4152,6 +4152,46 @@
         "summary": "Create Research Run"
       }
     },
+    "/api/v1/research-runs/latest": {
+      "get": {
+        "operationId": "get_latest_research_run_api_v1_research_runs_latest_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Latest Research Run"
+      }
+    },
     "/api/v1/research-runs/{run_id}": {
       "get": {
         "operationId": "get_research_run_api_v1_research_runs__run_id__get",

@@ -123,7 +123,43 @@ describe('API mode pages', () => {
     expect(screen.getByText('live/SEC/filing_sections/hash.txt')).toBeInTheDocument()
     expect(screen.getByText('FRESHNESS')).toBeInTheDocument()
     expect(screen.getByText('PASS')).toBeInTheDocument()
+    expect(screen.getByText('SEC filings · 1').closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText('Financial facts · 1').closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText('SEC data quality · 1').closest('details')).not.toHaveAttribute('open')
     expect(screen.queryByText('Fixture Mode')).not.toBeInTheDocument()
+  })
+
+  it('leads with one latest conclusion and keeps older decisions subordinate', () => {
+    const latest = {
+      asOf: '2026-08-29T09:00:00Z', confidence: '0.82', direction: 'UP', horizon: '12M',
+      id: 'thesis-latest', opinion: 'BULLISH' as const, summary: 'Latest durable demand thesis.', symbol: 'NVDA',
+    }
+    const previous = {
+      asOf: '2026-08-20T09:00:00Z', confidence: '0.30', direction: 'FLAT', horizon: '3M',
+      id: 'thesis-previous', opinion: 'ABSTAIN' as const, summary: 'Previous uncertain thesis.', symbol: 'NVDA',
+    }
+    render(<ApiResearchPage
+      asOf="2026-08-29T09:30:00Z"
+      dataQuality={[]}
+      financialFacts={[]}
+      idempotencyKey="research-form-hierarchy"
+      quote={quote}
+      records={[latest, previous]}
+      secFilings={[]}
+      symbol="NVDA"
+    />)
+
+    const conclusion = screen.getByRole('region', { name: 'Latest research conclusion' })
+    expect(conclusion).toHaveTextContent('BULLISH')
+    expect(conclusion).toHaveTextContent('82.00%')
+    expect(conclusion).toHaveTextContent(latest.summary)
+    expect(conclusion).not.toHaveTextContent('ABSTAIN')
+    const history = screen.getByText('Decision history · 1 previous').closest('details')
+    expect(history).not.toHaveAttribute('open')
+    expect(history).toHaveTextContent('ABSTAIN')
+    expect(history).toHaveTextContent('30.00%')
+    const currentMarket = screen.getByRole('region', { name: 'Current market reference' })
+    expect(conclusion.compareDocumentPosition(currentMarket) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('shows an empty persisted paper portfolio without inventing NAV or ledger facts', () => {
@@ -158,6 +194,24 @@ describe('API mode pages', () => {
     expect(summary).toHaveTextContent('As of')
     const evidence = screen.getByRole('region', { name: 'Paper trading evidence availability' })
     expect(within(evidence).getByText('Positions').parentElement).toHaveTextContent('0')
+  })
+
+  it('treats authoritative zero activity as empty history rather than missing evidence', () => {
+    render(<ApiPortfolioPage
+      asOf="2026-08-29T09:30:00Z"
+      portfolio={{
+        ...emptyPortfolio,
+        cash: { balance: '100000', currency: 'USD' },
+        initializedAt: '2026-08-29T09:00:00Z',
+        latestNav: { eventTime: '2026-08-29T09:00:00Z', nav: '100000', portfolioId: 'portfolio-1' },
+        performanceHistory: [{ eventTime: '2026-08-29T09:00:00Z', nav: '100000', portfolioId: 'portfolio-1' }],
+        status: 'SUCCESS',
+      }}
+    />)
+
+    expect(screen.queryByRole('status', { name: 'Portfolio evidence is partial' })).not.toBeInTheDocument()
+    expect(screen.getByText('Positions').parentElement).toHaveTextContent('0')
+    expect(screen.getByText('Cash ledger entries').parentElement).toHaveTextContent('0')
   })
 
   it('renders persisted weekly outcomes, calibration, attribution, and lessons', () => {

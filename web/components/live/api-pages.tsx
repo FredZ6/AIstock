@@ -43,6 +43,8 @@ export function ApiCollectionPage({
         kind: 'empty',
         title: emptyTitle,
         message: 'The authoritative backend returned no records at this point-in-time cutoff.',
+        actionHref: '/',
+        actionLabel: 'Review Today',
       } : { kind: 'success' }}>
         <section className="terminal-section first-section" aria-label={`${title} persisted records`}>
           <p className="section-kicker">Persisted records</p><h2>{count}</h2>
@@ -129,6 +131,8 @@ export function ApiTodayPage({
         kind: 'degraded',
         title: 'Some decision facts are unavailable',
         message: 'Available backend facts remain visible. No Fixture data was substituted.',
+        actionHref: '/watchlist',
+        actionLabel: 'Review watchlist',
         groups,
       }}>
         <section className="terminal-section first-section" aria-labelledby="live-market-title">
@@ -182,6 +186,8 @@ export function ApiResearchPage({
   symbol: string
   unavailableDomains?: string[]
 }) {
+  const latestRecord = records[0]
+  const previousRecords = records.slice(1)
   const missing = [
     ...unavailableDomains,
     ...(!quote ? ['Current market reference'] : []),
@@ -200,35 +206,50 @@ export function ApiResearchPage({
     <AppShell currentPath={`/research/${symbol}`}>
       <PageHeading asOf={asOf} eyebrow="Research · API Mode" title={`${symbol} research`} summary="Persisted research only; current market reference remains separate from historical decision evidence." />
       <StateBoundary state={state}>
+        {latestRecord ? <section className="decision-hero" aria-label="Latest research conclusion">
+          <div>
+            <p className="section-kicker">Latest research conclusion · {symbol}</p>
+            <h2>{latestRecord.opinion ? <Signal tone={latestRecord.opinion}>{latestRecord.opinion}</Signal> : 'Opinion unavailable'}</h2>
+            <p className="thesis-copy">{latestRecord.summary}</p>
+            <p className="research-freshness">Evidence cutoff <time dateTime={latestRecord.asOf}>{formatDualTime(latestRecord.asOf).newYork}</time></p>
+          </div>
+          <dl className="decision-facts"><div><dt>Confidence</dt><dd>{formatPercent(latestRecord.confidence, { signed: false })}</dd></div><div><dt>Direction</dt><dd>{latestRecord.direction}</dd></div><div><dt>Horizon</dt><dd>{latestRecord.horizon}</dd></div></dl>
+        </section> : null}
         <ResearchRunControl idempotencyKey={idempotencyKey} symbol={symbol} />
-        {quote ? <section className="decision-hero" aria-label="Latest persisted market quote">
+        {quote ? <section className="decision-hero" aria-label="Current market reference">
           <div><p className="section-kicker">Current market reference</p><h2>{quote.symbol}</h2><p className="thesis-copy">{formatMoney(quote.close, 'USD')}</p></div>
           <dl className="decision-facts"><div><dt>Provider</dt><dd>{quote.provider}</dd></div><div><dt>Coverage</dt><dd>{quote.coverage}</dd></div><div><dt>Available</dt><dd>{formatDualTime(quote.availableAt).newYork}</dd></div></dl>
         </section> : <p className="unavailable-value">Current quote unavailable.</p>}
         <p className="muted-copy">TradingView is a current-market reference only; it is not point-in-time decision evidence.</p>
         <TradingViewWidget kind="symbol-overview" symbol={symbol} />
-        {records.map((record) => <article className="terminal-section" key={record.id}>
-          <p className="section-kicker">Persisted thesis</p><h2>{record.direction}</h2><p>{record.summary}</p>
-          <dl className="decision-facts"><div><dt>Opinion</dt><dd>{record.opinion ? <Signal tone={record.opinion}>{record.opinion}</Signal> : 'Unavailable'}</dd></div><div><dt>Confidence</dt><dd>{formatPercent(record.confidence, { signed: false })}</dd></div><div><dt>Horizon</dt><dd>{record.horizon}</dd></div></dl>
-        </article>)}
-        {secFilings.length ? <section className="terminal-section" aria-labelledby="sec-filings-heading">
-          <p className="section-kicker">Persisted evidence</p><h2 id="sec-filings-heading">SEC filings</h2>
+        {previousRecords.length ? <details className="terminal-section research-disclosure">
+          <summary>Decision history · {previousRecords.length} previous</summary>
+          {previousRecords.map((record) => <article key={record.id}>
+            <p className="section-kicker">Previous persisted thesis</p><h2>{record.direction}</h2><p>{record.summary}</p>
+            <dl className="decision-facts"><div><dt>Opinion</dt><dd>{record.opinion ? <Signal tone={record.opinion}>{record.opinion}</Signal> : 'Unavailable'}</dd></div><div><dt>Confidence</dt><dd>{formatPercent(record.confidence, { signed: false })}</dd></div><div><dt>Horizon</dt><dd>{record.horizon}</dd></div><div><dt>As of</dt><dd><time dateTime={record.asOf}>{formatDualTime(record.asOf).newYork}</time></dd></div></dl>
+          </article>)}
+        </details> : null}
+        {secFilings.length ? <details className="terminal-section research-disclosure">
+          <summary>SEC filings · {secFilings.length}</summary>
+          <h2 id="sec-filings-heading">SEC filings</h2>
           <div className="table-scroll" tabIndex={0}><table aria-label="Persisted SEC filings"><thead><tr><th>Form</th><th>Filed</th><th>Report period</th><th>Accession</th><th>Available</th><th>Raw source</th></tr></thead><tbody>
             {secFilings.map((filing) => <tr key={filing.id}><td>{filing.form}</td><td>{filing.filingDate}</td><td>{filing.reportDate ?? 'Unavailable'}</td><td>{filing.accessionNumber}</td><td>{formatDualTime(filing.availableAt).newYork}</td><td><code>{filing.documentRawObjectKey}</code></td></tr>)}
           </tbody></table></div>
-        </section> : null}
-        {financialFacts.length ? <section className="terminal-section" aria-labelledby="financial-facts-heading">
-          <p className="section-kicker">Point-in-time fundamentals</p><h2 id="financial-facts-heading">Financial facts</h2>
+        </details> : null}
+        {financialFacts.length ? <details className="terminal-section research-disclosure">
+          <summary>Financial facts · {financialFacts.length}</summary>
+          <h2 id="financial-facts-heading">Financial facts</h2>
           <div className="table-scroll" tabIndex={0}><table aria-label="Persisted financial facts"><thead><tr><th>Concept</th><th>Value</th><th>Period</th><th>Mapping</th><th>Accession</th><th>Available</th></tr></thead><tbody>
             {financialFacts.map((fact) => <tr key={fact.id}><td>{fact.canonicalConcept ?? fact.sourceConcept}</td><td>{formatDecimal(fact.value)} {fact.currency ?? fact.unit}</td><td>{fact.periodStart} — {fact.periodEnd}</td><td>{fact.mappingStatus}</td><td>{fact.accessionNumber}</td><td>{formatDualTime(fact.availableAt).newYork}</td></tr>)}
           </tbody></table></div>
-        </section> : null}
-        {dataQuality.length ? <section className="terminal-section" aria-labelledby="sec-quality-heading">
-          <p className="section-kicker">Raw quality dimensions</p><h2 id="sec-quality-heading">SEC data quality</h2>
+        </details> : null}
+        {dataQuality.length ? <details className="terminal-section research-disclosure">
+          <summary>SEC data quality · {dataQuality.length}</summary>
+          <h2 id="sec-quality-heading">SEC data quality</h2>
           <div className="table-scroll" tabIndex={0}><table aria-label="Persisted SEC data quality"><thead><tr><th>Dataset</th><th>Dimension</th><th>Status</th><th>Freshness</th><th>Delay</th><th>Conflict</th><th>Observed</th></tr></thead><tbody>
             {dataQuality.map((quality) => <tr key={quality.id}><td>{quality.dataset}</td><td>{quality.dimension}</td><td>{quality.status}</td><td>{quality.freshness ?? 'Unavailable'}</td><td>{quality.delay ?? 'Unavailable'}</td><td>{quality.conflict ? 'Yes' : 'No'}</td><td>{formatDualTime(quality.observedAt).newYork}</td></tr>)}
           </tbody></table></div>
-        </section> : null}
+        </details> : null}
       </StateBoundary>
     </AppShell>
   )
@@ -237,9 +258,6 @@ export function ApiResearchPage({
 export function ApiPortfolioPage({ asOf, portfolio }: { asOf: string; portfolio: PortfolioSummary }) {
   const missing = [
     ...(!portfolio.latestNav ? ['NAV history'] : []),
-    ...(!portfolio.positions.length ? ['Positions'] : []),
-    ...(!portfolio.riskDecisions.length ? ['Risk decisions'] : []),
-    ...(!portfolio.fills.length ? ['Paper fills'] : []),
   ]
   return (
     <AppShell currentPath="/portfolio">
@@ -284,6 +302,8 @@ export function ApiWeeklyReviewPage({ asOf, detail }: { asOf: string; detail: We
         kind: 'degraded',
         title: 'Weekly review has no matured outcomes',
         message: 'The persisted review remains visible; missing outcomes are not substituted.',
+        actionHref: '/runs/latest',
+        actionLabel: 'Review latest run',
         providers: ['Matured outcomes'],
       } : { kind: 'success' }}>
         <section className="terminal-section first-section" aria-label="Weekly outcome summary">

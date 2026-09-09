@@ -77,6 +77,28 @@ describe('API mode fixture boundary', () => {
     expect(screen.queryByText(/fixture mode|frozen synthetic/i)).not.toBeInTheDocument()
   })
 
+  it('resolves the latest Run Trace alias before loading persisted metadata', async () => {
+    apiMode()
+    const latest = {
+      dataCutoff: '2026-08-31T12:00:00Z',
+      decisionTime: '2026-08-31T12:00:00Z',
+      runId: '10000000-0000-0000-0000-000000000099',
+      runType: 'RESEARCH',
+      status: 'RUNNING',
+      symbol: 'NVDA',
+    }
+    const getLatestResearchRun = vi.fn(async () => latest)
+    const getResearchRun = vi.fn()
+    vi.doMock('../lib/server/live-data-api', () => ({ getLatestResearchRun, getResearchRun }))
+    const { default: RunTraceRoute } = await import('../app/runs/[runId]/page')
+
+    render(await RunTraceRoute({ params: Promise.resolve({ runId: 'latest' }) }))
+
+    expect(getLatestResearchRun).toHaveBeenCalledWith(expect.objectContaining({ decisionTime: expect.any(String) }))
+    expect(getResearchRun).not.toHaveBeenCalled()
+    expect(screen.getByText(latest.runId)).toBeInTheDocument()
+  })
+
   it('does not merge Fixture policy data into API-mode Eval', async () => {
     apiMode()
     vi.doMock('../lib/server/live-data-api', () => ({ getEvalRuns: vi.fn(async () => ({ items: [], nextCursor: null })) }))

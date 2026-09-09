@@ -33,6 +33,7 @@ LOCKED_OPERATIONS = {
     ("PATCH", "/api/v1/watchlist/{symbol}"),
     ("DELETE", "/api/v1/watchlist/{symbol}"),
     ("POST", "/api/v1/research-runs"),
+    ("GET", "/api/v1/research-runs/latest"),
     ("GET", "/api/v1/research-runs/{run_id}"),
     ("GET", "/api/v1/research-runs/{run_id}/report"),
     ("GET", "/api/v1/stocks/{symbol}/research"),
@@ -219,6 +220,28 @@ def test_idempotency_replays_equal_requests_and_rejects_key_reuse(client: TestCl
     assert replay.headers["Idempotency-Replayed"] == "true"
     assert conflict.status_code == 409
     assert error(conflict)["code"] == "IDEMPOTENCY_CONFLICT"
+
+
+def test_latest_research_run_is_point_in_time_bounded(client: TestClient) -> None:
+    earlier = research_request("NVDA")
+    future = research_request("MSFT")
+    future["decision_time"] = "2026-08-23T21:00:00+00:00"
+    future["data_cutoff"] = future["decision_time"]
+    first = client.post(
+        "/api/v1/research-runs",
+        headers={"Idempotency-Key": f"latest-earlier-{uuid4()}"},
+        json=earlier,
+    )
+    client.post(
+        "/api/v1/research-runs",
+        headers={"Idempotency-Key": f"latest-future-{uuid4()}"},
+        json=future,
+    )
+
+    response = client.get("/api/v1/research-runs/latest?decision_time=2026-08-22T21:00:00Z")
+
+    assert response.status_code == 200
+    assert response.json() == first.json()
 
 
 def test_admission_limit_is_durable_and_cancellation_releases_capacity(

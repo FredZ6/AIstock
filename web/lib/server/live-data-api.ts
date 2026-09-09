@@ -417,6 +417,11 @@ export async function getResearchRun(options: LiveDataClientOptions, runId: stri
   ))
 }
 
+export async function getLatestResearchRun(options: LiveDataClientOptions): Promise<ResearchRun> {
+  const query = new URLSearchParams({ decision_time: options.decisionTime })
+  return researchRun(await requestJson(options, `/api/v1/research-runs/latest?${query}`))
+}
+
 export async function getResearchRunReport(
   options: LiveDataClientOptions,
   runId: string,

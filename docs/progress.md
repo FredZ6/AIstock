@@ -3350,3 +3350,63 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   probes subsequently agreed to the millisecond; the unchanged failing case then passed 1/1, and
   the full gate passed with the counts above. No timestamp assertion or migration behavior was
   weakened to hide the Docker clock resynchronization.
+
+## 2026-09-09 — Frontend P1 closure, ordered batch 1
+
+- Watchlist PIT/staleness RED: `pnpm --dir web test --run tests/watchlist-route.test.tsx
+  --reporter=verbose` exited 1 with 10 passed / 1 failed because the page displayed the latest
+  Watchlist configuration timestamp instead of the `decision_time` used by the quote query, and
+  old persisted quotes had no stale label. GREEN: the route now uses the exact query cutoff and
+  quotes older than the backend's 24-hour fallback ceiling retain their exact persistence time
+  while displaying `STALE` and its reason. Related Watchlist tests exited 0: 3 files / 47 passed;
+  TypeScript exited 0.
+- Run Trace latest-alias RED: focused Vitest exited 1 with 15 passed / 2 failed because no latest
+  client existed and `/runs/latest` was forwarded into the UUID detail endpoint. The focused API
+  contract test exited 1 with HTTP 422. GREEN: `GET /api/v1/research-runs/latest` selects only
+  RESEARCH runs whose aware `decision_time` is at or before the requested cutoff; the web route
+  resolves that alias before loading report/SSE data by the persisted UUID. Focused frontend tests
+  exited 0 with 2 files / 17 passed; focused API contract tests exited 0 with 2 passed.
+- Portfolio initialization RED: focused frontend testing exited 1 with 9 passed / 1 failed because
+  authoritative zero-length activity collections were labelled unavailable; the isolated database
+  test exited 1 because initialization wrote two ledger rows but no NAV row. GREEN: initialization
+  writes the opening NAV in the same transaction as the audited double-entry funding and remains
+  idempotent; zero positions, risk decisions and fills are rendered as authoritative empty history.
+  Focused frontend tests exited 0 with 10 passed; the complete initialization integration file
+  exited 0 with 5 passed.
+- Research hierarchy RED: focused component tests exited 1 with 2 failures because all persisted
+  theses and the complete SEC/XBRL payload were rendered at equal visual priority. GREEN: the newest
+  opinion, confidence, direction, horizon, summary and evidence cutoff now form one decision-first
+  conclusion; prior decisions and the complete SEC filing, financial-fact and quality tables remain
+  auditable behind closed-by-default disclosures. Related tests exited 0 with 19 passed. The live SEC
+  browser regression now deliberately opens each disclosure before asserting its persisted lineage.
+- TradingView mobile containment RED: focused tests exited 1 with 2 failures because the Symbol
+  Overview had neither a bounded horizontal scroll surface nor keyboard access. GREEN: only the
+  overview widget receives an internally scrollable mobile width, focus treatment and a named region;
+  the first browser accessibility run then correctly found its missing ARIA role (serious), a focused
+  RED test reproduced it, and the role fix passed 8/8 component tests plus the desktop/mobile axe
+  scan with zero serious or critical owned-DOM violations.
+- Watchlist density RED: the configuration regression exited 1 because zero symbol disclosures
+  existed. GREEN: each persisted or Fixture symbol retains all research, monitoring, threshold,
+  earnings and removal controls inside a closed-by-default settings disclosure; related tests exited
+  0 with 19 passed.
+- Recovery-action RED: `tests/page-states.test.tsx` exited 1 with 6 passed / 2 failed because Empty
+  and Degraded states exposed no accessible action. GREEN: the shared state contract supports an
+  explicit labelled destination, API collection pages link back to Today, Today links to Watchlist,
+  and an empty Weekly Review links to the latest Research run. The related 3-file suite exited 0 with
+  25 passed; TypeScript and ESLint exited 0.
+- Browser evidence: the broad mixed-environment Playwright attempt ran 34 tests and intentionally
+  exposed configuration-specific failures (API-only Watchlist persistence without FastAPI, a missing
+  generated Fixture evaluation report), plus the ARIA issue above and a development-server focus
+  race. After the ARIA fix, the accessibility cases passed in both profiles; the Skip-link case was
+  isolated from Next development recompilation and passed 2/2 across desktop/mobile. Route/readability
+  coverage in the broad run otherwise passed, including no document-level mobile overflow. TradingView
+  continues to emit its third-party iframe preload/credentials warning; owned code cannot safely alter
+  that cross-origin preload policy, so it remains a non-blocking external-console limitation.
+- Complete frontend verification exited 0: 30 files / 178 Vitest tests passed, followed sequentially
+  by TypeScript, ESLint and the Next.js production build. The first `make verify` attempt exited 1 at
+  Ruff formatting for two new test files; the second passed Ruff, Mypy and Alembic but exited 1 because
+  the new latest-run route made the committed OpenAPI snapshot stale. After deterministic formatting
+  and `scripts/export_openapi.py`, the final fresh `make verify` exited 0: Ruff format/check clean for
+  326 files, Mypy clean for 283 source files, no Alembic drift, OpenAPI/MCP/dependency checks passed,
+  backend 737 passed / 5 optional live-provider tests skipped, frontend 30 files / 178 passed, and
+  TypeScript, ESLint and Next.js production build passed. `git diff --check` exited 0.

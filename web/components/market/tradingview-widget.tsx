@@ -102,7 +102,13 @@ export function TradingViewWidget({ kind, symbol }: { kind: WidgetKind; symbol?:
         <span>Current market reference</span>
         <small>Not decision-time evidence</small>
       </div>
-      <div className="tradingview-widget-container" ref={container} />
+      <div
+        aria-label={kind === 'symbol-overview' ? `Scrollable ${symbol} TradingView overview` : undefined}
+        className="tradingview-widget-container"
+        ref={container}
+        role={kind === 'symbol-overview' ? 'region' : undefined}
+        tabIndex={kind === 'symbol-overview' ? 0 : undefined}
+      />
     </section>
   )
 }

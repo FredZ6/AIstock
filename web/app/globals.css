@@ -53,7 +53,8 @@ a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 table:focus-visible,
-.table-scroll:focus-visible {
+.table-scroll:focus-visible,
+.tradingview-widget-container:focus-visible {
   border-radius: 0.35rem;
   outline: 0.18rem solid var(--signal);
   outline-offset: 0.18rem;
@@ -113,7 +114,8 @@ a:active, button:active { transform: scale(0.98); transition: transform 100ms ea
 .state-detail-groups { display: grid; gap: 0.65rem; min-width: min(38rem, 80vw); padding-top: 0.7rem; }
 .state-detail-groups h3 { margin: 0; color: var(--muted); font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; }
 .state-detail-groups .state-tags { margin-top: 0.35rem; }
-.state-retry { display: inline-block; margin-top: 0.7rem; color: var(--negative); font-size: 0.75rem; font-weight: 700; }
+.state-retry { display: inline-block; margin-top: 0.7rem; color: var(--signal); font-size: 0.75rem; font-weight: 700; }
+.state-surface[data-state="failure"] .state-retry { color: var(--negative); }
 .state-surface[data-state="degraded"] > p,
 .state-surface[data-state="degraded"] > h2,
 .state-surface[data-state="degraded"] > ul,
@@ -401,6 +403,8 @@ button:hover { box-shadow: 0 0.65rem 1.5rem -0.85rem oklch(34% 0.08 255 / 0.4); 
 .watchlist-controls p { margin: 0.35rem 0 0; color: var(--text-tertiary); font-size: 0.7rem; }
 .watchlist-controls form { display: grid; grid-template-columns: minmax(8rem, 12rem) auto; gap: 0.35rem 0.6rem; }
 .watchlist-controls form label { grid-column: 1 / -1; color: var(--text-tertiary); font-size: 0.68rem; }
+.watchlist-config-list details > summary { min-height: 2.75rem; padding: 0.75rem 0; cursor: pointer; color: var(--text-secondary); font-size: 0.76rem; font-weight: 720; }
+.watchlist-config-list details[open] > summary { color: var(--signal); }
 input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--line); border-radius: 0.65rem; background: var(--ink); color: var(--text); font: inherit; }
 .research-run-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem 2rem; align-items: end; margin-top: var(--space-section); padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid color-mix(in oklch, var(--signal) 28%, var(--line)); border-radius: var(--radius-control); background: var(--surface-highlight); }
 .research-run-control h2 { margin: 0.4rem 0 0; font-size: clamp(1.1rem, 2vw, 1.5rem); }
@@ -449,6 +453,9 @@ input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--l
 .research-domain-grid p, .research-domain-grid strong { font-size: 0.72rem; line-height: 1.5; }
 .research-freshness { display: flex; flex-wrap: wrap; gap: 0.35rem 0.8rem; margin: 1rem 0 0; color: var(--text-tertiary); font-size: 0.7rem; }
 .research-freshness time { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.research-disclosure > summary { cursor: pointer; color: var(--signal); font-size: 0.78rem; font-weight: 750; letter-spacing: 0.04em; }
+.research-disclosure[open] > summary { margin-bottom: 1.5rem; }
+.research-disclosure > article + article { margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--line-soft); }
 
 .performance-overview { margin: clamp(1.5rem, 3vw, 2.5rem) 0 0; overflow: hidden; border: 1px solid var(--line); border-radius: clamp(1.35rem, 2vw, 2rem); background: var(--ink-raised); box-shadow: 0 1.25rem 3.5rem -2.65rem oklch(34% 0.065 255 / 0.34), inset 0 1px 0 oklch(100% 0 0 / 0.92); }
 .performance-head { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding: clamp(1.35rem, 3vw, 2.25rem); border-bottom: 1px solid var(--line-soft); }
@@ -582,6 +589,8 @@ input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--l
   .approval-panel { padding-left: 0; border-left: 0; }
   .market-widget-heading { align-items: flex-start; flex-direction: column; gap: 0.2rem; }
   .market-widget-symbol-overview { height: 27rem; }
+  .market-widget-symbol-overview .tradingview-widget-container { overflow-x: auto; overscroll-behavior-inline: contain; }
+  .market-widget-symbol-overview .tradingview-widget-container__widget { min-width: 38rem; }
   .performance-head { align-items: flex-start; flex-direction: column; }
   .performance-facts { grid-template-columns: 1fr; gap: 1rem; }
   .performance-facts div + div { padding: 1rem 0 0; border-top: 1px solid var(--line-soft); border-left: 0; }

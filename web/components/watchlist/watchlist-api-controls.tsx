@@ -12,12 +12,15 @@ import {
 import type { ApiWatchlistItem } from '../../lib/product-types'
 import type { MarketQuote } from '../../lib/server/live-data-api'
 import { formatMoney } from '../../lib/format'
-import { formatDualTime } from '../../lib/time'
+import { formatDualTime, parseAwareInstant } from '../../lib/time'
 import {
   initialWatchlistActionState,
   type WatchlistActionState,
 } from '../../lib/watchlist-action-state'
 import { companyName } from './watchlist-display'
+import { Signal } from '../ui/product-ui'
+
+const MAX_VISIBLE_QUOTE_AGE_MS = 24 * 60 * 60 * 1000
 
 function SubmitButton({ label, pendingLabel }: { label: string; pendingLabel: string }) {
   const { pending } = useFormStatus()
@@ -85,7 +88,7 @@ function PersistedSettings({ item }: { item: ApiWatchlistItem }) {
   )
 }
 
-export function WatchlistApiControls({ items, quotes }: { items: ApiWatchlistItem[]; quotes: MarketQuote[] }) {
+export function WatchlistApiControls({ asOf, items, quotes }: { asOf: string; items: ApiWatchlistItem[]; quotes: MarketQuote[] }) {
   const quoteBySymbol = new Map(quotes.map((quote) => [quote.symbol, quote]))
   return (
     <section className="terminal-section first-section" aria-labelledby="watchlist-api-count">
@@ -99,6 +102,9 @@ export function WatchlistApiControls({ items, quotes }: { items: ApiWatchlistIte
       <ol className="ranked-watchlist" aria-label="Ranked research watchlist">
         {items.map((item, index) => {
           const quote = quoteBySymbol.get(item.symbol)
+          const quoteIsStale = quote
+            ? parseAwareInstant(asOf).getTime() - parseAwareInstant(quote.availableAt).getTime() > MAX_VISIBLE_QUOTE_AGE_MS
+            : false
           return <li key={item.symbol}>
             <span className="watchlist-rank" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
             <div className="watchlist-identity">
@@ -112,9 +118,11 @@ export function WatchlistApiControls({ items, quotes }: { items: ApiWatchlistIte
             </div>
             <div className="watchlist-provenance">
               <span>{quote ? `${quote.provider} · ${quote.coverage}` : 'Quality unavailable'}</span>
+              {quoteIsStale ? <Signal tone="stale">STALE</Signal> : null}
               {quote
                 ? <time dateTime={quote.availableAt}>Persisted {formatDualTime(quote.availableAt).newYork}</time>
                 : <span className="unavailable-value">Persistence time unavailable</span>}
+              {quoteIsStale ? <span>Quote older than 24 hours at snapshot</span> : null}
             </div>
           </li>
         })}
@@ -127,8 +135,10 @@ export function WatchlistApiControls({ items, quotes }: { items: ApiWatchlistIte
         <div className="watchlist-controls"><AddWatchlistForm /></div>
         <div className="watchlist-config-list">
           {items.map((item) => <section aria-label={`${item.symbol} settings`} key={item.symbol}>
-            <h4>{item.symbol}</h4>
-            <PersistedSettings item={item} />
+            <details>
+              <summary>{item.symbol} settings</summary>
+              <PersistedSettings item={item} />
+            </details>
           </section>)}
         </div>
       </section>

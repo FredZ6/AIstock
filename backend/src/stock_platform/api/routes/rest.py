@@ -637,6 +637,29 @@ def create_research_run(
     )
 
 
+@router.get("/research-runs/latest", response_model=RunResponse)
+def get_latest_research_run(
+    decision_time: datetime, connection: ConnectionDependency
+) -> RunResponse:
+    cutoff = _aware_query_time(decision_time, "decision_time")
+    row = (
+        connection.execute(
+            select(agent_run)
+            .where(
+                agent_run.c.run_type == "RESEARCH",
+                agent_run.c.decision_time <= cutoff,
+            )
+            .order_by(agent_run.c.decision_time.desc(), agent_run.c.created_at.desc())
+            .limit(1)
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if row is None:
+        raise ApiError(404, "NOT_FOUND", "No research run exists at this decision time")
+    return _run_response(row)
+
+
 @router.get("/research-runs/{run_id}", response_model=RunResponse)
 def get_research_run(run_id: UUID, connection: ConnectionDependency) -> RunResponse:
     row = (
@@ -1316,6 +1339,14 @@ def initialize_portfolio(
             config["initial_cash"],
             config["currency"],
             effective_at,
+        )
+    )
+    connection.execute(
+        insert(portfolio_nav).values(
+            portfolio_id=config["id"],
+            nav=config["initial_cash"],
+            event_time=effective_at,
+            available_at=effective_at,
         )
     )
     response.headers["Idempotency-Replayed"] = "false"

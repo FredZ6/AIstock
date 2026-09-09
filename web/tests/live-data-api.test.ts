@@ -4,6 +4,7 @@ import {
   createResearchRun,
   getDataQuality,
   getMarketQuotes,
+  getLatestResearchRun,
   getPortfolioSummary,
   getProviderHealth,
   getStockResearch,
@@ -23,6 +24,23 @@ function jsonResponse(value: unknown, status = 200) {
 const options = { baseUrl: 'http://api.test', decisionTime: '2026-08-29T09:30:00Z' }
 
 describe('live data API client', () => {
+  it('loads the latest research run at the requested point-in-time cutoff', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      data_cutoff: options.decisionTime,
+      decision_time: options.decisionTime,
+      run_id: '10000000-0000-0000-0000-000000000099',
+      run_type: 'RESEARCH',
+      status: 'RUNNING',
+      symbol: 'NVDA',
+    }))
+
+    await expect(getLatestResearchRun({ ...options, fetchImpl })).resolves.toMatchObject({ symbol: 'NVDA' })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://api.test/api/v1/research-runs/latest?decision_time=${encodeURIComponent(options.decisionTime)}`,
+      expect.objectContaining({ cache: 'no-store' }),
+    )
+  })
+
   it('parses the closed research report without weakening Decimal or timestamp contracts', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       run_id: 'run-1',
