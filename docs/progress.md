@@ -3472,3 +3472,27 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   tests skipped, frontend 30 files / 184 passed, and TypeScript, ESLint and the Next.js production
   build passed. Existing jsdom local-storage and cross-realm AbortSignal diagnostics remain
   non-failing test noise tracked by FRE-38. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-09 — M8.1 frontend product closure, FRE-30 authoritative Today state
+
+- Today state RED: `npm test -- --run tests/home.test.tsx
+  tests/api-route-degradation.test.tsx` exited 1 with 3 failures because API mode always declared
+  Research decisions, Alerts and Market regime unavailable, even when the corresponding persisted
+  facts were available. The new success regression also proved that Alerts and Research were not
+  requested or rendered.
+- GREEN: Today now requests Watchlist configuration, current persisted quotes, provider health,
+  paper-portfolio summary, Alerts and per-symbol Research concurrently where possible. Its
+  unavailable groups are derived only from rejected responses, provider coverage, quote quality and
+  missing symbols. A successful empty collection remains an authoritative empty fact; a partial
+  failure preserves every fulfilled fact and never imports Fixture data. Provider health, current
+  research conclusions, Alerts, paper NAV and the exact aware PIT cutoff are rendered when supplied
+  by their locked contracts. No Market Context success is invented because the current locked REST
+  surface does not expose one.
+- Focused verification exited 0 with 2 files / 7 tests passed. Complete frontend Vitest exited 0
+  with 30 files / 185 tests passed. ESLint, TypeScript and the Next.js production build all exited
+  0. Existing jsdom local-storage and cross-realm AbortSignal diagnostics remain expected,
+  non-failing test noise tracked by FRE-38.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI checks passed, backend 742 passed / 5 optional live-provider
+  tests skipped, frontend 30 files / 185 passed, and TypeScript, ESLint and the Next.js production
+  build passed. `git diff --check` exited 0. No push, PR or merge is claimed by this checkpoint.

@@ -99,7 +99,7 @@ describe('API mode pages', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument()
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
-    expect(screen.getByText(/ALPACA · IEX/)).toBeInTheDocument()
+    expect(screen.getAllByText(/ALPACA · IEX/)).toHaveLength(2)
     expect(screen.getByRole('region', { name: 'Current market reference' })).toBeInTheDocument()
     expect(screen.queryByRole('list', { name: 'Latest persisted quotes' })).not.toBeInTheDocument()
     const evidence = screen.getByText('Persisted quote evidence · 1 symbol').closest('details')

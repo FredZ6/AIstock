@@ -174,16 +174,20 @@ export function ApiRunMetadataPage({ run, report }: { run: ResearchRun; report?:
 }
 
 export function ApiTodayPage({
+  alerts = [],
   asOf,
   health,
   portfolio,
   quotes,
+  research = [],
   unavailableDomains = [],
 }: {
+  alerts?: AlertRecord[]
   asOf: string
   health: ProviderHealth | null
   portfolio: PortfolioSummary | null
   quotes: MarketQuote[]
+  research?: ResearchRecord[]
   unavailableDomains?: string[]
 }) {
   const unavailableProviders = health ? Object.entries(health.providers)
@@ -195,24 +199,28 @@ export function ApiTodayPage({
   const decisionDomains = unavailableDomains.filter(
     (domain) => !providerDomains.includes(domain) && !marketDomains.includes(domain),
   )
-  const decisionFacts = [...decisionDomains, 'Research decisions', 'Alerts']
-  if (!portfolio?.latestNav) decisionFacts.push('Portfolio NAV')
+  const decisionFacts = [...decisionDomains]
+  if (portfolio && !portfolio.latestNav) decisionFacts.push('Portfolio NAV')
   const groups = [
     { label: 'Provider', items: unique([...providerDomains, ...unavailableProviders]) },
-    { label: 'Market Data', items: unique([...marketDomains, 'Market regime']) },
+    { label: 'Market Data', items: unique(marketDomains) },
     { label: 'Decision Domain', items: unique(decisionFacts) },
   ].filter((group) => group.items.length)
   return (
     <AppShell currentPath="/">
       <PageHeading asOf={asOf} eyebrow="Decision workspace · API Mode" title="Today" summary="Current persisted facts, with unavailable domains left explicit." />
-      <StateBoundary compact state={{
-        kind: 'degraded',
+      <StateBoundary compact state={groups.length ? {
+        kind: 'degraded' as const,
         title: 'Some decision facts are unavailable',
         message: 'Available backend facts remain visible. No Fixture data was substituted.',
         actionHref: '/watchlist',
         actionLabel: 'Review watchlist',
         groups,
-      }}>
+      } : { kind: 'success' as const }}>
+        {health ? <section className="terminal-section first-section" aria-labelledby="provider-health-title">
+          <div className="section-heading"><div><p className="section-kicker">Runtime coverage</p><h2 id="provider-health-title">Provider health</h2></div><span className="muted-copy">{health.mode} · read only</span></div>
+          <ul className="plain-list" aria-label="Provider health facts">{Object.entries(health.providers).map(([name, provider]) => <li key={name}><strong>{name.toUpperCase()}</strong><p>{provider.coverage ? `${name.toUpperCase()} · ${provider.coverage} · ${provider.status ?? 'UNAVAILABLE'}` : `${provider.mode} · ${provider.status ?? 'UNAVAILABLE'}`}</p></li>)}</ul>
+        </section> : null}
         <section className="terminal-section first-section" aria-labelledby="live-market-title">
           <div className="section-heading">
             <div><p className="section-kicker">External current market</p><h2 id="live-market-title">Market watchlist</h2></div>
@@ -232,6 +240,14 @@ export function ApiTodayPage({
             </ul>
           </details>
         </section>
+        {research.length ? <section className="terminal-section" aria-labelledby="today-research-title">
+          <div className="section-heading"><div><p className="section-kicker">Latest persisted conclusions</p><h2 id="today-research-title">Research decisions</h2></div><Link href={`/research/${research[0].symbol}`}>Open research</Link></div>
+          <ul className="lineage-list">{research.map((record) => <li key={record.id}><div className="section-heading"><strong>{record.symbol}</strong>{record.opinion ? <Signal tone={record.opinion}>{record.opinion}</Signal> : null}</div><p>{record.summary}</p><small>Confidence {formatPercent(record.confidence, { signed: false })} · cutoff <time dateTime={record.asOf}>{formatDualTime(record.asOf).newYork}</time></small></li>)}</ul>
+        </section> : null}
+        {alerts.length ? <section className="terminal-section" aria-labelledby="today-alerts-title">
+          <div className="section-heading"><div><p className="section-kicker">Actionable persisted events</p><h2 id="today-alerts-title">Alerts</h2></div><Link href="/alerts">View all</Link></div>
+          <ul className="lineage-list">{alerts.map((alert) => <li key={alert.id}><div className="section-heading"><strong>{alert.symbol}</strong><Signal tone={alert.severity}>{alert.severity}</Signal></div><p>{alert.ruleId} · {alert.ruleVersion}</p><small>Materiality {formatPercent(alert.materiality, { signed: false })} · <time dateTime={alert.eventTime}>{formatDualTime(alert.eventTime).newYork}</time></small></li>)}</ul>
+        </section> : null}
         <section className="terminal-section" aria-labelledby="paper-portfolio-title">
           <p className="section-kicker">Paper only</p><h2 id="paper-portfolio-title">Paper portfolio</h2>
           {portfolio?.latestNav
