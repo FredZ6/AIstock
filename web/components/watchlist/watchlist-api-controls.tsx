@@ -10,8 +10,9 @@ import {
   updateWatchlistAction,
 } from '../../app/watchlist/actions'
 import type { ApiWatchlistItem } from '../../lib/product-types'
-import type { MarketQuote } from '../../lib/server/live-data-api'
-import { formatMoney } from '../../lib/format'
+import type { EarningsEvent, MarketBar, MarketQuote } from '../../lib/server/live-data-api'
+import { decimalChange, normalizeDecimalSeries } from '../../lib/decimal'
+import { formatMoney, formatPercent } from '../../lib/format'
 import { formatDualTime, parseAwareInstant } from '../../lib/time'
 import {
   initialWatchlistActionState,
@@ -50,11 +51,32 @@ function AddWatchlistForm() {
   )
 }
 
-function PersistedSettings({ item }: { item: ApiWatchlistItem }) {
+function PersistedTrend({ bars, symbol }: { bars: MarketBar[]; symbol: string }) {
+  if (bars.length < 2) {
+    return <div className="watchlist-trend unavailable-value" aria-label={`${symbol} compact trend`}>Trend unavailable</div>
+  }
+  const normalized = normalizeDecimalSeries(bars.map((bar) => bar.close))
+  const points = normalized.map((value, index) => {
+    const x = normalized.length === 1 ? 48 : index * 96 / (normalized.length - 1)
+    return `${x},${28 - value * 24}`
+  }).join(' ')
+  return <div className="watchlist-trend" data-direction={decimalChange(bars.at(-1)!.close, bars[0].close).startsWith('-') ? 'negative' : 'positive'}>
+    <svg aria-label={`${symbol} persisted ${bars.length}-session trend`} role="img" viewBox="0 0 96 32">
+      <polyline points={points} vectorEffect="non-scaling-stroke" />
+    </svg>
+  </div>
+}
+
+function PersistedSettings({ asOf, earnings, item }: { asOf: string; earnings?: EarningsEvent[]; item: ApiWatchlistItem }) {
   const update = updateWatchlistAction.bind(null, item.symbol)
   const remove = deleteWatchlistAction.bind(null, item.symbol)
   const [updateState, updateAction] = useActionState(update, initialWatchlistActionState)
   const [deleteState, deleteAction] = useActionState(remove, initialWatchlistActionState)
+  const nextEarnings = earnings?.find((event) => event.eventDate >= asOf.slice(0, 10))
+  const earningsDate = nextEarnings
+    ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+      .format(new Date(`${nextEarnings.eventDate}T00:00:00Z`))
+    : null
 
   return (
     <div className="watchlist-api-actions">
@@ -83,12 +105,29 @@ function PersistedSettings({ item }: { item: ApiWatchlistItem }) {
         <SubmitButton label={`Delete ${item.symbol}`} pendingLabel={`Deleting ${item.symbol}…`} />
         <ActionMessage state={deleteState} />
       </form>
-      <p className="watchlist-setting-note">Earnings schedule unavailable</p>
+      {nextEarnings ? <details className="watchlist-provenance-details">
+        <summary>Next earnings {earningsDate}</summary>
+        <p>{nextEarnings.provider} · available <time dateTime={nextEarnings.availableAt}>{formatDualTime(nextEarnings.availableAt).newYork}</time></p>
+        <code>{nextEarnings.rawObjectKey}</code>
+        <small>{nextEarnings.contentHash}</small>
+      </details> : earnings ? <p className="watchlist-setting-note">No persisted upcoming earnings at this cutoff</p> : <p className="watchlist-setting-note">Earnings schedule unavailable</p>}
     </div>
   )
 }
 
-export function WatchlistApiControls({ asOf, items, quotes }: { asOf: string; items: ApiWatchlistItem[]; quotes: MarketQuote[] }) {
+export function WatchlistApiControls({
+  asOf,
+  earningsBySymbol = {},
+  historiesBySymbol = {},
+  items,
+  quotes,
+}: {
+  asOf: string
+  earningsBySymbol?: Record<string, EarningsEvent[]>
+  historiesBySymbol?: Record<string, MarketBar[]>
+  items: ApiWatchlistItem[]
+  quotes: MarketQuote[]
+}) {
   const quoteBySymbol = new Map(quotes.map((quote) => [quote.symbol, quote]))
   return (
     <section className="terminal-section first-section" aria-labelledby="watchlist-api-count">
@@ -102,6 +141,13 @@ export function WatchlistApiControls({ asOf, items, quotes }: { asOf: string; it
       <ol className="ranked-watchlist" aria-label="Ranked research watchlist">
         {items.map((item, index) => {
           const quote = quoteBySymbol.get(item.symbol)
+          const history = historiesBySymbol[item.symbol] ?? []
+          const latestBar = history.at(-1)
+          const previousBar = history.at(-2)
+          const dailyChange = latestBar && previousBar ? decimalChange(latestBar.close, previousBar.close) : null
+          const historyIsStale = latestBar
+            ? parseAwareInstant(asOf).getTime() - parseAwareInstant(latestBar.availableAt).getTime() > MAX_VISIBLE_QUOTE_AGE_MS
+            : false
           const quoteIsStale = quote
             ? parseAwareInstant(asOf).getTime() - parseAwareInstant(quote.availableAt).getTime() > MAX_VISIBLE_QUOTE_AGE_MS
             : false
@@ -111,10 +157,10 @@ export function WatchlistApiControls({ asOf, items, quotes }: { asOf: string; it
               <Link href={`/research/${item.symbol}`}>{item.symbol}</Link>
               <span>{companyName(item.symbol)}</span>
             </div>
-            <div className="watchlist-trend unavailable-value" aria-label={`${item.symbol} compact trend`}>Trend unavailable</div>
+            <PersistedTrend bars={history} symbol={item.symbol} />
             <div className="watchlist-quote">
               <strong className={quote ? undefined : 'unavailable-value'}>{quote ? formatMoney(quote.close, 'USD') : 'Price unavailable'}</strong>
-              <span className="unavailable-value">Change unavailable</span>
+              <span className={dailyChange ? undefined : 'unavailable-value'}>{dailyChange ? formatPercent(dailyChange) : 'Change unavailable'}</span>
             </div>
             <div className="watchlist-provenance">
               <span>{quote ? `${quote.provider} · ${quote.coverage}` : 'Quality unavailable'}</span>
@@ -123,6 +169,15 @@ export function WatchlistApiControls({ asOf, items, quotes }: { asOf: string; it
                 ? <time dateTime={quote.availableAt}>Persisted {formatDualTime(quote.availableAt).newYork}</time>
                 : <span className="unavailable-value">Persistence time unavailable</span>}
               {quoteIsStale ? <span>Quote older than 24 hours at snapshot</span> : null}
+              {historyIsStale ? <Signal tone="stale">TREND STALE</Signal> : null}
+              {historyIsStale ? <span>Historical trend older than 24 hours at snapshot</span> : null}
+              {latestBar ? <details className="watchlist-provenance-details">
+                <summary>PIT cutoff {formatDualTime(asOf).newYork}</summary>
+                <span>Bar event <time dateTime={latestBar.eventTime}>{formatDualTime(latestBar.eventTime).newYork}</time></span>
+                <span>Available <time dateTime={latestBar.availableAt}>{formatDualTime(latestBar.availableAt).newYork}</time></span>
+                <code>{latestBar.rawObjectKey}</code>
+                <small>{latestBar.contentHash}</small>
+              </details> : null}
             </div>
           </li>
         })}
@@ -137,7 +192,7 @@ export function WatchlistApiControls({ asOf, items, quotes }: { asOf: string; it
           {items.map((item) => <section aria-label={`${item.symbol} settings`} key={item.symbol}>
             <details>
               <summary>{item.symbol} settings</summary>
-              <PersistedSettings item={item} />
+              <PersistedSettings asOf={asOf} earnings={earningsBySymbol[item.symbol]} item={item} />
             </details>
           </section>)}
         </div>

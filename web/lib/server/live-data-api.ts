@@ -63,6 +63,20 @@ export type MarketQuote = {
   symbol: string
 }
 
+export type MarketBar = MarketQuote & {
+  conflict: boolean
+  contentHash: string
+  feedType: string
+  high: string
+  ingestedAt: string
+  low: string
+  open: string
+  rawObjectKey: string
+  session: 'PRE_MARKET' | 'REGULAR' | 'AFTER_HOURS' | 'OVERNIGHT'
+  timeframe: '1Min' | '1Day'
+  volume: string
+}
+
 export type ProviderHealth = {
   mode: 'fixture' | 'paper' | 'test'
   providers: Record<string, {
@@ -763,6 +777,55 @@ export async function getMarketQuotes(
           availableAt: instant(row.available_at, 'quote.available_at'),
         }
       }),
+    }
+  })
+}
+
+export async function getHistoricalBars(
+  options: LiveDataClientOptions,
+  symbol: string,
+  start: string,
+  end: string,
+): Promise<{ decisionTime: string; items: MarketBar[]; status: LiveDataStatus }> {
+  if (!symbolPattern.test(symbol)) throw new LiveDataApiError('contract', 'Bar symbol is invalid')
+  const query = new URLSearchParams({
+    decision_time: instant(options.decisionTime, 'bars.decision_time'),
+    end: instant(end, 'bars.end'),
+    limit: '45',
+    start: instant(start, 'bars.start'),
+    timeframe: '1Day',
+  })
+  const value = await requestJson(options, `/api/v1/market-data/bars/${symbol}?${query}`)
+  return contract(() => {
+    const source = record(value, 'bars')
+    if (!Array.isArray(source.items)) throw new TypeError('bars.items must be an array')
+    return {
+      decisionTime: instant(source.decision_time, 'bars.decision_time'),
+      items: source.items.map((item, index) => {
+        const row = record(item, `bars.items[${index}]`)
+        const rowSymbol = text(row.symbol, 'bar.symbol')
+        if (rowSymbol !== symbol) throw new TypeError('bar.symbol does not match the requested symbol')
+        return {
+          availableAt: instant(row.available_at, 'bar.available_at'),
+          close: decimal(row.close, 'bar.close'),
+          conflict: booleanValue(row.conflict, 'bar.conflict'),
+          contentHash: text(row.content_hash, 'bar.content_hash'),
+          coverage: enumeration(row.coverage, ['IEX', 'SIP'] as const, 'bar.coverage'),
+          eventTime: instant(row.event_time, 'bar.event_time'),
+          feedType: text(row.feed_type, 'bar.feed_type'),
+          high: decimal(row.high, 'bar.high'),
+          ingestedAt: instant(row.ingested_at, 'bar.ingested_at'),
+          low: decimal(row.low, 'bar.low'),
+          open: decimal(row.open, 'bar.open'),
+          provider: text(row.provider, 'bar.provider'),
+          rawObjectKey: text(row.raw_object_key, 'bar.raw_object_key'),
+          session: enumeration(row.session, ['PRE_MARKET', 'REGULAR', 'AFTER_HOURS', 'OVERNIGHT'] as const, 'bar.session'),
+          symbol: rowSymbol,
+          timeframe: enumeration(row.timeframe, ['1Min', '1Day'] as const, 'bar.timeframe'),
+          volume: decimal(row.volume, 'bar.volume'),
+        }
+      }),
+      status: enumeration(source.status, ['SUCCESS', 'DEGRADED', 'FAILURE'] as const, 'bars.status'),
     }
   })
 }

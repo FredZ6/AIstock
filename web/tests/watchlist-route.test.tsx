@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiWatchlistPage } from '../components/watchlist/watchlist-page'
@@ -16,6 +16,28 @@ const apiRow = {
   updatedAt: '2026-08-23T00:05:00+00:00',
 }
 
+function marketBar(close: string, eventTime: string, contentHash = 'a'.repeat(64)) {
+  return {
+    availableAt: eventTime,
+    close,
+    conflict: false,
+    contentHash,
+    coverage: 'IEX' as const,
+    eventTime,
+    feedType: 'price_bars',
+    high: close,
+    ingestedAt: eventTime,
+    low: close,
+    open: close,
+    provider: 'ALPACA',
+    rawObjectKey: `live/ALPACA/price_bars/${contentHash}.json`,
+    session: 'REGULAR' as const,
+    symbol: 'NVDA',
+    timeframe: '1Day' as const,
+    volume: '1000',
+  }
+}
+
 async function mockWatchlistRead(implementation: () => unknown | Promise<unknown>) {
   vi.doMock('../lib/server/watchlist-api', async (importOriginal) => {
     const original = await importOriginal<typeof import('../lib/server/watchlist-api')>()
@@ -26,7 +48,15 @@ async function mockWatchlistRead(implementation: () => unknown | Promise<unknown
 async function mockMarketQuotes(implementation: (...args: unknown[]) => unknown | Promise<unknown>) {
   vi.doMock('../lib/server/live-data-api', async (importOriginal) => {
     const original = await importOriginal<typeof import('../lib/server/live-data-api')>()
-    return { ...original, getMarketQuotes: vi.fn(async (...args: unknown[]) => implementation(...args)) }
+    return {
+      ...original,
+      getHistoricalBars: vi.fn(async () => ({ decisionTime: '2026-08-29T09:30:00Z', items: [], status: 'FAILURE' })),
+      getMarketQuotes: vi.fn(async (...args: unknown[]) => implementation(...args)),
+      getStockResearch: vi.fn(async () => ({
+        earningsEvents: [], financialFacts: [], newsArticles: [], optionSnapshots: [], records: [],
+        secFilings: [], unavailableDomains: ['EARNINGS'],
+      })),
+    }
   })
 }
 
@@ -246,6 +276,95 @@ describe('Watchlist route data boundaries', () => {
     expect(row).toHaveTextContent('Change unavailable')
     expect(row).toHaveTextContent('ALPACA · IEX')
     expect(row).toHaveTextContent('Persisted Aug 29, 2026')
+  })
+
+  it('renders persisted bar change, compact trend, provenance, and earnings schedule', () => {
+    const contentHash = 'a'.repeat(64)
+
+    render(<ApiWatchlistPage
+      asOf="2026-08-29T09:30:00Z"
+      earningsBySymbol={{
+        NVDA: [{
+          availableAt: '2026-08-29T09:20:00Z', contentHash: 'b'.repeat(64), currency: 'USD',
+          estimate: '0.95', eventDate: '2026-09-20', eventTime: '2026-08-29T09:00:00Z',
+          fiscalDateEnd: '2026-06-30', id: 'earnings-1', provider: 'ALPHA_VANTAGE',
+          rawObjectKey: 'live/earnings/NVDA.csv',
+        }],
+      }}
+      historiesBySymbol={{ NVDA: [
+        marketBar('100', '2026-08-27T20:00:00Z'),
+        marketBar('105', '2026-08-28T20:00:00Z'),
+        marketBar('110', '2026-08-29T09:20:00Z'),
+      ] }}
+      items={[apiRow]}
+      quotes={[{
+        availableAt: '2026-08-29T09:20:00Z', close: '110', coverage: 'IEX',
+        eventTime: '2026-08-29T09:20:00Z', provider: 'ALPACA', symbol: 'NVDA',
+      }]}
+    />)
+
+    const row = within(screen.getByRole('list', { name: 'Ranked research watchlist' })).getByRole('listitem')
+    expect(within(row).getByText('+4.76%')).toBeInTheDocument()
+    expect(within(row).getByRole('img', { name: 'NVDA persisted 3-session trend' })).toBeInTheDocument()
+    expect(row).toHaveTextContent('PIT cutoff Aug 29, 2026')
+    expect(row).toHaveTextContent(`live/ALPACA/price_bars/${contentHash}.json`)
+    const configuration = screen.getByRole('region', { name: 'Watchlist configuration' })
+    fireEvent.click(within(configuration).getByText('NVDA settings'))
+    fireEvent.click(within(configuration).getByText('Next earnings Sep 20, 2026'))
+    expect(within(configuration).getByText(/ALPHA_VANTAGE/)).toBeInTheDocument()
+    expect(within(configuration).getByText('live/earnings/NVDA.csv')).toBeInTheDocument()
+  })
+
+  it('keeps stale trend history explicit even when the current quote is fresh', () => {
+    render(<ApiWatchlistPage
+      asOf="2026-09-08T09:30:00Z"
+      earningsBySymbol={{ NVDA: [] }}
+      historiesBySymbol={{ NVDA: [
+        marketBar('100', '2026-09-01T20:00:00Z'),
+        marketBar('101', '2026-09-02T20:00:00Z'),
+      ] }}
+      items={[apiRow]}
+      quotes={[{
+        availableAt: '2026-09-08T09:20:00Z', close: '102', coverage: 'IEX',
+        eventTime: '2026-09-08T09:19:00Z', provider: 'ALPACA', symbol: 'NVDA',
+      }]}
+    />)
+
+    expect(screen.getByRole('status')).toHaveTextContent('NVDA trend stale')
+    const row = within(screen.getByRole('list', { name: 'Ranked research watchlist' })).getByRole('listitem')
+    expect(row).toHaveTextContent('Historical trend older than 24 hours at snapshot')
+  })
+
+  it('loads bar and earnings enrichment with the same aware decision cutoff', async () => {
+    let historyCutoff: string | undefined
+    let researchCutoff: string | undefined
+    process.env.WEB_DATA_MODE = 'api'
+    process.env.API_BASE_URL = 'http://127.0.0.1:8000'
+    await mockWatchlistRead(() => [apiRow])
+    vi.doMock('../lib/server/live-data-api', async (importOriginal) => {
+      const original = await importOriginal<typeof import('../lib/server/live-data-api')>()
+      return {
+        ...original,
+        getHistoricalBars: vi.fn(async (options: { decisionTime: string }) => {
+          historyCutoff = options.decisionTime
+          return { decisionTime: options.decisionTime, items: [], status: 'FAILURE' }
+        }),
+        getMarketQuotes: vi.fn(async () => ({ items: [], missingSymbols: ['NVDA'], status: 'FAILURE' })),
+        getStockResearch: vi.fn(async (options: { decisionTime: string }) => {
+          researchCutoff = options.decisionTime
+          return {
+            earningsEvents: [], financialFacts: [], newsArticles: [], optionSnapshots: [],
+            records: [], secFilings: [], unavailableDomains: ['EARNINGS'],
+          }
+        }),
+      }
+    })
+    const { default: WatchlistRoute } = await import('../app/watchlist/page')
+
+    render(await WatchlistRoute())
+
+    expect(historyCutoff).toBeDefined()
+    expect(researchCutoff).toBe(historyCutoff)
   })
 
   it('keeps all persisted watchlist mutations in one labelled configuration region', () => {

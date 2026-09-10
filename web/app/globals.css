@@ -439,8 +439,13 @@ input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--l
 .watchlist-identity span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .watchlist-trend { color: var(--positive); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .watchlist-trend[data-direction="negative"] { color: var(--negative); }
+.watchlist-trend svg { display: block; width: 6rem; height: 2rem; overflow: visible; }
+.watchlist-trend polyline { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .watchlist-quote strong { font-size: 0.95rem; font-variant-numeric: tabular-nums; }
 .watchlist-provenance time { color: var(--text-secondary); }
+.watchlist-provenance-details { min-width: 0; }
+.watchlist-provenance-details summary { cursor: pointer; color: var(--text-secondary); }
+.watchlist-provenance-details code, .watchlist-provenance-details small { display: block; max-width: 100%; overflow-wrap: anywhere; }
 .watchlist-configuration { margin-top: var(--space-section); padding-top: var(--space-section); border-top: 1px solid var(--line); }
 .watchlist-configuration h3 { margin: 0.4rem 0 0; }
 .watchlist-config-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--line-soft); }

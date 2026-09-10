@@ -6,6 +6,7 @@ import {
   getDataQuality,
   getEvalRunDetail,
   getEvalRuns,
+  getHistoricalBars,
   getMarketQuotes,
   getLatestResearchRun,
   getPortfolioSummary,
@@ -216,6 +217,39 @@ describe('live data API client', () => {
     expect(fetchImpl).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/market-data/quotes?'),
       expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
+    )
+  })
+
+  it('parses point-in-time historical bars with complete provenance', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      decision_time: options.decisionTime,
+      items: [{
+        available_at: '2026-08-29T09:20:00Z', close: '217.545', conflict: false,
+        content_hash: 'a'.repeat(64), coverage: 'IEX', event_time: '2026-08-28T20:00:00Z',
+        feed_type: 'price_bars', high: '221', ingested_at: '2026-08-29T09:20:01Z',
+        low: '216', open: '220', provider: 'ALPACA',
+        raw_object_key: `live/ALPACA/price_bars/${'a'.repeat(64)}.json`,
+        session: 'REGULAR', symbol: 'NVDA', timeframe: '1Day', volume: '5357434',
+      }],
+      missing_symbols: [], status: 'SUCCESS',
+    }))
+
+    await expect(getHistoricalBars(
+      { ...options, fetchImpl },
+      'NVDA',
+      '2026-07-15T09:30:00Z',
+      options.decisionTime,
+    )).resolves.toMatchObject({
+      decisionTime: options.decisionTime,
+      items: [{
+        close: '217.545', contentHash: 'a'.repeat(64), coverage: 'IEX',
+        rawObjectKey: `live/ALPACA/price_bars/${'a'.repeat(64)}.json`, symbol: 'NVDA',
+      }],
+      status: 'SUCCESS',
+    })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/market-data/bars/NVDA?'),
+      expect.objectContaining({ cache: 'no-store' }),
     )
   })
 

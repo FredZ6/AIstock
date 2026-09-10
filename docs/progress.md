@@ -3547,3 +3547,31 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   frontend 30 files / 189 passed, and TypeScript, ESLint and the Next.js production build passed.
   Existing jsdom local-storage and cross-realm AbortSignal diagnostics remain non-failing test noise
   tracked by FRE-38. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-10 — M8.1 frontend product closure, FRE-37 Watchlist trends and earnings
+
+- Watchlist contract RED: `npm test -- --run tests/live-data-api.test.ts
+  tests/watchlist-route.test.tsx` exited 1 with 3 expected failures because no historical-bars
+  client existed and the page requested neither price history nor research enrichment. GREEN:
+  the strict API client now validates point-in-time daily bars, Decimal strings, aware timestamps
+  and complete provider/raw-object provenance; the Watchlist route requests bars and research with
+  one shared aware decision cutoff. The focused rerun exited 0 with 2 files / 31 tests passed, and
+  TypeScript exited 0.
+- A follow-up stale-history RED exited 1 because a fresh quote could conceal an independently stale
+  trend series. GREEN: quote freshness and trend freshness are evaluated and explained separately.
+  Persisted earnings display the next event date and exact provider, availability, raw key and hash;
+  an authoritative empty schedule and an unavailable earnings domain remain visibly distinct. Failed
+  enrichment preserves fulfilled market facts and never imports Fixture data.
+- Complete frontend verification exited 0: 30 files / 193 Vitest tests passed, followed by ESLint,
+  TypeScript and the Next.js production build. Existing jsdom local-storage and cross-realm
+  AbortSignal diagnostics remain non-failing test noise tracked by FRE-38.
+- Playwright browser verification against local FastAPI/PostgreSQL API mode rendered 11 persisted
+  symbols with compact accessible trend graphics, calculated changes, exact PIT cutoffs and stale
+  labels. Desktop 1440px and mobile 390px both reported no document-level horizontal overflow;
+  keyboard traversal reached interactive navigation/theme controls. Missing research enrichment was
+  shown as Degraded without Fixture fallback. Temporary browser and application servers were closed
+  after verification.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 743 passed / 5 optional
+  live-provider tests skipped, frontend 30 files / 193 passed, and TypeScript, ESLint and the
+  Next.js production build passed. No push, PR or merge is claimed by this checkpoint.
