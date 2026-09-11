@@ -8,7 +8,7 @@ import { MarketThemeContext } from '../market/tradingview-widget'
 const navigation = [
   { href: '/', label: 'Today' },
   { href: '/watchlist', label: 'Watchlist' },
-  { href: '/research/NVDA', label: 'Research' },
+  { href: '/research', label: 'Research' },
   { href: '/runs/latest', label: 'Run Trace' },
   { href: '/portfolio', label: 'Portfolio' },
   { href: '/alerts', label: 'Alerts' },
@@ -22,7 +22,13 @@ type AppShellProps = {
 }
 
 export function AppShell({ children, currentPath }: AppShellProps) {
-  const currentLabel = navigation.find((item) => item.href === currentPath)?.label ?? 'Research'
+  const researchPath = currentPath.startsWith('/research/') ? currentPath : '/research'
+  const contextualNavigation = navigation.map((item) => item.label === 'Research'
+    ? { ...item, href: researchPath }
+    : item)
+  const currentLabel = currentPath.startsWith('/research/')
+    ? 'Research'
+    : navigation.find((item) => item.href === currentPath)?.label ?? 'Research'
   const [dark, setDark] = useState<boolean | null>(null)
   const [navigationOpen, setNavigationOpen] = useState(false)
 
@@ -79,7 +85,7 @@ export function AppShell({ children, currentPath }: AppShellProps) {
             data-open={navigationOpen}
             id="primary-navigation"
           >
-            {navigation.map((item) => (
+            {contextualNavigation.map((item) => (
               <Link
                 aria-current={currentPath === item.href ? 'page' : undefined}
                 className="nav-link"

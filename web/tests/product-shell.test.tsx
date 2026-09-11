@@ -39,7 +39,7 @@ describe('product shell', () => {
     expect(links).toEqual([
       { href: '/', label: 'Today' },
       { href: '/watchlist', label: 'Watchlist' },
-      { href: '/research/NVDA', label: 'Research' },
+      { href: '/research', label: 'Research' },
       { href: '/runs/latest', label: 'Run Trace' },
       { href: '/portfolio', label: 'Portfolio' },
       { href: '/alerts', label: 'Alerts' },
@@ -49,6 +49,18 @@ describe('product shell', () => {
     expect(screen.getByRole('link', { name: 'Today' })).toHaveAttribute('aria-current', 'page')
     expect(screen.queryByRole('region', { name: 'Current market ticker' })).not.toBeInTheDocument()
     expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
+  })
+
+  it('preserves the current research symbol in contextual navigation', () => {
+    render(
+      <AppShell currentPath="/research/MSFT">
+        <h1>MSFT research</h1>
+      </AppShell>,
+    )
+
+    expect(screen.getByRole('link', { name: 'Research' })).toHaveAttribute('href', '/research/MSFT')
+    expect(screen.getByRole('link', { name: 'Research' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByText('Current · Research')).toBeInTheDocument()
   })
 
   it('keeps the research-only safety boundary and keyboard entry point visible', () => {

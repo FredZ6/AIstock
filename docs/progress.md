@@ -3604,3 +3604,30 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 743 passed / 5 optional
   live-provider tests skipped, frontend 30 files / 194 passed, and TypeScript, ESLint and the
   Next.js production build passed. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-11 — M8.1 frontend product closure, FRE-34 contextual Research navigation
+
+- Navigation RED: `npm test -- --run tests/product-shell.test.tsx` exited 1 with 2 failed / 3
+  passed because the global Research destination remained hard-coded to `/research/NVDA` and did
+  not preserve a current MSFT context. GREEN: neutral pages now target `/research`, while an open
+  detail page retains its exact `/research/{symbol}` destination and current-page semantics.
+- Directory RED first confirmed the missing module, then the behavioral RED exited 1 with 2/2
+  failures because no authoritative selector or empty-universe state existed. GREEN adds a dynamic
+  `/research` route backed by the current mode's Watchlist universe, an accessible native symbol
+  selector, direct contextual links, and newest-first persisted Research records queried at one
+  aware decision cutoff. Fixture data is dynamically imported only in explicit Fixture mode.
+- A review RED exited 1 because a failed per-symbol Research read was silently indistinguishable
+  from no history. GREEN keeps the symbol selectable, reports the affected symbols as Degraded and
+  explicitly states that no Fixture history was substituted. Focused verification exited 0 with
+  2 files / 9 tests passed; complete frontend verification exited 0 with 31 files / 199 tests
+  passed, followed by TypeScript, ESLint and the Next.js production build, all exit 0.
+- Playwright against real FastAPI/PostgreSQL API mode rendered 11 authoritative Watchlist symbols
+  and only 3 persisted recent Research records (AVGO, BE and NVDA). Selecting NVDA produced
+  `/research/NVDA`; the detail-page Research navigation retained that same href and `aria-current`.
+  Desktop and 390px mobile had no document-level horizontal overflow and the browser reported 0
+  console errors. TradingView iframe warnings remained isolated third-party diagnostics. Temporary
+  browser and application servers were closed after verification.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 743 passed / 5 optional
+  live-provider tests skipped, frontend 31 files / 199 passed, and TypeScript, ESLint and the
+  Next.js production build passed. No push, PR or merge is claimed by this checkpoint.

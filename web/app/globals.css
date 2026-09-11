@@ -480,9 +480,20 @@ input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--l
 .newest-facts small, .table-scroll td small { display: block; color: var(--text-secondary); }
 .evidence-empty { padding: 1rem; border: 1px dashed var(--line); border-radius: var(--radius-control); background: var(--surface-soft); }
 .evidence-empty p { margin-top: 0; }
+.research-directory + .research-directory { margin-top: 1.5rem; }
+.research-directory-control { display: flex; align-items: end; gap: 0.75rem; flex-wrap: wrap; }
+.research-directory-control label { display: grid; flex: 1 1 16rem; gap: 0.35rem; color: var(--text-secondary); font-size: 0.78rem; font-weight: 700; }
+.research-directory-control select { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--text-primary); }
+.research-directory-control .button-link { display: inline-flex; min-height: 2.75rem; align-items: center; justify-content: center; padding: 0.65rem 1rem; border: 1px solid var(--signal); border-radius: var(--radius-control); color: var(--signal); font-weight: 750; }
+.research-directory-list { display: grid; gap: 1px; margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--line-soft); list-style: none; }
+.research-directory-list a { display: grid; grid-template-columns: minmax(5rem, 0.6fr) minmax(7rem, 0.7fr) minmax(12rem, 1fr); gap: 1rem; align-items: center; min-height: 3.5rem; padding: 0.8rem 1rem; background: var(--surface); color: var(--text-primary); }
+.research-directory-list time, .research-directory-list span { color: var(--text-secondary); }
 @media (max-width: 640px) {
   .evidence-toolbar, .evidence-toolbar label, .evidence-toolbar input, .evidence-toolbar select { width: 100%; }
   .evidence-toolbar > span { margin-left: 0; }
+  .research-directory-control, .research-directory-control label, .research-directory-control .button-link { width: 100%; }
+  .research-directory-list a { grid-template-columns: 1fr auto; }
+  .research-directory-list time { grid-column: 1 / -1; }
 }
 
 .performance-overview { margin: clamp(1.5rem, 3vw, 2.5rem) 0 0; overflow: hidden; border: 1px solid var(--line); border-radius: clamp(1.35rem, 2vw, 2rem); background: var(--ink-raised); box-shadow: 0 1.25rem 3.5rem -2.65rem oklch(34% 0.065 255 / 0.34), inset 0 1px 0 oklch(100% 0 0 / 0.92); }
