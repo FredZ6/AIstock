@@ -3576,6 +3576,35 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   live-provider tests skipped, frontend 30 files / 193 passed, and TypeScript, ESLint and the
   Next.js production build passed. No push, PR or merge is claimed by this checkpoint.
 
+## 2026-09-12 — M8.1 frontend product closure, FRE-36 workflow-aware recovery
+
+- Empty-state RED: `npm test -- --run tests/api-boundary-routing.test.tsx
+  tests/page-states.test.tsx` exited 1 with 4 failed / 12 passed. Alerts still used generic
+  recovery copy, Weekly Review and Eval looped through Today, and Failure offered a navigation link
+  instead of an in-place retry. GREEN routes Alerts to persisted Watchlist monitoring controls,
+  routes Weekly Review to the Research decision prerequisite, and leaves operator-only Eval without
+  a misleading browser producer.
+- Degraded-state RED: `npm test -- --run tests/api-pages.test.tsx` exited 1 with 1 failed / 14
+  passed because a persisted Weekly Review without matured outcomes linked to the latest trace.
+  GREEN now explains the maturity prerequisite and links to Research decisions without starting a
+  review automatically.
+- Shared-boundary integration initially exited 1 with 26 failed / 173 passed because `useRouter`
+  was invoked by every StateBoundary state. Root-cause correction isolated the hook in the rendered
+  Retry control, preserving server-compatible Success, Loading, Empty and Degraded states. The
+  corrected complete frontend command exited 0 with 31 files / 199 tests passed, followed by
+  TypeScript, ESLint and the Next.js production build, all exit 0.
+- Playwright against an intentionally unavailable API opened
+  `/alerts?symbol=NVDA&threshold=7`, rendered an explicit API Failure with no Fixture fallback, and
+  retained the full route and both query parameters after clicking `Try again`. The accessible
+  control remained visible at a 390px viewport. The only console errors were the expected structured
+  `live-data-route-failure` records for the unavailable test endpoint. Temporary browser and Next.js
+  processes were closed after verification.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 743 passed / 5 optional
+  live-provider tests skipped, frontend 31 files / 199 passed, and TypeScript, ESLint and the
+  Next.js production build passed. No run, notification, policy activation, brokerage action, push,
+  PR or merge is claimed by this checkpoint.
+
 ## 2026-09-11 — M8.1 frontend product closure, FRE-32 searchable SEC evidence
 
 - Primary RED: `npm test -- --run tests/api-pages.test.tsx` exited 1 with 1 failed / 14 passed

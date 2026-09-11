@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import { parseAwareInstant } from '../../lib/time'
+import { RetryButton } from './retry-button'
 
 type LoadingState = {
   kind: 'loading'
@@ -37,7 +38,7 @@ type PartialState = MessageState & {
 
 type FailureState = MessageState & {
   kind: 'failure'
-  retryHref?: string
+  retry?: boolean
 }
 
 type SuccessState = {
@@ -154,10 +155,8 @@ export function StateBoundary({ children, compact, state }: StateBoundaryProps) 
         <p className="state-label">Failure</p>
         <h2>{state.title}</h2>
         <p className="state-message">{state.message}</p>
-        {state.retryHref ? (
-          <Link className="state-retry" href={state.retryHref}>
-            Try again
-          </Link>
+        {state.retry ? (
+          <RetryButton />
         ) : null}
       </section>
     )

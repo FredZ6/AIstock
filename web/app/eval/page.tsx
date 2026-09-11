@@ -17,7 +17,14 @@ export default async function EvalRoute() {
     }
     const asOf = new Date().toISOString()
     const page = await getEvalRuns({ baseUrl: config.baseUrl, decisionTime: asOf })
-    if (page.items.length === 0) return <ApiCollectionPage asOf={asOf} count={0} currentPath="/eval" emptyTitle="No persisted evaluation runs" title="Eval & Admin" />
+    if (page.items.length === 0) return <ApiCollectionPage
+      asOf={asOf}
+      count={0}
+      currentPath="/eval"
+      emptyMessage="Persisted evaluation evidence requires the operator-only offline evaluation persistence workflow. No browser producer or automatic policy activation is available."
+      emptyTitle="No persisted evaluation runs"
+      title="Eval & Admin"
+    />
     const detail = await getEvalRunDetail({ baseUrl: config.baseUrl, decisionTime: asOf }, page.items[0].id)
     return <ApiEvalPage asOf={asOf} detail={detail} />
   } catch (error) {

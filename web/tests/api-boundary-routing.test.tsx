@@ -24,6 +24,8 @@ describe('API mode fixture boundary', () => {
     render(await AlertsRoute())
 
     expect(screen.getByRole('status', { name: 'No persisted alerts' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Configure alert monitoring' })).toHaveAttribute('href', '/watchlist')
+    expect(screen.getByRole('status', { name: 'No persisted alerts' })).toHaveTextContent('monitoring thresholds')
     expect(screen.queryByText(/fixture mode|frozen synthetic/i)).not.toBeInTheDocument()
   })
 
@@ -58,6 +60,11 @@ describe('API mode fixture boundary', () => {
     render(await WeeklyReviewRoute())
 
     expect(screen.getByRole('status', { name: 'No persisted weekly reviews' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Review research decisions' })).toHaveAttribute('href', '/research')
+    expect(screen.getByRole('status', { name: 'No persisted weekly reviews' })).toHaveTextContent(
+      'eligible decision outcomes mature',
+    )
+    expect(screen.queryByRole('link', { name: 'Review Today' })).not.toBeInTheDocument()
     expect(screen.queryByText(/fixture mode|frozen synthetic/i)).not.toBeInTheDocument()
   })
 
@@ -131,6 +138,10 @@ describe('API mode fixture boundary', () => {
     render(await EvalRoute())
 
     expect(screen.getByRole('status', { name: 'No persisted evaluation runs' })).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'No persisted evaluation runs' })).toHaveTextContent(
+      'operator-only offline evaluation persistence workflow',
+    )
+    expect(screen.queryByRole('link', { name: 'Review Today' })).not.toBeInTheDocument()
     expect(screen.queryByText(/fixture mode|frozen synthetic/i)).not.toBeInTheDocument()
   })
 

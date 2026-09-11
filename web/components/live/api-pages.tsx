@@ -65,9 +65,9 @@ export function ApiAlertsPage({ alerts, asOf }: { alerts: AlertRecord[]; asOf: s
       <StateBoundary state={alerts.length === 0 ? {
         kind: 'empty',
         title: 'No persisted alerts',
-        message: 'The authoritative backend returned no alert records at this point-in-time cutoff.',
+        message: 'Configure monitored symbols and monitoring thresholds before the alert worker can persist matching events.',
         actionHref: '/watchlist',
-        actionLabel: 'Review watchlist',
+        actionLabel: 'Configure alert monitoring',
       } : { kind: 'success' }}>
         <section className="terminal-section first-section" aria-labelledby="persisted-alerts-title">
           <div className="section-heading">
@@ -111,15 +111,21 @@ export function ApiAlertsPage({ alerts, asOf }: { alerts: AlertRecord[]; asOf: s
 }
 
 export function ApiCollectionPage({
+  actionHref,
+  actionLabel,
   asOf,
   count,
   currentPath,
+  emptyMessage,
   emptyTitle,
   title,
 }: {
+  actionHref?: string
+  actionLabel?: string
   asOf: string
   count: number
   currentPath: string
+  emptyMessage: string
   emptyTitle: string
   title: string
 }) {
@@ -129,9 +135,9 @@ export function ApiCollectionPage({
       <StateBoundary state={count === 0 ? {
         kind: 'empty',
         title: emptyTitle,
-        message: 'The authoritative backend returned no records at this point-in-time cutoff.',
-        actionHref: '/',
-        actionLabel: 'Review Today',
+        message: emptyMessage,
+        actionHref,
+        actionLabel,
       } : { kind: 'success' }}>
         <section className="terminal-section first-section" aria-label={`${title} persisted records`}>
           <p className="section-kicker">Persisted records</p><h2>{count}</h2>
@@ -438,9 +444,9 @@ export function ApiWeeklyReviewPage({ asOf, detail }: { asOf: string; detail: We
       <StateBoundary state={partial ? {
         kind: 'degraded',
         title: 'Weekly review has no matured outcomes',
-        message: 'The persisted review remains visible; missing outcomes are not substituted.',
-        actionHref: '/runs/latest',
-        actionLabel: 'Review latest run',
+        message: 'The persisted review remains visible. Wait for eligible decision outcomes to mature; missing outcomes are not substituted and no review is started here.',
+        actionHref: '/research',
+        actionLabel: 'Review research decisions',
         providers: ['Matured outcomes'],
       } : { kind: 'success' }}>
         <section className="terminal-section first-section" aria-label="Weekly outcome summary">
@@ -479,7 +485,7 @@ export function ApiFailurePage({ currentPath, title }: { currentPath: string; ti
   return (
     <AppShell currentPath={currentPath}>
       <PageHeading asOf={asOf} eyebrow="API Mode" title={title} summary="The backend response could not be safely rendered." />
-      <StateBoundary state={{ kind: 'failure', title: `${title} unavailable`, message: 'The API was unavailable or returned an invalid contract. No Fixture data was substituted.', retryHref: currentPath }} />
+      <StateBoundary state={{ kind: 'failure', title: `${title} unavailable`, message: 'The API was unavailable or returned an invalid contract. No Fixture data was substituted.', retry: true }} />
     </AppShell>
   )
 }

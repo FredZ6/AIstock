@@ -1,9 +1,16 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { StateBoundary } from '../components/states/state-boundary'
 
+const refresh = vi.fn()
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh }),
+}))
+
 describe('StateBoundary', () => {
+  beforeEach(() => refresh.mockReset())
   it('announces loading without presenting stale content as current', () => {
     render(<StateBoundary state={{ kind: 'loading', label: 'Today data' }} />)
 
@@ -119,14 +126,16 @@ describe('StateBoundary', () => {
           kind: 'failure',
           title: 'Today data unavailable',
           message: 'The request failed before a trustworthy snapshot was available.',
-          retryHref: '/',
+          retry: true,
         }}
       />,
     )
 
     expect(screen.getByRole('alert')).toHaveAccessibleName('Today data unavailable')
     expect(screen.getByRole('alert')).toHaveClass('surface-card')
-    expect(screen.getByRole('link', { name: 'Try again' })).toHaveAttribute('href', '/')
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('link', { name: 'Try again' })).not.toBeInTheDocument()
   })
 
   it('renders successful content without an artificial status wrapper', () => {

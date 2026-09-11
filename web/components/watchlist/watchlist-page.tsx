@@ -80,7 +80,7 @@ export function WatchlistFailurePage({ asOf }: { asOf: string }) {
         kind: 'failure',
         title: 'Watchlist unavailable',
         message: 'FastAPI did not return a valid Watchlist response. Fixture data was not substituted.',
-        retryHref: '/watchlist',
+        retry: true,
       }} />
     </AppShell>
   )

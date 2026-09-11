@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}))
+
 import { ApiWatchlistPage } from '../components/watchlist/watchlist-page'
 
 const apiRow = {
