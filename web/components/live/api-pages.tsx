@@ -24,6 +24,7 @@ import { formatDualTime } from '../../lib/time'
 import { AppShell } from '../layout/app-shell'
 import { TradingViewWidget } from '../market/tradingview-widget'
 import { TradingViewTickerList } from '../market/tradingview-ticker-list'
+import { FinancialFactsDisclosure, SecFilingsDisclosure } from '../research/research-evidence-browser'
 import { ResearchRunControl } from '../research/research-run-control'
 import { StateBoundary } from '../states/state-boundary'
 import { LiveRunTrace } from '../trace/live-run-trace'
@@ -335,20 +336,8 @@ export function ApiResearchPage({
             <dl className="decision-facts"><div><dt>Opinion</dt><dd>{record.opinion ? <Signal tone={record.opinion}>{record.opinion}</Signal> : 'Unavailable'}</dd></div><div><dt>Confidence</dt><dd>{formatPercent(record.confidence, { signed: false })}</dd></div><div><dt>Horizon</dt><dd>{record.horizon}</dd></div><div><dt>As of</dt><dd><time dateTime={record.asOf}>{formatDualTime(record.asOf).newYork}</time></dd></div></dl>
           </article>)}
         </details> : null}
-        {secFilings.length ? <details className="terminal-section research-disclosure">
-          <summary>SEC filings · {secFilings.length}</summary>
-          <h2 id="sec-filings-heading">SEC filings</h2>
-          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted SEC filings"><thead><tr><th>Form</th><th>Filed</th><th>Report period</th><th>Accession</th><th>Available</th><th>Raw source</th></tr></thead><tbody>
-            {secFilings.map((filing) => <tr key={filing.id}><td>{filing.form}</td><td>{filing.filingDate}</td><td>{filing.reportDate ?? 'Unavailable'}</td><td>{filing.accessionNumber}</td><td>{formatDualTime(filing.availableAt).newYork}</td><td><code>{filing.documentRawObjectKey}</code></td></tr>)}
-          </tbody></table></div>
-        </details> : null}
-        {financialFacts.length ? <details className="terminal-section research-disclosure">
-          <summary>Financial facts · {financialFacts.length}</summary>
-          <h2 id="financial-facts-heading">Financial facts</h2>
-          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted financial facts"><thead><tr><th>Concept</th><th>Value</th><th>Period</th><th>Mapping</th><th>Accession</th><th>Available</th></tr></thead><tbody>
-            {financialFacts.map((fact) => <tr key={fact.id}><td>{fact.canonicalConcept ?? fact.sourceConcept}</td><td>{formatDecimal(fact.value)} {fact.currency ?? fact.unit}</td><td>{fact.periodStart} — {fact.periodEnd}</td><td>{fact.mappingStatus}</td><td>{fact.accessionNumber}</td><td>{formatDualTime(fact.availableAt).newYork}</td></tr>)}
-          </tbody></table></div>
-        </details> : null}
+        {secFilings.length ? <SecFilingsDisclosure filings={secFilings} /> : null}
+        {financialFacts.length ? <FinancialFactsDisclosure facts={financialFacts} filings={secFilings} /> : null}
         {earningsEvents.length ? <details className="terminal-section research-disclosure">
           <summary>Earnings events · {earningsEvents.length}</summary>
           <h2>Earnings events</h2>

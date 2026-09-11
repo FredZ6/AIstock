@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ApiAlertsPage, ApiPortfolioPage, ApiResearchPage, ApiRunMetadataPage, ApiTodayPage, ApiWeeklyReviewPage } from '../components/live/api-pages'
@@ -150,15 +150,96 @@ describe('API mode pages', () => {
     />)
     expect(screen.getByRole('heading', { name: 'SEC filings' })).toBeInTheDocument()
     expect(screen.getAllByText('0001045810-26-000001')).toHaveLength(2)
-    expect(screen.getByText('REVENUE')).toBeInTheDocument()
-    expect(screen.getByText('9,007,199,254,740,993 USD')).toBeInTheDocument()
-    expect(screen.getByText('live/SEC/filing_sections/hash.txt')).toBeInTheDocument()
+    expect(within(screen.getByRole('table', { name: 'Persisted financial facts' })).getByText('REVENUE')).toBeInTheDocument()
+    expect(within(screen.getByRole('table', { name: 'Persisted financial facts' })).getByText('9,007,199,254,740,993 USD')).toBeInTheDocument()
+    expect(within(screen.getByRole('table', { name: 'Persisted SEC filings' })).getByText('live/SEC/filing_sections/hash.txt')).toBeInTheDocument()
     expect(screen.getByText('FRESHNESS')).toBeInTheDocument()
     expect(screen.getByText('PASS')).toBeInTheDocument()
     expect(screen.getByText('SEC filings · 1').closest('details')).not.toHaveAttribute('open')
     expect(screen.getByText('Financial facts · 1').closest('details')).not.toHaveAttribute('open')
     expect(screen.getByText('SEC data quality · 1').closest('details')).not.toHaveAttribute('open')
     expect(screen.queryByText('Fixture Mode')).not.toBeInTheDocument()
+  })
+
+  it('searches SEC evidence and filters financial facts without hiding lineage', () => {
+    const filings = [{
+      acceptedAt: '2026-08-28T20:05:00Z', accessionNumber: '0001045810-26-000001',
+      availableAt: '2026-08-28T20:05:00Z', description: 'Quarterly report',
+      documentRawObjectKey: 'live/SEC/filing_sections/quarterly.txt', filingDate: '2026-08-28',
+      form: '10-Q', id: 'filing-quarterly', provider: 'SEC', reportDate: '2026-07-31',
+    }, {
+      acceptedAt: '2026-02-20T20:05:00Z', accessionNumber: '0001045810-26-000002',
+      availableAt: '2026-02-20T20:05:00Z', description: 'Annual report',
+      documentRawObjectKey: 'live/SEC/filing_sections/annual.txt', filingDate: '2026-02-20',
+      form: '10-K', id: 'filing-annual', provider: 'SEC', reportDate: '2026-01-31',
+    }]
+    const facts = [{
+      accessionNumber: '0001045810-26-000001', availableAt: '2026-08-28T20:05:00Z',
+      canonicalConcept: 'REVENUE', currency: 'USD', id: 'fact-revenue-ytd', mappingStatus: 'EXACT' as const,
+      periodEnd: '2026-07-31', periodStart: '2026-02-01', provider: 'SEC',
+      sourceConcept: 'RevenueFromContractWithCustomer', taxonomy: 'us-gaap', unit: 'USD', value: '220',
+    }, {
+      accessionNumber: '0001045810-26-000001', availableAt: '2026-08-28T20:05:00Z',
+      canonicalConcept: 'REVENUE', currency: 'USD', id: 'fact-revenue-latest', mappingStatus: 'EXACT' as const,
+      periodEnd: '2026-07-31', periodStart: '2026-05-01', provider: 'SEC',
+      sourceConcept: 'RevenueFromContractWithCustomer', taxonomy: 'us-gaap', unit: 'USD', value: '120',
+    }, {
+      accessionNumber: '0001045810-26-000002', availableAt: '2026-02-20T20:05:00Z',
+      canonicalConcept: 'REVENUE', currency: 'USD', id: 'fact-revenue-older', mappingStatus: 'EXACT' as const,
+      periodEnd: '2026-01-31', periodStart: '2025-11-01', provider: 'SEC',
+      sourceConcept: 'Revenues', taxonomy: 'us-gaap', unit: 'USD', value: '100',
+    }, {
+      accessionNumber: '0001045810-26-000001', availableAt: '2026-08-28T20:05:00Z',
+      canonicalConcept: 'ASSETS', currency: 'USD', id: 'fact-assets-latest', mappingStatus: 'EXACT' as const,
+      periodEnd: '2026-07-31', periodStart: '2026-07-31', provider: 'SEC',
+      sourceConcept: 'Assets', taxonomy: 'us-gaap', unit: 'USD', value: '350',
+    }, {
+      accessionNumber: '0001045810-26-000001', availableAt: '2026-08-28T20:05:00Z',
+      canonicalConcept: null, currency: 'USD', id: 'fact-unmapped', mappingStatus: 'UNMAPPED' as const,
+      periodEnd: '2026-07-31', periodStart: '2026-05-01', provider: 'SEC',
+      sourceConcept: 'IssuerSpecificAdjustment', taxonomy: 'custom', unit: 'USD', value: '7',
+    }]
+
+    render(<ApiResearchPage
+      asOf="2026-08-29T09:30:00Z"
+      dataQuality={[]}
+      financialFacts={facts}
+      idempotencyKey="research-form-filter"
+      quote={quote}
+      records={[]}
+      secFilings={filings}
+      symbol="NVDA"
+    />)
+
+    fireEvent.click(screen.getByText('SEC filings · 2'))
+    const filingSearch = screen.getByRole('searchbox', { name: 'Search SEC filings' })
+    fireEvent.change(filingSearch, { target: { value: '10-K' } })
+    const filingsTable = screen.getByRole('table', { name: 'Persisted SEC filings' })
+    expect(within(filingsTable).getByText('10-K')).toBeInTheDocument()
+    expect(within(filingsTable).queryByText('10-Q')).not.toBeInTheDocument()
+    expect(within(filingsTable).getByText('filing-annual')).toBeInTheDocument()
+    expect(within(filingsTable).getByText('live/SEC/filing_sections/annual.txt')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Financial facts · 5'))
+    const newest = screen.getByRole('region', { name: 'Newest persisted values' })
+    expect(newest).toHaveTextContent('REVENUE120 USD')
+    expect(newest).toHaveTextContent('2026-05-01 — 2026-07-31')
+    expect(newest).not.toHaveTextContent('220 USD')
+    expect(newest).not.toHaveTextContent('IssuerSpecificAdjustment')
+    expect(screen.getByRole('option', { name: 'UNMAPPED' })).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Financial fact category' }), { target: { value: 'ASSETS' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Financial fact period' }), { target: { value: '2026-07-31' } })
+    const factsTable = screen.getByRole('table', { name: 'Persisted financial facts' })
+    expect(within(factsTable).getByText('ASSETS')).toBeInTheDocument()
+    expect(within(factsTable).getByText('fact-assets-latest')).toBeInTheDocument()
+    expect(within(factsTable).getByText('Assets')).toBeInTheDocument()
+    expect(within(factsTable).queryByText('REVENUE')).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search financial facts' }), { target: { value: 'no-match' } })
+    expect(screen.getByRole('status', { name: 'No financial facts match active filters' })).toHaveTextContent('category ASSETS')
+    fireEvent.click(screen.getByRole('button', { name: 'Reset financial fact filters' }))
+    expect(screen.getByRole('table', { name: 'Persisted financial facts' })).toHaveTextContent('fact-revenue-older')
+    expect(screen.getByRole('table', { name: 'Persisted financial facts' })).toHaveTextContent('IssuerSpecificAdjustment')
   })
 
   it('renders persisted Earnings, News and Options while keeping Analyst Targets unavailable', () => {

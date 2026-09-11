@@ -3575,3 +3575,32 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 743 passed / 5 optional
   live-provider tests skipped, frontend 30 files / 193 passed, and TypeScript, ESLint and the
   Next.js production build passed. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-11 — M8.1 frontend product closure, FRE-32 searchable SEC evidence
+
+- Primary RED: `npm test -- --run tests/api-pages.test.tsx` exited 1 with 1 failed / 14 passed
+  because the Research page exposed neither `Search SEC filings` nor financial-fact filters. GREEN:
+  the new client evidence browser adds deferred client-side search, category and period filters,
+  live result counts, explicit no-match/reset states and contained scroll regions while preserving
+  every filing/fact identifier, accession, provider-derived availability and raw-object key.
+- Real-data review found that 68 unmapped source concepts initially polluted both the latest-value
+  summary and category selector. Its regression RED exited 1; GREEN groups them under one
+  `UNMAPPED` category, preserves all rows in the audit table and limits the summary to canonical
+  concepts. A second financial-accuracy RED exited 1 because a cumulative YTD value could win an
+  equal-end-date tie; the deterministic selector now orders by period end, then the later period
+  start, availability and record ID, and displays the complete period range. Focused verification
+  exited 0 with 15/15 tests, followed by TypeScript and ESLint, both exit 0.
+- Complete frontend verification exited 0 with 30 files / 194 tests passed and the Next.js
+  production build passed. Existing jsdom local-storage and cross-realm AbortSignal diagnostics
+  remain non-failing test noise tracked by FRE-38.
+- Playwright against local FastAPI/PostgreSQL API mode rendered 20 persisted SEC filings and 100
+  persisted financial facts with no Fixture substitution. Searching `10-Q` returned 3/20 filings;
+  the newest-value summary rendered 3 canonical concepts and the category selector rendered All,
+  NET_INCOME, OPERATING_CASH_FLOW, REVENUE and UNMAPPED. The browser reported 0 console errors;
+  48 warnings came from the isolated TradingView iframe. Desktop and 390px mobile viewports had no
+  document-level horizontal overflow, while the 1319px and 2934px audit tables remained contained
+  in 314px `overflow-x: auto` regions. Temporary browser and application servers were closed.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 743 passed / 5 optional
+  live-provider tests skipped, frontend 30 files / 194 passed, and TypeScript, ESLint and the
+  Next.js production build passed. No push, PR or merge is claimed by this checkpoint.
