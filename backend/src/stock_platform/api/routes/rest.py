@@ -19,6 +19,7 @@ from stock_platform.api.schemas.errors import ApiError
 from stock_platform.api.schemas.rest import (
     AlertPage,
     DataQualityResponse,
+    EvalRunDetail,
     EvalRunPage,
     HumanAction,
     MarketDataResponse,
@@ -84,7 +85,10 @@ from stock_platform.infrastructure.db.models.tables import (
     decision_outcome,
     decision_snapshot,
     derived_metric,
+    earnings_event,
     error_attribution,
+    eval_metric,
+    eval_run,
     evidence_gap,
     evidence_item,
     execution_policy_version,
@@ -94,13 +98,16 @@ from stock_platform.infrastructure.db.models.tables import (
     lesson_approval,
     lesson_attribution_link,
     market_bar,
+    news_article,
     normalized_record,
+    option_snapshot,
     paper_fill,
     paper_order,
     paper_portfolio_config,
     portfolio_initialization_request,
     portfolio_nav,
     raw_data_object,
+    regression_gate_result,
     replay_run,
     research_opinion,
     research_scoring_policy_version,
@@ -637,10 +644,44 @@ def create_research_run(
     )
 
 
-@router.get("/research-runs/{run_id}", response_model=RunResponse)
-def get_research_run(run_id: UUID, connection: ConnectionDependency) -> RunResponse:
+@router.get("/research-runs/latest", response_model=RunResponse)
+def get_latest_research_run(
+    decision_time: datetime, connection: ConnectionDependency
+) -> RunResponse:
+    cutoff = _aware_query_time(decision_time, "decision_time")
     row = (
-        connection.execute(select(agent_run).where(agent_run.c.id == run_id))
+        connection.execute(
+            select(agent_run)
+            .where(
+                agent_run.c.run_type == "RESEARCH",
+                agent_run.c.decision_time <= cutoff,
+                agent_run.c.created_at <= cutoff,
+            )
+            .order_by(agent_run.c.decision_time.desc(), agent_run.c.created_at.desc())
+            .limit(1)
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if row is None:
+        raise ApiError(404, "NOT_FOUND", "No research run exists at this decision time")
+    return _run_response(row)
+
+
+@router.get("/research-runs/{run_id}", response_model=RunResponse)
+def get_research_run(
+    run_id: UUID,
+    decision_time: datetime,
+    connection: ConnectionDependency,
+) -> RunResponse:
+    cutoff = _aware_query_time(decision_time, "decision_time")
+    row = (
+        connection.execute(
+            select(agent_run).where(
+                agent_run.c.id == run_id,
+                agent_run.c.created_at <= cutoff,
+            )
+        )
         .mappings()
         .one_or_none()
     )
@@ -673,11 +714,21 @@ def cancel_research_run(run_id: UUID, connection: ConnectionDependency) -> RunRe
 
 
 @router.get("/research-runs/{run_id}/report", response_model=ResearchRunReportResponse)
-def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[str, Any]:
+def get_research_report(
+    run_id: UUID,
+    decision_time: datetime,
+    connection: ConnectionDependency,
+) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
     thesis = (
         connection.execute(
             select(investment_thesis)
-            .where(investment_thesis.c.run_id == run_id)
+            .join(agent_run, agent_run.c.id == investment_thesis.c.run_id)
+            .where(
+                investment_thesis.c.run_id == run_id,
+                agent_run.c.created_at <= cutoff,
+                investment_thesis.c.created_at <= cutoff,
+            )
             .order_by(investment_thesis.c.created_at.desc())
             .limit(1)
         )
@@ -689,7 +740,10 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
     opinion = (
         connection.execute(
             select(research_opinion)
-            .where(research_opinion.c.thesis_id == thesis["id"])
+            .where(
+                research_opinion.c.thesis_id == thesis["id"],
+                research_opinion.c.created_at <= cutoff,
+            )
             .order_by(research_opinion.c.created_at.desc())
             .limit(1)
         )
@@ -727,7 +781,11 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
                 confidence_policy_version,
                 confidence_policy_version.c.id == decision_snapshot.c.confidence_policy_version_id,
             )
-            .where(decision_snapshot.c.thesis_id == thesis["id"])
+            .where(
+                decision_snapshot.c.thesis_id == thesis["id"],
+                decision_snapshot.c.available_at <= cutoff,
+                decision_snapshot.c.created_at <= cutoff,
+            )
             .order_by(decision_snapshot.c.created_at.desc())
             .limit(1)
         )
@@ -767,9 +825,23 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
                     raw_data_object,
                     raw_data_object.c.id == normalized_record.c.raw_data_object_id,
                 )
-                .outerjoin(claim, claim.c.evidence_id == evidence_item.c.id)
+                .outerjoin(
+                    claim,
+                    and_(
+                        claim.c.evidence_id == evidence_item.c.id,
+                        claim.c.created_at <= cutoff,
+                    ),
+                )
             )
-            .where(thesis_evidence_link.c.thesis_id == thesis["id"])
+            .where(
+                thesis_evidence_link.c.thesis_id == thesis["id"],
+                thesis_evidence_link.c.created_at <= cutoff,
+                evidence_item.c.created_at <= cutoff,
+                derived_metric.c.created_at <= cutoff,
+                normalized_record.c.created_at <= cutoff,
+                raw_data_object.c.available_at <= cutoff,
+                raw_data_object.c.ingested_at <= cutoff,
+            )
             .order_by(evidence_item.c.id, claim.c.created_at, claim.c.id)
         )
         .mappings()
@@ -803,7 +875,11 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
     gaps = (
         connection.execute(
             select(evidence_gap)
-            .where(evidence_gap.c.run_id == run_id)
+            .where(
+                evidence_gap.c.run_id == run_id,
+                evidence_gap.c.observed_at <= cutoff,
+                evidence_gap.c.created_at <= cutoff,
+            )
             .order_by(evidence_gap.c.observed_at, evidence_gap.c.id)
         )
         .mappings()
@@ -811,7 +887,10 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
     )
     diff = (
         connection.execute(
-            select(decision_diff).where(decision_diff.c.decision_id == decision["id"])
+            select(decision_diff).where(
+                decision_diff.c.decision_id == decision["id"],
+                decision_diff.c.created_at <= cutoff,
+            )
         )
         .mappings()
         .one()
@@ -974,11 +1053,115 @@ def get_stock_research(
         .mappings()
         .all()
     )
+    news_raw = raw_data_object.alias("news_raw")
+    news_rows = (
+        connection.execute(
+            select(
+                news_article.c.id,
+                news_article.c.provider,
+                news_article.c.headline,
+                news_article.c.source,
+                news_article.c.summary,
+                news_article.c.published_at.label("event_time"),
+                news_article.c.available_at,
+                news_raw.c.content_hash,
+                news_raw.c.raw_object_key,
+            )
+            .join(news_raw, news_raw.c.id == news_article.c.raw_data_object_id)
+            .where(
+                news_article.c.provider != "FIXTURE",
+                news_raw.c.provider != "FIXTURE",
+                news_article.c.symbols.contains([_symbol(symbol)]),
+                news_article.c.pit_eligible.is_(True),
+                news_article.c.observed_at <= cutoff,
+                news_article.c.available_at <= cutoff,
+                news_raw.c.available_at <= cutoff,
+            )
+            .order_by(news_article.c.published_at.desc(), news_article.c.id.desc())
+            .limit(20)
+        )
+        .mappings()
+        .all()
+    )
+    earnings_raw = raw_data_object.alias("earnings_raw")
+    newer_earnings = earnings_event.alias("newer_earnings")
+    has_visible_earnings_revision = (
+        select(newer_earnings.c.id)
+        .where(
+            newer_earnings.c.supersedes_id == earnings_event.c.id,
+            newer_earnings.c.available_at <= cutoff,
+        )
+        .exists()
+    )
+    earnings_rows = (
+        connection.execute(
+            select(
+                earnings_event.c.id,
+                earnings_event.c.provider,
+                earnings_event.c.event_date,
+                earnings_event.c.fiscal_date_end,
+                earnings_event.c.estimate,
+                earnings_event.c.currency,
+                earnings_raw.c.event_time,
+                earnings_event.c.available_at,
+                earnings_raw.c.content_hash,
+                earnings_raw.c.raw_object_key,
+            )
+            .join(earnings_raw, earnings_raw.c.id == earnings_event.c.raw_data_object_id)
+            .where(
+                earnings_event.c.provider != "FIXTURE",
+                earnings_raw.c.provider != "FIXTURE",
+                earnings_event.c.security_id == visible_security,
+                earnings_event.c.available_at <= cutoff,
+                earnings_raw.c.available_at <= cutoff,
+                ~has_visible_earnings_revision,
+            )
+            .order_by(earnings_event.c.event_date, earnings_event.c.id.desc())
+            .limit(20)
+        )
+        .mappings()
+        .all()
+    )
+    option_rows = (
+        connection.execute(
+            select(
+                option_snapshot.c.id,
+                option_snapshot.c.provider,
+                option_snapshot.c.feed_type,
+                option_snapshot.c.event_time,
+                option_snapshot.c.available_at,
+                option_snapshot.c.content_hash,
+                option_snapshot.c.raw_object_key,
+                option_snapshot.c.payload,
+            )
+            .where(
+                option_snapshot.c.provider != "FIXTURE",
+                option_snapshot.c.symbol == _symbol(symbol),
+                option_snapshot.c.event_time <= cutoff,
+                option_snapshot.c.available_at <= cutoff,
+            )
+            .order_by(option_snapshot.c.event_time.desc(), option_snapshot.c.id.desc())
+            .limit(20)
+        )
+        .mappings()
+        .all()
+    )
+    unavailable_domains = ["ANALYST_TARGETS"]
+    if not news_rows:
+        unavailable_domains.append("NEWS")
+    if not earnings_rows:
+        unavailable_domains.append("EARNINGS")
+    if not option_rows:
+        unavailable_domains.append("OPTIONS")
     return {
         "decision_time": cutoff,
         "items": items,
         "sec_filings": [_row(row) for row in filing_rows],
         "financial_facts": [_row(row) for row in fact_rows],
+        "news_articles": [_row(row) for row in news_rows],
+        "earnings_events": [_row(row) for row in earnings_rows],
+        "option_snapshots": [_row(row) for row in option_rows],
+        "unavailable_domains": unavailable_domains,
         "next_cursor": next_cursor,
     }
 
@@ -1316,6 +1499,14 @@ def initialize_portfolio(
             config["initial_cash"],
             config["currency"],
             effective_at,
+        )
+    )
+    connection.execute(
+        insert(portfolio_nav).values(
+            portfolio_id=config["id"],
+            nav=config["initial_cash"],
+            event_time=effective_at,
+            available_at=effective_at,
         )
     )
     response.headers["Idempotency-Replayed"] = "false"
@@ -1692,11 +1883,82 @@ def rollback_policy(
 
 
 @router.get("/evals/runs", response_model=EvalRunPage)
-def list_eval_runs(decision_time: datetime) -> dict[str, Any]:
+def list_eval_runs(
+    decision_time: datetime,
+    connection: ConnectionDependency,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: str | None = None,
+) -> dict[str, Any]:
     cutoff = _aware_query_time(decision_time, "decision_time")
-    return {"decision_time": cutoff, "items": [], "next_cursor": None}
+    rows = (
+        connection.execute(
+            select(eval_run)
+            .where(eval_run.c.created_at <= cutoff)
+            .where(_cursor_filter(eval_run.c.created_at, eval_run.c.id, cursor))
+            .order_by(eval_run.c.created_at.desc(), eval_run.c.id.desc())
+            .limit(limit + 1)
+        )
+        .mappings()
+        .all()
+    )
+    items, next_cursor = _page(rows, limit, "created_at")
+    return {"decision_time": cutoff, "items": items, "next_cursor": next_cursor}
 
 
-@router.get("/evals/runs/{eval_run_id}")
-def get_eval_run(eval_run_id: UUID) -> dict[str, Any]:
-    raise ApiError(404, "NOT_FOUND", f"Evaluation run {eval_run_id} not found")
+@router.get("/evals/runs/{eval_run_id}", response_model=EvalRunDetail)
+def get_eval_run(
+    eval_run_id: UUID,
+    decision_time: datetime,
+    connection: ConnectionDependency,
+) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
+    run = (
+        connection.execute(
+            select(eval_run).where(
+                eval_run.c.id == eval_run_id,
+                eval_run.c.created_at <= cutoff,
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if run is None:
+        raise ApiError(404, "NOT_FOUND", f"Evaluation run {eval_run_id} not found")
+    metrics = (
+        connection.execute(
+            select(
+                eval_metric.c.metric_name,
+                eval_metric.c.metric_value,
+                eval_metric.c.case_ids,
+                eval_metric.c.case_hashes,
+            )
+            .where(eval_metric.c.eval_run_id == eval_run_id)
+            .where(eval_metric.c.created_at <= cutoff)
+            .order_by(eval_metric.c.metric_name)
+        )
+        .mappings()
+        .all()
+    )
+    gates = (
+        connection.execute(
+            select(
+                regression_gate_result.c.metric_name,
+                regression_gate_result.c.comparison,
+                regression_gate_result.c.threshold,
+                regression_gate_result.c.observed,
+                regression_gate_result.c.passed,
+                regression_gate_result.c.reason,
+            )
+            .where(regression_gate_result.c.eval_run_id == eval_run_id)
+            .where(regression_gate_result.c.created_at <= cutoff)
+            .order_by(regression_gate_result.c.metric_name)
+        )
+        .mappings()
+        .all()
+    )
+    return {
+        "decision_time": cutoff,
+        "run": _row(run),
+        "metrics": [_row(row) for row in metrics],
+        "gates": [_row(row) for row in gates],
+    }

@@ -56,6 +56,12 @@ describe('research workflow pages', () => {
       'https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js',
     ))
     expect(overview.querySelector('script')?.textContent).toContain('NASDAQ:NVDA|1D')
+    expect(overview.querySelector('.tradingview-widget-container')).toHaveAttribute('tabindex', '0')
+    expect(overview.querySelector('.tradingview-widget-container')).toHaveAttribute('role', 'region')
+    expect(overview.querySelector('.tradingview-widget-container')).toHaveAttribute(
+      'aria-label',
+      'Scrollable NVDA TradingView overview',
+    )
     expect(screen.getByText(/not decision-time evidence/i)).toBeInTheDocument()
     expect(screen.getAllByText('BULLISH').length).toBeGreaterThan(0)
     expect(screen.getAllByText('HOLD').length).toBeGreaterThan(0)

@@ -1,5 +1,5 @@
 from contextlib import nullcontext
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from alembic import command
@@ -42,10 +42,12 @@ def test_completed_research_report_is_closed_and_lineage_backed(
                 decision_time=as_of,
                 data_cutoff=as_of,
                 status="QUEUED",
+                created_at=as_of - timedelta(minutes=1),
             )
         )
 
     assert execute_research_run(isolated_database_url, str(run_id)) is True
+    visible_at = datetime.now(UTC)
 
     with engine.connect() as connection:
         app.dependency_overrides[get_connection] = lambda: connection
@@ -56,10 +58,18 @@ def test_completed_research_report_is_closed_and_lineage_backed(
             environment="test", _env_file=None
         )
         try:
-            response = TestClient(app).get(f"/api/v1/research-runs/{run_id}/report")
+            hidden = TestClient(app).get(
+                f"/api/v1/research-runs/{run_id}/report",
+                params={"decision_time": as_of.isoformat()},
+            )
+            response = TestClient(app).get(
+                f"/api/v1/research-runs/{run_id}/report",
+                params={"decision_time": visible_at.isoformat()},
+            )
         finally:
             app.dependency_overrides.clear()
 
+    assert hidden.status_code == 404
     assert response.status_code == 200
     report = response.json()
     assert set(report) == {

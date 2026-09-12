@@ -3,6 +3,9 @@ import { expect, test } from '@playwright/test'
 test('API-mode research renders persisted SEC facts without Fixture fallback', async ({ page }) => {
   test.skip(process.env.RUN_SEC_LIVE_BROWSER !== '1', 'Requires local persisted SEC facts')
   await page.goto('/research/NVDA')
+  await page.getByText(/^SEC filings ·/).click()
+  await page.getByText(/^Financial facts ·/).click()
+  await page.getByText(/^SEC data quality ·/).click()
   await expect(page.getByRole('heading', { name: 'SEC filings' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Financial facts' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'SEC data quality' })).toBeVisible()

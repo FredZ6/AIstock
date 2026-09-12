@@ -23,6 +23,9 @@ APPEND_ONLY_TABLES = {
     "financial_fact",
     "earnings_event",
     "data_quality_observation",
+    "eval_run",
+    "eval_metric",
+    "regression_gate_result",
 }
 
 UPDATE_PROBE_COLUMNS = {
@@ -423,6 +426,51 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
             ),
             {"portfolio_id": portfolio_id, "transaction_id": transaction_id},
         )
+        eval_run_id = connection.execute(
+            text(
+                """
+                INSERT INTO eval_run (
+                    status, passed, mode, dataset_version, case_count, data_cutoff,
+                    model_version, prompt_version, research_scoring_policy_version,
+                    risk_policy_version, execution_policy_version,
+                    confidence_policy_version, gate_policy_version, summary_hash
+                ) VALUES (
+                    'PASSED', true, 'fixture', 'eval-v0.2.0', 200, now(),
+                    'fixture-deterministic-v1', 'offline-eval-v0.2',
+                    'research-scoring-v0.2', 'risk-v0.2', 'execution-v0.2',
+                    'confidence-v0.2', 'evaluation-gates-v0.2', repeat('c', 64)
+                )
+                RETURNING id
+                """
+            )
+        ).scalar_one()
+        connection.execute(
+            text(
+                """
+                INSERT INTO eval_metric (
+                    eval_run_id, metric_name, metric_value, case_ids, case_hashes
+                ) VALUES (
+                    :eval_run_id, 'audit_completeness', 1,
+                    '["case-1"]'::jsonb, '["hash-1"]'::jsonb
+                )
+                """
+            ),
+            {"eval_run_id": eval_run_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO regression_gate_result (
+                    eval_run_id, metric_name, comparison, threshold,
+                    observed, passed, reason
+                ) VALUES (
+                    :eval_run_id, 'audit_completeness', 'AT_LEAST', 1,
+                    1, true, 'threshold satisfied'
+                )
+                """
+            ),
+            {"eval_run_id": eval_run_id},
+        )
         for table_name in APPEND_ONLY_TABLES - {
             "investment_thesis",
             "decision_snapshot",
@@ -441,6 +489,9 @@ def test_database_rejects_update_and_delete_for_every_append_only_table(engine: 
             "financial_fact",
             "earnings_event",
             "data_quality_observation",
+            "eval_run",
+            "eval_metric",
+            "regression_gate_result",
         }:
             connection.execute(text(f"INSERT INTO {table_name} DEFAULT VALUES"))
 

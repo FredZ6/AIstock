@@ -16,7 +16,16 @@ export default async function WeeklyReviewRoute() {
     const asOf = new Date().toISOString()
     const page = await getWeeklyReviews({ baseUrl: config.baseUrl, decisionTime: asOf })
     const latest = page.items[0]
-    if (!latest) return <ApiCollectionPage asOf={asOf} count={0} currentPath="/weekly-review" emptyTitle="No persisted weekly reviews" title="Weekly Review" />
+    if (!latest) return <ApiCollectionPage
+      actionHref="/research"
+      actionLabel="Review research decisions"
+      asOf={asOf}
+      count={0}
+      currentPath="/weekly-review"
+      emptyMessage="Weekly Review is scheduled only after eligible decision outcomes mature. Complete research decisions first; this page never starts a review automatically."
+      emptyTitle="No persisted weekly reviews"
+      title="Weekly Review"
+    />
     if (typeof latest.id !== 'string') throw new TypeError('Weekly review id is invalid')
     const detail = await getWeeklyReviewDetail({ baseUrl: config.baseUrl, decisionTime: asOf }, latest.id)
     return <ApiWeeklyReviewPage asOf={asOf} detail={detail} />

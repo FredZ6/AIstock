@@ -51,4 +51,13 @@ describe('visual system contract', () => {
       )
     }
   })
+
+  it('contains the TradingView overview in a keyboard-scrollable mobile viewport', () => {
+    expect(css).toMatch(
+      /@media \(max-width: 48rem\)[\s\S]*\.market-widget-symbol-overview \.tradingview-widget-container\s*\{[^}]*overflow-x:\s*auto/s,
+    )
+    expect(css).toMatch(
+      /@media \(max-width: 48rem\)[\s\S]*\.market-widget-symbol-overview \.tradingview-widget-container__widget\s*\{[^}]*min-width:/s,
+    )
+  })
 })

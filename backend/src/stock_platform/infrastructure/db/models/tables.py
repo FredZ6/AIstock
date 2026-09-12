@@ -1605,3 +1605,66 @@ alert_metric = time_series_table(
     Column("data_quality", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
 )
 Index("alert_metric_alert_id_idx", alert_metric.c.alert_id, alert_metric.c.event_time.desc())
+
+eval_run = Table(
+    "eval_run",
+    metadata,
+    uuid_pk(),
+    Column("status", Text, nullable=False),
+    Column("passed", Boolean, nullable=False),
+    Column("mode", Text, nullable=False),
+    Column("dataset_version", Text, nullable=False),
+    Column("case_count", Integer, nullable=False),
+    Column("data_cutoff", DateTime(timezone=True), nullable=False),
+    Column("model_version", Text, nullable=False),
+    Column("prompt_version", Text, nullable=False),
+    Column("research_scoring_policy_version", Text, nullable=False),
+    Column("risk_policy_version", Text, nullable=False),
+    Column("execution_policy_version", Text, nullable=False),
+    Column("confidence_policy_version", Text, nullable=False),
+    Column("gate_policy_version", Text, nullable=False),
+    Column("summary_hash", Text, nullable=False),
+    created_at(),
+    CheckConstraint("status IN ('PASSED', 'FAILED')", name=conv("ck_eval_run_status")),
+    CheckConstraint("mode = 'fixture'", name=conv("ck_eval_run_mode")),
+    CheckConstraint("case_count > 0", name=conv("ck_eval_run_case_count")),
+    CheckConstraint(
+        "(status = 'PASSED') = passed",
+        name=conv("ck_eval_run_status_passed"),
+    ),
+    CheckConstraint(
+        "summary_hash ~ '^[0-9a-f]{64}$'",
+        name=conv("ck_eval_run_summary_hash"),
+    ),
+)
+Index("eval_run_created_idx", eval_run.c.created_at.desc(), eval_run.c.id.desc())
+
+eval_metric = Table(
+    "eval_metric",
+    metadata,
+    Column("eval_run_id", UUID(as_uuid=True), ForeignKey("eval_run.id"), nullable=False),
+    Column("metric_name", Text, nullable=False),
+    Column("metric_value", Numeric, nullable=False),
+    Column("case_ids", JSONB, nullable=False),
+    Column("case_hashes", JSONB, nullable=False),
+    created_at(),
+    PrimaryKeyConstraint("eval_run_id", "metric_name"),
+)
+
+regression_gate_result = Table(
+    "regression_gate_result",
+    metadata,
+    Column("eval_run_id", UUID(as_uuid=True), ForeignKey("eval_run.id"), nullable=False),
+    Column("metric_name", Text, nullable=False),
+    Column("comparison", Text, nullable=False),
+    Column("threshold", Numeric, nullable=False),
+    Column("observed", Numeric),
+    Column("passed", Boolean, nullable=False),
+    Column("reason", Text, nullable=False),
+    created_at(),
+    PrimaryKeyConstraint("eval_run_id", "metric_name"),
+    CheckConstraint(
+        "comparison IN ('AT_LEAST', 'AT_MOST', 'LESS_THAN')",
+        name=conv("ck_regression_gate_comparison"),
+    ),
+)

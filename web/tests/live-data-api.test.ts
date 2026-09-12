@@ -2,8 +2,14 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   createResearchRun,
+  getAlerts,
   getDataQuality,
+  getEvalRunDetail,
+  getEvalRuns,
+  getHistoricalBars,
   getMarketQuotes,
+  getLatestResearchRun,
+  getResearchRun,
   getPortfolioSummary,
   getProviderHealth,
   getStockResearch,
@@ -23,6 +29,129 @@ function jsonResponse(value: unknown, status = 200) {
 const options = { baseUrl: 'http://api.test', decisionTime: '2026-08-29T09:30:00Z' }
 
 describe('live data API client', () => {
+  it('parses version-pinned evaluation runs, metrics, and gates', async () => {
+    const run = {
+      id: '10000000-0000-0000-0000-000000000099', status: 'PASSED', passed: true,
+      mode: 'fixture', dataset_version: 'eval-v0.2.0', case_count: 200,
+      data_cutoff: '2026-08-21T20:00:00Z', model_version: 'fixture-deterministic-v1',
+      prompt_version: 'offline-eval-v0.2', research_scoring_policy_version: 'research-v1',
+      risk_policy_version: 'risk-v1', execution_policy_version: 'execution-v1',
+      confidence_policy_version: 'confidence-v1', gate_policy_version: 'gates-v1',
+      summary_hash: 'a'.repeat(64), created_at: '2026-08-29T09:20:00Z',
+    }
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [run], next_cursor: null, decision_time: options.decisionTime }))
+      .mockResolvedValueOnce(jsonResponse({
+        decision_time: options.decisionTime, run,
+        metrics: [{ metric_name: 'directional_accuracy', metric_value: '0.91', case_ids: ['r1'], case_hashes: ['b'.repeat(64)] }],
+        gates: [{ metric_name: 'directional_accuracy', comparison: 'AT_LEAST', threshold: '0.8', observed: '0.91', passed: true, reason: 'meets threshold' }],
+      }))
+
+    const page = await getEvalRuns({ ...options, fetchImpl })
+    await expect(getEvalRunDetail({ ...options, fetchImpl }, page.items[0].id)).resolves.toMatchObject({
+      run: { caseCount: 200, modelVersion: 'fixture-deterministic-v1' },
+      metrics: [{ name: 'directional_accuracy', value: '0.91' }],
+      gates: [{ comparison: 'AT_LEAST', passed: true }],
+    })
+  })
+
+  it('parses the locked point-in-time Alert contract without weakening Decimal or timestamp fields', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      decision_time: options.decisionTime,
+      items: [{
+        acknowledged_at: null,
+        acknowledged_by: null,
+        alert_key: 'NVDA:price-gap:2026-08-29',
+        conditions: [{ operator: 'gte', threshold: '0.05' }],
+        correlation_id: '10000000-0000-0000-0000-000000000099',
+        created_at: '2026-08-29T09:21:00Z',
+        data_quality: { coverage: 'IEX', freshness: 'PT1M' },
+        event_time: '2026-08-29T09:20:00Z',
+        id: '10000000-0000-0000-0000-000000000001',
+        materiality: '0.075',
+        metrics: { move: '0.081' },
+        rule_id: 'price-gap',
+        rule_version: 'price-gap-v2',
+        severity: 'HIGH',
+        symbol: 'NVDA',
+      }],
+      next_cursor: null,
+    }))
+
+    await expect(getAlerts({ ...options, fetchImpl })).resolves.toEqual({
+      items: [expect.objectContaining({
+        alertKey: 'NVDA:price-gap:2026-08-29',
+        correlationId: '10000000-0000-0000-0000-000000000099',
+        createdAt: '2026-08-29T09:21:00Z',
+        dataQuality: { coverage: 'IEX', freshness: 'PT1M' },
+        eventTime: '2026-08-29T09:20:00Z',
+        materiality: '0.075',
+        ruleId: 'price-gap',
+        ruleVersion: 'price-gap-v2',
+        severity: 'HIGH',
+        symbol: 'NVDA',
+      })],
+      nextCursor: null,
+    })
+  })
+
+  it('rejects malformed Alert Decimal and naive datetime values', async () => {
+    const invalid = {
+      acknowledged_at: null,
+      acknowledged_by: null,
+      alert_key: 'NVDA:price-gap:2026-08-29',
+      conditions: [],
+      correlation_id: '10000000-0000-0000-0000-000000000099',
+      created_at: '2026-08-29T09:21:00Z',
+      data_quality: {},
+      event_time: '2026-08-29T09:20:00',
+      id: '10000000-0000-0000-0000-000000000001',
+      materiality: 0.075,
+      metrics: {},
+      rule_id: 'price-gap',
+      rule_version: 'price-gap-v2',
+      severity: 'HIGH',
+      symbol: 'NVDA',
+    }
+    const fetchImpl = vi.fn(async () => jsonResponse({ items: [invalid], next_cursor: null }))
+
+    await expect(getAlerts({ ...options, fetchImpl })).rejects.toMatchObject({ kind: 'contract' })
+  })
+
+  it('loads the latest research run at the requested point-in-time cutoff', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      data_cutoff: options.decisionTime,
+      decision_time: options.decisionTime,
+      run_id: '10000000-0000-0000-0000-000000000099',
+      run_type: 'RESEARCH',
+      status: 'RUNNING',
+      symbol: 'NVDA',
+    }))
+
+    await expect(getLatestResearchRun({ ...options, fetchImpl })).resolves.toMatchObject({ symbol: 'NVDA' })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://api.test/api/v1/research-runs/latest?decision_time=${encodeURIComponent(options.decisionTime)}`,
+      expect.objectContaining({ cache: 'no-store' }),
+    )
+  })
+
+  it('loads a named research run at the requested point-in-time cutoff', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      data_cutoff: options.decisionTime,
+      decision_time: options.decisionTime,
+      run_id: '10000000-0000-0000-0000-000000000099',
+      run_type: 'RESEARCH',
+      status: 'COMPLETED',
+      symbol: 'NVDA',
+    }))
+
+    await expect(getResearchRun({ ...options, fetchImpl }, 'run-1')).resolves.toMatchObject({ symbol: 'NVDA' })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://api.test/api/v1/research-runs/run-1?decision_time=${encodeURIComponent(options.decisionTime)}`,
+      expect.objectContaining({ cache: 'no-store' }),
+    )
+  })
+
   it('parses the closed research report without weakening Decimal or timestamp contracts', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       run_id: 'run-1',
@@ -39,6 +168,10 @@ describe('live data API client', () => {
       evidence: [{ rawObjectKey: 'sec/raw.json' }],
       decisionDiff: { generator: 'DETERMINISTIC_CODE' },
     })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://api.test/api/v1/research-runs/run-1/report?decision_time=${encodeURIComponent(options.decisionTime)}`,
+      expect.objectContaining({ cache: 'no-store' }),
+    )
   })
 
   it('admits a research run with one point-in-time cutoff and a stable idempotency key', async () => {
@@ -109,6 +242,39 @@ describe('live data API client', () => {
     )
   })
 
+  it('parses point-in-time historical bars with complete provenance', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      decision_time: options.decisionTime,
+      items: [{
+        available_at: '2026-08-29T09:20:00Z', close: '217.545', conflict: false,
+        content_hash: 'a'.repeat(64), coverage: 'IEX', event_time: '2026-08-28T20:00:00Z',
+        feed_type: 'price_bars', high: '221', ingested_at: '2026-08-29T09:20:01Z',
+        low: '216', open: '220', provider: 'ALPACA',
+        raw_object_key: `live/ALPACA/price_bars/${'a'.repeat(64)}.json`,
+        session: 'REGULAR', symbol: 'NVDA', timeframe: '1Day', volume: '5357434',
+      }],
+      missing_symbols: [], status: 'SUCCESS',
+    }))
+
+    await expect(getHistoricalBars(
+      { ...options, fetchImpl },
+      'NVDA',
+      '2026-07-15T09:30:00Z',
+      options.decisionTime,
+    )).resolves.toMatchObject({
+      decisionTime: options.decisionTime,
+      items: [{
+        close: '217.545', contentHash: 'a'.repeat(64), coverage: 'IEX',
+        rawObjectKey: `live/ALPACA/price_bars/${'a'.repeat(64)}.json`, symbol: 'NVDA',
+      }],
+      status: 'SUCCESS',
+    })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/market-data/bars/NVDA?'),
+      expect.objectContaining({ cache: 'no-store' }),
+    )
+  })
+
   it('rejects malformed provider responses instead of substituting fixtures', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ status: 'SUCCESS', items: [{ close: 217.5 }] }))
 
@@ -134,8 +300,9 @@ describe('live data API client', () => {
         positions: [], risk_decisions: [], status: 'EMPTY', trading: 'paper_only',
       })
       return jsonResponse({
-        decision_time: options.decisionTime, financial_facts: [], items: [],
-        next_cursor: null, sec_filings: [],
+        decision_time: options.decisionTime, earnings_events: [], financial_facts: [], items: [],
+        news_articles: [], next_cursor: null, option_snapshots: [], sec_filings: [],
+        unavailable_domains: ['ANALYST_TARGETS'],
       })
     })
 
@@ -151,8 +318,64 @@ describe('live data API client', () => {
       cash: null, latestNav: null, status: 'EMPTY', trading: 'paper_only',
     })
     await expect(getStockResearch({ ...options, fetchImpl }, 'NVDA')).resolves.toEqual({
-      financialFacts: [], records: [], secFilings: [],
+      earningsEvents: [], financialFacts: [], newsArticles: [], optionSnapshots: [], records: [],
+      secFilings: [], unavailableDomains: ['ANALYST_TARGETS'],
     })
+  })
+
+  it('parses persisted research domains with complete provenance', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      decision_time: options.decisionTime,
+      earnings_events: [{ available_at: '2026-08-29T09:20:00Z', content_hash: 'b'.repeat(64), currency: 'USD', estimate: '0.95', event_date: '2026-09-20', event_time: '2026-08-29T09:00:00Z', fiscal_date_end: '2026-06-30', id: 'earnings-1', provider: 'ALPHA_VANTAGE', raw_object_key: 'live/earnings.csv' }],
+      financial_facts: [], items: [],
+      news_articles: [{ available_at: '2026-08-29T09:20:00Z', content_hash: 'a'.repeat(64), event_time: '2026-08-29T09:00:00Z', headline: 'Persisted headline', id: 'news-1', provider: 'ALPACA', raw_object_key: 'live/news.json', source: 'wire', summary: 'Persisted summary' }],
+      next_cursor: null,
+      option_snapshots: [{ available_at: '2026-08-29T09:20:00Z', content_hash: 'c'.repeat(64), event_time: '2026-08-29T09:00:00Z', feed_type: 'option_snapshot', id: 'options-1', payload: { put_call_ratio: '0.72' }, provider: 'ALPACA', raw_object_key: 'live/options.json' }],
+      sec_filings: [], unavailable_domains: ['ANALYST_TARGETS'],
+    }))
+
+    await expect(getStockResearch({ ...options, fetchImpl }, 'NVDA')).resolves.toMatchObject({
+      earningsEvents: [{ estimate: '0.95', rawObjectKey: 'live/earnings.csv' }],
+      newsArticles: [{ headline: 'Persisted headline', provider: 'ALPACA' }],
+      optionSnapshots: [{ contentHash: 'c'.repeat(64), payload: { put_call_ratio: '0.72' } }],
+      unavailableDomains: ['ANALYST_TARGETS'],
+    })
+  })
+
+  it('parses the complete point-in-time paper portfolio contract without numeric money', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      cash: { balance: '90500', currency: 'USD' },
+      cash_ledger: [{ account: 'CASH', created_at: '2026-08-29T09:20:00Z', credit: '0', currency: 'USD', debit: '9500', id: 'ledger-1', idempotency_key: 'fill-1:cash', occurred_at: '2026-08-29T09:20:00Z', reversal_of_id: null, source_id: 'fill-1', transaction_id: 'transaction-1' }],
+      configuration: { currency: 'USD', id: 'portfolio-1', initial_cash: '100000', name: 'default-paper' },
+      decision_time: options.decisionTime,
+      fills: [{ created_at: '2026-08-29T09:20:00Z', currency: 'USD', execution_policy_version_id: 'execution-v1', fee: '0', filled_at: '2026-08-29T09:20:00Z', id: 'fill-1', idempotency_key: 'fill-1', order_id: 'order-1', portfolio_id: 'portfolio-1', price: '190', quantity: '50', reversal_of_id: null, side: 'BUY', source_bar_time: '2026-08-29T09:19:00Z', symbol: 'NVDA' }],
+      initialized_at: '2026-08-28T09:00:00Z',
+      latest_nav: { available_at: '2026-08-29T09:21:00Z', event_time: '2026-08-29T09:20:00Z', id: 'nav-2', nav: '100500', portfolio_id: 'portfolio-1' },
+      orders: [],
+      performance_history: [
+        { available_at: '2026-08-28T09:01:00Z', event_time: '2026-08-28T09:00:00Z', id: 'nav-1', nav: '101000', portfolio_id: 'portfolio-1' },
+        { available_at: '2026-08-29T09:21:00Z', event_time: '2026-08-29T09:20:00Z', id: 'nav-2', nav: '100500', portfolio_id: 'portfolio-1' },
+      ],
+      positions: [{ average_cost: '190', market_price: '200', market_value: '10000', price_available_at: '2026-08-29T09:19:00Z', quantity: '50', symbol: 'NVDA', unrealized_pnl: '500' }],
+      risk_decisions: [{ approved_delta: '0.1', approved_weight: '0.1', authorization_source: 'policy', authorized_side: 'BUY', created_at: '2026-08-29T09:18:00Z', current_weight: '0', decided_at: '2026-08-29T09:18:00Z', id: 'risk-1', market_context_snapshot_id: 'context-1', max_order_quantity: '50', portfolio_id: 'portfolio-1', proposal_id: 'proposal-1', reason_codes: [], reference_nav: '100000', reference_price: '190', research_decision_id: 'research-1', requested_weight: '0.1', risk_policy_version_id: 'risk-v1', status: 'APPROVED', symbol: 'NVDA' }],
+      status: 'SUCCESS', trading: 'paper_only',
+    }))
+
+    await expect(getPortfolioSummary({ ...options, fetchImpl })).resolves.toMatchObject({
+      cashLedger: [{ debit: '9500', occurredAt: '2026-08-29T09:20:00Z' }],
+      fills: [{ price: '190', quantity: '50', symbol: 'NVDA' }],
+      performanceHistory: [{ nav: '101000' }, { availableAt: '2026-08-29T09:21:00Z', nav: '100500' }],
+      positions: [{ marketValue: '10000', unrealizedPnl: '500' }],
+      riskDecisions: [{ approvedWeight: '0.1', status: 'APPROVED' }],
+    })
+
+    const invalidFetch = vi.fn(async () => jsonResponse({
+      cash: null, cash_ledger: [], configuration: null, decision_time: options.decisionTime,
+      fills: [], initialized_at: null, latest_nav: null, orders: [], performance_history: [],
+      positions: [{ average_cost: 190, market_price: null, market_value: null, price_available_at: null, quantity: '50', symbol: 'NVDA', unrealized_pnl: null }],
+      risk_decisions: [], status: 'SUCCESS', trading: 'paper_only',
+    }))
+    await expect(getPortfolioSummary({ ...options, fetchImpl: invalidFetch })).rejects.toMatchObject({ kind: 'contract' })
   })
 
   it('loads point-in-time SEC data-quality dimensions without deriving a UI grade', async () => {

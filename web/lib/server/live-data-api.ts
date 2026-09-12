@@ -7,6 +7,53 @@ type JsonRecord = Record<string, unknown>
 
 export type LiveDataStatus = 'SUCCESS' | 'DEGRADED' | 'FAILURE'
 
+export type AlertRecord = {
+  acknowledgedAt: string | null
+  acknowledgedBy: string | null
+  alertKey: string
+  conditions: unknown[]
+  correlationId: string
+  createdAt: string
+  dataQuality: JsonRecord
+  eventTime: string
+  id: string
+  materiality: string
+  metrics: JsonRecord
+  ruleId: string
+  ruleVersion: string
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  symbol: string
+}
+
+export type AlertPage = { items: AlertRecord[]; nextCursor: string | null }
+
+export type EvalRunRecord = {
+  caseCount: number
+  confidencePolicyVersion: string
+  createdAt: string
+  dataCutoff: string
+  datasetVersion: string
+  executionPolicyVersion: string
+  gatePolicyVersion: string
+  id: string
+  mode: 'fixture'
+  modelVersion: string
+  passed: boolean
+  promptVersion: string
+  researchScoringPolicyVersion: string
+  riskPolicyVersion: string
+  status: 'PASSED' | 'FAILED'
+  summaryHash: string
+}
+
+export type EvalRunPage = { items: EvalRunRecord[]; nextCursor: string | null }
+
+export type EvalRunDetail = {
+  gates: Array<{ comparison: 'AT_LEAST' | 'AT_MOST' | 'LESS_THAN'; name: string; observed: string | null; passed: boolean; reason: string; threshold: string }>
+  metrics: Array<{ caseHashes: string[]; caseIds: string[]; name: string; value: string }>
+  run: EvalRunRecord
+}
+
 export type MarketQuote = {
   availableAt: string
   close: string
@@ -14,6 +61,20 @@ export type MarketQuote = {
   eventTime: string
   provider: string
   symbol: string
+}
+
+export type MarketBar = MarketQuote & {
+  conflict: boolean
+  contentHash: string
+  feedType: string
+  high: string
+  ingestedAt: string
+  low: string
+  open: string
+  rawObjectKey: string
+  session: 'PRE_MARKET' | 'REGULAR' | 'AFTER_HOURS' | 'OVERNIGHT'
+  timeframe: '1Min' | '1Day'
+  volume: string
 }
 
 export type ProviderHealth = {
@@ -28,17 +89,82 @@ export type ProviderHealth = {
 
 export type PortfolioSummary = {
   cash: null | { balance: string; currency: 'USD' }
-  cashLedger: JsonRecord[]
+  cashLedger: Array<{
+    account: string
+    createdAt: string
+    credit: string
+    currency: 'USD'
+    debit: string
+    id: string
+    idempotencyKey: string
+    occurredAt: string
+    reversalOfId: string | null
+    sourceId: string
+    transactionId: string
+  }>
   configuration: null | { currency: 'USD'; id: string; initialCash: string; name: string }
-  fills: JsonRecord[]
+  fills: Array<{
+    createdAt: string
+    currency: 'USD'
+    executionPolicyVersionId: string
+    fee: string
+    filledAt: string
+    id: string
+    idempotencyKey: string
+    orderId: string
+    portfolioId: string
+    price: string
+    quantity: string
+    reversalOfId: string | null
+    side: 'BUY' | 'SELL'
+    sourceBarTime: string
+    symbol: string
+  }>
   initializedAt: string | null
-  latestNav: null | { eventTime: string; nav: string; portfolioId: string }
+  latestNav: null | PortfolioNav
   orders: JsonRecord[]
-  performanceHistory: JsonRecord[]
-  positions: JsonRecord[]
-  riskDecisions: JsonRecord[]
+  performanceHistory: PortfolioNav[]
+  positions: Array<{
+    averageCost: string
+    marketPrice: string | null
+    marketValue: string | null
+    priceAvailableAt: string | null
+    quantity: string
+    symbol: string
+    unrealizedPnl: string | null
+  }>
+  riskDecisions: Array<{
+    approvedDelta: string
+    approvedWeight: string
+    authorizationSource: string
+    authorizedSide: 'BUY' | 'SELL' | null
+    createdAt: string
+    currentWeight: string
+    decidedAt: string
+    id: string
+    marketContextSnapshotId: string
+    maxOrderQuantity: string
+    portfolioId: string
+    proposalId: string
+    reasonCodes: string[]
+    referenceNav: string | null
+    referencePrice: string | null
+    researchDecisionId: string | null
+    requestedWeight: string
+    riskPolicyVersionId: string
+    status: 'APPROVED' | 'CLIPPED' | 'REJECTED'
+    symbol: string
+  }>
   status: 'EMPTY' | 'SUCCESS'
   trading: 'paper_only'
+}
+
+export type PortfolioNav = {
+  availableAt: string
+  eventTime: string
+  id: string
+  nav: string
+  portfolioId: string
 }
 
 export type PortfolioInitialization = {
@@ -90,10 +216,50 @@ export type FinancialFact = {
   value: string
 }
 
+export type NewsArticle = {
+  availableAt: string
+  contentHash: string
+  eventTime: string
+  headline: string
+  id: string
+  provider: string
+  rawObjectKey: string
+  source: string
+  summary: string
+}
+
+export type EarningsEvent = {
+  availableAt: string
+  contentHash: string
+  currency: string | null
+  estimate: string | null
+  eventDate: string
+  eventTime: string
+  fiscalDateEnd: string
+  id: string
+  provider: string
+  rawObjectKey: string
+}
+
+export type OptionSnapshot = {
+  availableAt: string
+  contentHash: string
+  eventTime: string
+  feedType: string
+  id: string
+  payload: JsonRecord
+  provider: string
+  rawObjectKey: string
+}
+
 export type StockResearch = {
+  earningsEvents: EarningsEvent[]
   financialFacts: FinancialFact[]
+  newsArticles: NewsArticle[]
+  optionSnapshots: OptionSnapshot[]
   records: ResearchRecord[]
   secFilings: SecFiling[]
+  unavailableDomains: Array<'EARNINGS' | 'NEWS' | 'OPTIONS' | 'ANALYST_TARGETS'>
 }
 
 export type DataQuality = {
@@ -285,9 +451,41 @@ function pagedRecords(value: unknown, path: string): PagedRecords {
   })
 }
 
-export async function getAlerts(options: LiveDataClientOptions): Promise<PagedRecords> {
+export async function getAlerts(options: LiveDataClientOptions): Promise<AlertPage> {
   const query = new URLSearchParams({ decision_time: options.decisionTime, limit: '50' })
-  return pagedRecords(await requestJson(options, `/api/v1/alerts?${query}`), 'alerts')
+  const value = await requestJson(options, `/api/v1/alerts?${query}`)
+  return contract(() => {
+    const source = record(value, 'alerts')
+    if (!Array.isArray(source.items)) throw new TypeError('alerts.items must be an array')
+    const nextCursor = source.next_cursor
+    if (nextCursor !== null && typeof nextCursor !== 'string') throw new TypeError('alerts.next_cursor is invalid')
+    return {
+      items: source.items.map((item, index) => {
+        const row = record(item, `alerts.items[${index}]`)
+        const symbol = text(row.symbol, `alerts.items[${index}].symbol`)
+        if (!symbolPattern.test(symbol)) throw new TypeError(`alerts.items[${index}].symbol is invalid`)
+        if (!Array.isArray(row.conditions)) throw new TypeError(`alerts.items[${index}].conditions must be an array`)
+        return {
+          id: text(row.id, `alerts.items[${index}].id`),
+          correlationId: text(row.correlation_id, `alerts.items[${index}].correlation_id`),
+          alertKey: text(row.alert_key, `alerts.items[${index}].alert_key`),
+          symbol,
+          eventTime: instant(row.event_time, `alerts.items[${index}].event_time`),
+          ruleId: text(row.rule_id, `alerts.items[${index}].rule_id`),
+          ruleVersion: text(row.rule_version, `alerts.items[${index}].rule_version`),
+          severity: enumeration(row.severity, ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const, `alerts.items[${index}].severity`),
+          materiality: decimal(row.materiality, `alerts.items[${index}].materiality`),
+          conditions: row.conditions,
+          metrics: record(row.metrics, `alerts.items[${index}].metrics`),
+          dataQuality: record(row.data_quality, `alerts.items[${index}].data_quality`),
+          acknowledgedAt: row.acknowledged_at === null ? null : instant(row.acknowledged_at, `alerts.items[${index}].acknowledged_at`),
+          acknowledgedBy: row.acknowledged_by === null ? null : text(row.acknowledged_by, `alerts.items[${index}].acknowledged_by`),
+          createdAt: instant(row.created_at, `alerts.items[${index}].created_at`),
+        }
+      }),
+      nextCursor,
+    }
+  })
 }
 
 export async function getWeeklyReviews(options: LiveDataClientOptions): Promise<PagedRecords> {
@@ -364,9 +562,71 @@ export async function getWeeklyReviewDetail(
   })
 }
 
-export async function getEvalRuns(options: LiveDataClientOptions): Promise<PagedRecords> {
+function stringArray(value: unknown, path: string): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    throw new TypeError(`${path} must be an array of strings`)
+  }
+  return value
+}
+
+function evalRun(value: unknown, path: string): EvalRunRecord {
+  const row = record(value, path)
+  if (!Number.isInteger(row.case_count) || Number(row.case_count) < 1) {
+    throw new TypeError(`${path}.case_count is invalid`)
+  }
+  const summaryHash = text(row.summary_hash, `${path}.summary_hash`)
+  if (!/^[0-9a-f]{64}$/.test(summaryHash)) throw new TypeError(`${path}.summary_hash is invalid`)
+  return {
+    id: text(row.id, `${path}.id`),
+    status: enumeration(row.status, ['PASSED', 'FAILED'] as const, `${path}.status`),
+    passed: booleanValue(row.passed, `${path}.passed`),
+    mode: enumeration(row.mode, ['fixture'] as const, `${path}.mode`),
+    datasetVersion: text(row.dataset_version, `${path}.dataset_version`),
+    caseCount: Number(row.case_count),
+    dataCutoff: instant(row.data_cutoff, `${path}.data_cutoff`),
+    modelVersion: text(row.model_version, `${path}.model_version`),
+    promptVersion: text(row.prompt_version, `${path}.prompt_version`),
+    researchScoringPolicyVersion: text(row.research_scoring_policy_version, `${path}.research_scoring_policy_version`),
+    riskPolicyVersion: text(row.risk_policy_version, `${path}.risk_policy_version`),
+    executionPolicyVersion: text(row.execution_policy_version, `${path}.execution_policy_version`),
+    confidencePolicyVersion: text(row.confidence_policy_version, `${path}.confidence_policy_version`),
+    gatePolicyVersion: text(row.gate_policy_version, `${path}.gate_policy_version`),
+    summaryHash,
+    createdAt: instant(row.created_at, `${path}.created_at`),
+  }
+}
+
+export async function getEvalRuns(options: LiveDataClientOptions): Promise<EvalRunPage> {
   const query = new URLSearchParams({ decision_time: options.decisionTime, limit: '50' })
-  return pagedRecords(await requestJson(options, `/api/v1/evals/runs?${query}`), 'eval_runs')
+  const value = await requestJson(options, `/api/v1/evals/runs?${query}`)
+  return contract(() => {
+    const source = record(value, 'eval_runs')
+    if (!Array.isArray(source.items)) throw new TypeError('eval_runs.items must be an array')
+    const nextCursor = source.next_cursor
+    if (nextCursor !== null && typeof nextCursor !== 'string') throw new TypeError('eval_runs.next_cursor is invalid')
+    return { items: source.items.map((item, index) => evalRun(item, `eval_runs.items[${index}]`)), nextCursor }
+  })
+}
+
+export async function getEvalRunDetail(options: LiveDataClientOptions, runId: string): Promise<EvalRunDetail> {
+  if (!runId) throw new LiveDataApiError('contract', 'Evaluation run id is required')
+  const query = new URLSearchParams({ decision_time: options.decisionTime })
+  const value = await requestJson(options, `/api/v1/evals/runs/${encodeURIComponent(runId)}?${query}`)
+  return contract(() => {
+    const source = record(value, 'eval_run_detail')
+    if (!Array.isArray(source.metrics) || !Array.isArray(source.gates)) throw new TypeError('evaluation evidence must be arrays')
+    return {
+      run: evalRun(source.run, 'eval_run_detail.run'),
+      metrics: source.metrics.map((item, index) => {
+        const row = record(item, `eval_run_detail.metrics[${index}]`)
+        return { name: text(row.metric_name, 'metric.name'), value: decimal(row.metric_value, 'metric.value'), caseIds: stringArray(row.case_ids, 'metric.case_ids'), caseHashes: stringArray(row.case_hashes, 'metric.case_hashes') }
+      }),
+      gates: source.gates.map((item, index) => {
+        const row = record(item, `eval_run_detail.gates[${index}]`)
+        return { name: text(row.metric_name, 'gate.name'), comparison: enumeration(row.comparison, ['AT_LEAST', 'AT_MOST', 'LESS_THAN'] as const, 'gate.comparison'), threshold: decimal(row.threshold, 'gate.threshold'), observed: row.observed === null ? null : decimal(row.observed, 'gate.observed'), passed: booleanValue(row.passed, 'gate.passed'), reason: text(row.reason, 'gate.reason') }
+      }),
+    }
+  })
 }
 
 function researchRun(value: unknown): ResearchRun {
@@ -411,17 +671,24 @@ export async function createResearchRun(
 }
 
 export async function getResearchRun(options: LiveDataClientOptions, runId: string): Promise<ResearchRun> {
+  const query = new URLSearchParams({ decision_time: options.decisionTime })
   return researchRun(await requestJson(
     options,
-    `/api/v1/research-runs/${encodeURIComponent(runId)}`,
+    `/api/v1/research-runs/${encodeURIComponent(runId)}?${query}`,
   ))
+}
+
+export async function getLatestResearchRun(options: LiveDataClientOptions): Promise<ResearchRun> {
+  const query = new URLSearchParams({ decision_time: options.decisionTime })
+  return researchRun(await requestJson(options, `/api/v1/research-runs/latest?${query}`))
 }
 
 export async function getResearchRunReport(
   options: LiveDataClientOptions,
   runId: string,
 ): Promise<ResearchRunReport> {
-  const value = await requestJson(options, `/api/v1/research-runs/${encodeURIComponent(runId)}/report`)
+  const query = new URLSearchParams({ decision_time: options.decisionTime })
+  const value = await requestJson(options, `/api/v1/research-runs/${encodeURIComponent(runId)}/report?${query}`)
   return contract(() => {
     const source = record(value, 'research_report')
     const thesis = record(source.thesis, 'research_report.thesis')
@@ -516,6 +783,55 @@ export async function getMarketQuotes(
   })
 }
 
+export async function getHistoricalBars(
+  options: LiveDataClientOptions,
+  symbol: string,
+  start: string,
+  end: string,
+): Promise<{ decisionTime: string; items: MarketBar[]; status: LiveDataStatus }> {
+  if (!symbolPattern.test(symbol)) throw new LiveDataApiError('contract', 'Bar symbol is invalid')
+  const query = new URLSearchParams({
+    decision_time: instant(options.decisionTime, 'bars.decision_time'),
+    end: instant(end, 'bars.end'),
+    limit: '45',
+    start: instant(start, 'bars.start'),
+    timeframe: '1Day',
+  })
+  const value = await requestJson(options, `/api/v1/market-data/bars/${symbol}?${query}`)
+  return contract(() => {
+    const source = record(value, 'bars')
+    if (!Array.isArray(source.items)) throw new TypeError('bars.items must be an array')
+    return {
+      decisionTime: instant(source.decision_time, 'bars.decision_time'),
+      items: source.items.map((item, index) => {
+        const row = record(item, `bars.items[${index}]`)
+        const rowSymbol = text(row.symbol, 'bar.symbol')
+        if (rowSymbol !== symbol) throw new TypeError('bar.symbol does not match the requested symbol')
+        return {
+          availableAt: instant(row.available_at, 'bar.available_at'),
+          close: decimal(row.close, 'bar.close'),
+          conflict: booleanValue(row.conflict, 'bar.conflict'),
+          contentHash: text(row.content_hash, 'bar.content_hash'),
+          coverage: enumeration(row.coverage, ['IEX', 'SIP'] as const, 'bar.coverage'),
+          eventTime: instant(row.event_time, 'bar.event_time'),
+          feedType: text(row.feed_type, 'bar.feed_type'),
+          high: decimal(row.high, 'bar.high'),
+          ingestedAt: instant(row.ingested_at, 'bar.ingested_at'),
+          low: decimal(row.low, 'bar.low'),
+          open: decimal(row.open, 'bar.open'),
+          provider: text(row.provider, 'bar.provider'),
+          rawObjectKey: text(row.raw_object_key, 'bar.raw_object_key'),
+          session: enumeration(row.session, ['PRE_MARKET', 'REGULAR', 'AFTER_HOURS', 'OVERNIGHT'] as const, 'bar.session'),
+          symbol: rowSymbol,
+          timeframe: enumeration(row.timeframe, ['1Min', '1Day'] as const, 'bar.timeframe'),
+          volume: decimal(row.volume, 'bar.volume'),
+        }
+      }),
+      status: enumeration(source.status, ['SUCCESS', 'DEGRADED', 'FAILURE'] as const, 'bars.status'),
+    }
+  })
+}
+
 export async function getProviderHealth(options: LiveDataClientOptions): Promise<ProviderHealth> {
   const value = await requestJson(options, '/api/v1/providers/health')
   return contract(() => {
@@ -555,6 +871,92 @@ export async function getPortfolioSummary(options: LiveDataClientOptions): Promi
       if (!Array.isArray(value)) throw new TypeError(`portfolio.${name} must be an array`)
       return value.map((item, index) => record(item, `portfolio.${name}[${index}]`))
     }
+    const nullableText = (value: unknown, path: string) => value === null ? null : text(value, path)
+    const nullableDecimal = (value: unknown, path: string) => value === null ? null : decimal(value, path)
+    const nullableInstant = (value: unknown, path: string) => value === null ? null : instant(value, path)
+    const nav = (value: JsonRecord, path: string): PortfolioNav => ({
+      availableAt: instant(value.available_at, `${path}.available_at`),
+      eventTime: instant(value.event_time, `${path}.event_time`),
+      id: text(value.id, `${path}.id`),
+      nav: decimal(value.nav, `${path}.nav`),
+      portfolioId: text(value.portfolio_id, `${path}.portfolio_id`),
+    })
+    const positions = records('positions').map((value, index) => {
+      const path = `portfolio.positions[${index}]`
+      return {
+        averageCost: decimal(value.average_cost, `${path}.average_cost`),
+        marketPrice: nullableDecimal(value.market_price, `${path}.market_price`),
+        marketValue: nullableDecimal(value.market_value, `${path}.market_value`),
+        priceAvailableAt: nullableInstant(value.price_available_at, `${path}.price_available_at`),
+        quantity: decimal(value.quantity, `${path}.quantity`),
+        symbol: text(value.symbol, `${path}.symbol`),
+        unrealizedPnl: nullableDecimal(value.unrealized_pnl, `${path}.unrealized_pnl`),
+      }
+    })
+    const riskDecisions = records('risk_decisions').map((value, index) => {
+      const path = `portfolio.risk_decisions[${index}]`
+      const reasonCodes = value.reason_codes
+      if (!Array.isArray(reasonCodes)) throw new TypeError(`${path}.reason_codes must be an array`)
+      return {
+        approvedDelta: decimal(value.approved_delta, `${path}.approved_delta`),
+        approvedWeight: decimal(value.approved_weight, `${path}.approved_weight`),
+        authorizationSource: text(value.authorization_source, `${path}.authorization_source`),
+        authorizedSide: value.authorized_side === null ? null : enumeration(value.authorized_side, ['BUY', 'SELL'] as const, `${path}.authorized_side`),
+        createdAt: instant(value.created_at, `${path}.created_at`),
+        currentWeight: decimal(value.current_weight, `${path}.current_weight`),
+        decidedAt: instant(value.decided_at, `${path}.decided_at`),
+        id: text(value.id, `${path}.id`),
+        marketContextSnapshotId: text(value.market_context_snapshot_id, `${path}.market_context_snapshot_id`),
+        maxOrderQuantity: decimal(value.max_order_quantity, `${path}.max_order_quantity`),
+        portfolioId: text(value.portfolio_id, `${path}.portfolio_id`),
+        proposalId: text(value.proposal_id, `${path}.proposal_id`),
+        reasonCodes: reasonCodes.map((reason, reasonIndex) => text(reason, `${path}.reason_codes[${reasonIndex}]`)),
+        referenceNav: nullableDecimal(value.reference_nav, `${path}.reference_nav`),
+        referencePrice: nullableDecimal(value.reference_price, `${path}.reference_price`),
+        researchDecisionId: nullableText(value.research_decision_id, `${path}.research_decision_id`),
+        requestedWeight: decimal(value.requested_weight, `${path}.requested_weight`),
+        riskPolicyVersionId: text(value.risk_policy_version_id, `${path}.risk_policy_version_id`),
+        status: enumeration(value.status, ['APPROVED', 'CLIPPED', 'REJECTED'] as const, `${path}.status`),
+        symbol: text(value.symbol, `${path}.symbol`),
+      }
+    })
+    const fills = records('fills').map((value, index) => {
+      const path = `portfolio.fills[${index}]`
+      return {
+        createdAt: instant(value.created_at, `${path}.created_at`),
+        currency: enumeration(value.currency, ['USD'] as const, `${path}.currency`),
+        executionPolicyVersionId: text(value.execution_policy_version_id, `${path}.execution_policy_version_id`),
+        fee: decimal(value.fee, `${path}.fee`),
+        filledAt: instant(value.filled_at, `${path}.filled_at`),
+        id: text(value.id, `${path}.id`),
+        idempotencyKey: text(value.idempotency_key, `${path}.idempotency_key`),
+        orderId: text(value.order_id, `${path}.order_id`),
+        portfolioId: text(value.portfolio_id, `${path}.portfolio_id`),
+        price: decimal(value.price, `${path}.price`),
+        quantity: decimal(value.quantity, `${path}.quantity`),
+        reversalOfId: nullableText(value.reversal_of_id, `${path}.reversal_of_id`),
+        side: enumeration(value.side, ['BUY', 'SELL'] as const, `${path}.side`),
+        sourceBarTime: instant(value.source_bar_time, `${path}.source_bar_time`),
+        symbol: text(value.symbol, `${path}.symbol`),
+      }
+    })
+    const cashLedger = records('cash_ledger').map((value, index) => {
+      const path = `portfolio.cash_ledger[${index}]`
+      return {
+        account: text(value.account, `${path}.account`),
+        createdAt: instant(value.created_at, `${path}.created_at`),
+        credit: decimal(value.credit, `${path}.credit`),
+        currency: enumeration(value.currency, ['USD'] as const, `${path}.currency`),
+        debit: decimal(value.debit, `${path}.debit`),
+        id: text(value.id, `${path}.id`),
+        idempotencyKey: text(value.idempotency_key, `${path}.idempotency_key`),
+        occurredAt: instant(value.occurred_at, `${path}.occurred_at`),
+        reversalOfId: nullableText(value.reversal_of_id, `${path}.reversal_of_id`),
+        sourceId: text(value.source_id, `${path}.source_id`),
+        transactionId: text(value.transaction_id, `${path}.transaction_id`),
+      }
+    })
+    const performanceHistory = records('performance_history').map((value, index) => nav(value, `portfolio.performance_history[${index}]`))
     return {
       status: enumeration(source.status, ['EMPTY', 'SUCCESS'] as const, 'portfolio.status'),
       trading: enumeration(source.trading, ['paper_only'] as const, 'portfolio.trading'),
@@ -571,17 +973,13 @@ export async function getPortfolioSummary(options: LiveDataClientOptions): Promi
         balance: decimal(cash.balance, 'portfolio.cash.balance'),
         currency: enumeration(cash.currency, ['USD'] as const, 'portfolio.cash.currency'),
       } : null,
-      latestNav: latest ? {
-        eventTime: instant(latest.event_time, 'portfolio.latest_nav.event_time'),
-        nav: decimal(latest.nav, 'portfolio.latest_nav.nav'),
-        portfolioId: text(latest.portfolio_id, 'portfolio.latest_nav.portfolio_id'),
-      } : null,
-      positions: records('positions'),
-      riskDecisions: records('risk_decisions'),
+      latestNav: latest ? nav(latest, 'portfolio.latest_nav') : null,
+      positions,
+      riskDecisions,
       orders: records('orders'),
-      fills: records('fills'),
-      cashLedger: records('cash_ledger'),
-      performanceHistory: records('performance_history'),
+      fills,
+      cashLedger,
+      performanceHistory,
     }
   })
 }
@@ -636,7 +1034,43 @@ export async function getStockResearch(
         taxonomy: text(row.taxonomy, 'fact.taxonomy'), unit: text(row.unit, 'fact.unit'), value: decimal(row.value, 'fact.value'),
       }
     })
-    return { financialFacts, records, secFilings }
+    if (!Array.isArray(page.news_articles)) throw new TypeError('research.news_articles must be an array')
+    if (!Array.isArray(page.earnings_events)) throw new TypeError('research.earnings_events must be an array')
+    if (!Array.isArray(page.option_snapshots)) throw new TypeError('research.option_snapshots must be an array')
+    if (!Array.isArray(page.unavailable_domains)) throw new TypeError('research.unavailable_domains must be an array')
+    const newsArticles = page.news_articles.map((item, index) => {
+      const row = record(item, `news_articles[${index}]`)
+      return {
+        availableAt: instant(row.available_at, 'news.available_at'), contentHash: text(row.content_hash, 'news.content_hash'),
+        eventTime: instant(row.event_time, 'news.event_time'), headline: text(row.headline, 'news.headline'),
+        id: text(row.id, 'news.id'), provider: text(row.provider, 'news.provider'), rawObjectKey: text(row.raw_object_key, 'news.raw_object_key'),
+        source: text(row.source, 'news.source'), summary: text(row.summary, 'news.summary'),
+      }
+    })
+    const earningsEvents = page.earnings_events.map((item, index) => {
+      const row = record(item, `earnings_events[${index}]`)
+      return {
+        availableAt: instant(row.available_at, 'earnings.available_at'), contentHash: text(row.content_hash, 'earnings.content_hash'),
+        currency: row.currency === null ? null : text(row.currency, 'earnings.currency'),
+        estimate: row.estimate === null ? null : decimal(row.estimate, 'earnings.estimate'),
+        eventDate: text(row.event_date, 'earnings.event_date'), eventTime: instant(row.event_time, 'earnings.event_time'),
+        fiscalDateEnd: text(row.fiscal_date_end, 'earnings.fiscal_date_end'), id: text(row.id, 'earnings.id'),
+        provider: text(row.provider, 'earnings.provider'), rawObjectKey: text(row.raw_object_key, 'earnings.raw_object_key'),
+      }
+    })
+    const optionSnapshots = page.option_snapshots.map((item, index) => {
+      const row = record(item, `option_snapshots[${index}]`)
+      return {
+        availableAt: instant(row.available_at, 'options.available_at'), contentHash: text(row.content_hash, 'options.content_hash'),
+        eventTime: instant(row.event_time, 'options.event_time'), feedType: text(row.feed_type, 'options.feed_type'),
+        id: text(row.id, 'options.id'), payload: record(row.payload, 'options.payload'), provider: text(row.provider, 'options.provider'),
+        rawObjectKey: text(row.raw_object_key, 'options.raw_object_key'),
+      }
+    })
+    const unavailableDomains = page.unavailable_domains.map((item, index) => enumeration(
+      item, ['EARNINGS', 'NEWS', 'OPTIONS', 'ANALYST_TARGETS'] as const, `research.unavailable_domains[${index}]`,
+    ))
+    return { earningsEvents, financialFacts, newsArticles, optionSnapshots, records, secFilings, unavailableDomains }
   })
 }
 

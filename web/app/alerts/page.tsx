@@ -1,5 +1,5 @@
 import { AlertsPage } from '../../components/alerts/alerts-page'
-import { ApiCollectionPage, ApiFailurePage } from '../../components/live/api-pages'
+import { ApiAlertsPage, ApiFailurePage } from '../../components/live/api-pages'
 import { readWebDataConfig } from '../../lib/server/data-mode'
 import { reportLiveDataFailure } from '../../lib/server/live-data-diagnostics'
 import { getAlerts } from '../../lib/server/live-data-api'
@@ -15,7 +15,7 @@ export default async function AlertsRoute() {
     }
     const asOf = new Date().toISOString()
     const page = await getAlerts({ baseUrl: config.baseUrl, decisionTime: asOf })
-    return <ApiCollectionPage asOf={asOf} count={page.items.length} currentPath="/alerts" emptyTitle="No persisted alerts" title="Alerts" />
+    return <ApiAlertsPage alerts={page.items} asOf={asOf} />
   } catch (error) {
     reportLiveDataFailure('/alerts', 'alerts', error)
     return <ApiFailurePage currentPath="/alerts" title="Alerts" />

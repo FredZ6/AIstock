@@ -384,12 +384,54 @@
         "title": "DataQualityResponse",
         "type": "object"
       },
-      "EvalRunItem": {
+      "EarningsEventItem": {
         "additionalProperties": false,
         "properties": {
-          "created_at": {
+          "available_at": {
             "format": "date-time",
-            "title": "Created At",
+            "title": "Available At",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "estimate": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate"
+          },
+          "event_date": {
+            "format": "date",
+            "title": "Event Date",
+            "type": "string"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
+            "type": "string"
+          },
+          "fiscal_date_end": {
+            "format": "date",
+            "title": "Fiscal Date End",
             "type": "string"
           },
           "id": {
@@ -397,14 +439,193 @@
             "title": "Id",
             "type": "string"
           },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "raw_object_key": {
+            "title": "Raw Object Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "event_date",
+          "fiscal_date_end",
+          "estimate",
+          "currency",
+          "event_time",
+          "available_at",
+          "content_hash",
+          "raw_object_key"
+        ],
+        "title": "EarningsEventItem",
+        "type": "object"
+      },
+      "EvalMetricItem": {
+        "additionalProperties": false,
+        "properties": {
+          "case_hashes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Case Hashes",
+            "type": "array"
+          },
+          "case_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Case Ids",
+            "type": "array"
+          },
+          "metric_name": {
+            "title": "Metric Name",
+            "type": "string"
+          },
+          "metric_value": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Metric Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric_name",
+          "metric_value",
+          "case_ids",
+          "case_hashes"
+        ],
+        "title": "EvalMetricItem",
+        "type": "object"
+      },
+      "EvalRunDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_time": {
+            "format": "date-time",
+            "title": "Decision Time",
+            "type": "string"
+          },
+          "gates": {
+            "items": {
+              "$ref": "#/components/schemas/RegressionGateResultItem"
+            },
+            "title": "Gates",
+            "type": "array"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/EvalMetricItem"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "run": {
+            "$ref": "#/components/schemas/EvalRunItem"
+          }
+        },
+        "required": [
+          "decision_time",
+          "run",
+          "metrics",
+          "gates"
+        ],
+        "title": "EvalRunDetail",
+        "type": "object"
+      },
+      "EvalRunItem": {
+        "additionalProperties": false,
+        "properties": {
+          "case_count": {
+            "title": "Case Count",
+            "type": "integer"
+          },
+          "confidence_policy_version": {
+            "title": "Confidence Policy Version",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_cutoff": {
+            "format": "date-time",
+            "title": "Data Cutoff",
+            "type": "string"
+          },
+          "dataset_version": {
+            "title": "Dataset Version",
+            "type": "string"
+          },
+          "execution_policy_version": {
+            "title": "Execution Policy Version",
+            "type": "string"
+          },
+          "gate_policy_version": {
+            "title": "Gate Policy Version",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "const": "fixture",
+            "title": "Mode",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "research_scoring_policy_version": {
+            "title": "Research Scoring Policy Version",
+            "type": "string"
+          },
+          "risk_policy_version": {
+            "title": "Risk Policy Version",
+            "type": "string"
+          },
           "status": {
+            "enum": [
+              "PASSED",
+              "FAILED"
+            ],
             "title": "Status",
+            "type": "string"
+          },
+          "summary_hash": {
+            "title": "Summary Hash",
             "type": "string"
           }
         },
         "required": [
           "id",
           "status",
+          "passed",
+          "mode",
+          "dataset_version",
+          "case_count",
+          "data_cutoff",
+          "model_version",
+          "prompt_version",
+          "research_scoring_policy_version",
+          "risk_policy_version",
+          "execution_policy_version",
+          "confidence_policy_version",
+          "gate_policy_version",
+          "summary_hash",
           "created_at"
         ],
         "title": "EvalRunItem",
@@ -762,6 +983,116 @@
           "items"
         ],
         "title": "MarketDataResponse",
+        "type": "object"
+      },
+      "NewsArticleItem": {
+        "additionalProperties": false,
+        "properties": {
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "raw_object_key": {
+            "title": "Raw Object Key",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "headline",
+          "source",
+          "summary",
+          "event_time",
+          "available_at",
+          "content_hash",
+          "raw_object_key"
+        ],
+        "title": "NewsArticleItem",
+        "type": "object"
+      },
+      "OptionSnapshotItem": {
+        "additionalProperties": false,
+        "properties": {
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
+            "type": "string"
+          },
+          "feed_type": {
+            "title": "Feed Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "raw_object_key": {
+            "title": "Raw Object Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "feed_type",
+          "event_time",
+          "available_at",
+          "content_hash",
+          "raw_object_key",
+          "payload"
+        ],
+        "title": "OptionSnapshotItem",
         "type": "object"
       },
       "PaperFillItem": {
@@ -1512,6 +1843,59 @@
         "title": "ProviderStates",
         "type": "object"
       },
+      "RegressionGateResultItem": {
+        "additionalProperties": false,
+        "properties": {
+          "comparison": {
+            "enum": [
+              "AT_LEAST",
+              "AT_MOST",
+              "LESS_THAN"
+            ],
+            "title": "Comparison",
+            "type": "string"
+          },
+          "metric_name": {
+            "title": "Metric Name",
+            "type": "string"
+          },
+          "observed": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "threshold": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Threshold",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric_name",
+          "comparison",
+          "threshold",
+          "observed",
+          "passed",
+          "reason"
+        ],
+        "title": "RegressionGateResultItem",
+        "type": "object"
+      },
       "ResearchItem": {
         "additionalProperties": false,
         "properties": {
@@ -1641,6 +2025,13 @@
             "title": "Decision Time",
             "type": "string"
           },
+          "earnings_events": {
+            "items": {
+              "$ref": "#/components/schemas/EarningsEventItem"
+            },
+            "title": "Earnings Events",
+            "type": "array"
+          },
           "financial_facts": {
             "items": {
               "$ref": "#/components/schemas/FinancialFactItem"
@@ -1655,6 +2046,13 @@
             "title": "Items",
             "type": "array"
           },
+          "news_articles": {
+            "items": {
+              "$ref": "#/components/schemas/NewsArticleItem"
+            },
+            "title": "News Articles",
+            "type": "array"
+          },
           "next_cursor": {
             "anyOf": [
               {
@@ -1666,11 +2064,31 @@
             ],
             "title": "Next Cursor"
           },
+          "option_snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/OptionSnapshotItem"
+            },
+            "title": "Option Snapshots",
+            "type": "array"
+          },
           "sec_filings": {
             "items": {
               "$ref": "#/components/schemas/SecFilingItem"
             },
             "title": "Sec Filings",
+            "type": "array"
+          },
+          "unavailable_domains": {
+            "items": {
+              "enum": [
+                "EARNINGS",
+                "NEWS",
+                "OPTIONS",
+                "ANALYST_TARGETS"
+              ],
+              "type": "string"
+            },
+            "title": "Unavailable Domains",
             "type": "array"
           }
         },
@@ -1679,6 +2097,10 @@
           "items",
           "sec_filings",
           "financial_facts",
+          "news_articles",
+          "earnings_events",
+          "option_snapshots",
+          "unavailable_domains",
           "next_cursor"
         ],
         "title": "ResearchPage",
@@ -3366,6 +3788,34 @@
               "title": "Decision Time",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
           }
         ],
         "responses": {
@@ -3406,6 +3856,16 @@
               "title": "Eval Run Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3413,9 +3873,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Eval Run Api V1 Evals Runs  Eval Run Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/EvalRunDetail"
                 }
               }
             },
@@ -4152,6 +4610,46 @@
         "summary": "Create Research Run"
       }
     },
+    "/api/v1/research-runs/latest": {
+      "get": {
+        "operationId": "get_latest_research_run_api_v1_research_runs_latest_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Latest Research Run"
+      }
+    },
     "/api/v1/research-runs/{run_id}": {
       "get": {
         "operationId": "get_research_run_api_v1_research_runs__run_id__get",
@@ -4163,6 +4661,16 @@
             "schema": {
               "format": "uuid",
               "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
               "type": "string"
             }
           }
@@ -4243,6 +4751,16 @@
             "schema": {
               "format": "uuid",
               "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision_time",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Decision Time",
               "type": "string"
             }
           }

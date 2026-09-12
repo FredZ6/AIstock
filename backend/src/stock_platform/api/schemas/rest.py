@@ -391,11 +391,51 @@ class FinancialFactItem(StrictModel):
     mapping_status: Literal["EXACT", "DERIVED", "UNMAPPED", "AMBIGUOUS"]
 
 
+class NewsArticleItem(StrictModel):
+    id: UUID
+    provider: str
+    headline: str
+    source: str
+    summary: str
+    event_time: datetime
+    available_at: datetime
+    content_hash: str
+    raw_object_key: str
+
+
+class EarningsEventItem(StrictModel):
+    id: UUID
+    provider: str
+    event_date: date
+    fiscal_date_end: date
+    estimate: Decimal | None
+    currency: str | None
+    event_time: datetime
+    available_at: datetime
+    content_hash: str
+    raw_object_key: str
+
+
+class OptionSnapshotItem(StrictModel):
+    id: UUID
+    provider: str
+    feed_type: str
+    event_time: datetime
+    available_at: datetime
+    content_hash: str
+    raw_object_key: str
+    payload: dict[str, Any]
+
+
 class ResearchPage(StrictModel):
     decision_time: datetime
     items: list[ResearchItem]
     sec_filings: list[SecFilingItem]
     financial_facts: list[FinancialFactItem]
+    news_articles: list[NewsArticleItem]
+    earnings_events: list[EarningsEventItem]
+    option_snapshots: list[OptionSnapshotItem]
+    unavailable_domains: list[Literal["EARNINGS", "NEWS", "OPTIONS", "ANALYST_TARGETS"]]
     next_cursor: str | None
 
 
@@ -582,7 +622,20 @@ class WeeklyReviewDetail(StrictModel):
 
 class EvalRunItem(StrictModel):
     id: UUID
-    status: str
+    status: Literal["PASSED", "FAILED"]
+    passed: bool
+    mode: Literal["fixture"]
+    dataset_version: str
+    case_count: int
+    data_cutoff: datetime
+    model_version: str
+    prompt_version: str
+    research_scoring_policy_version: str
+    risk_policy_version: str
+    execution_policy_version: str
+    confidence_policy_version: str
+    gate_policy_version: str
+    summary_hash: str
     created_at: datetime
 
 
@@ -590,3 +643,26 @@ class EvalRunPage(StrictModel):
     decision_time: datetime
     items: list[EvalRunItem]
     next_cursor: str | None
+
+
+class EvalMetricItem(StrictModel):
+    metric_name: str
+    metric_value: Decimal
+    case_ids: list[str]
+    case_hashes: list[str]
+
+
+class RegressionGateResultItem(StrictModel):
+    metric_name: str
+    comparison: Literal["AT_LEAST", "AT_MOST", "LESS_THAN"]
+    threshold: Decimal
+    observed: Decimal | None
+    passed: bool
+    reason: str
+
+
+class EvalRunDetail(StrictModel):
+    decision_time: datetime
+    run: EvalRunItem
+    metrics: list[EvalMetricItem]
+    gates: list[RegressionGateResultItem]

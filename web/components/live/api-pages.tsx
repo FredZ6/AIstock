@@ -1,11 +1,17 @@
 import Link from 'next/link'
 
 import { initializePortfolioAction } from '../../app/portfolio/actions'
+import { compareDecimals, decimalChange, normalizeDecimalSeries } from '../../lib/decimal'
 import { formatDecimal, formatMoney, formatPercent } from '../../lib/format'
 import type {
+  AlertRecord,
   DataQuality,
+  EarningsEvent,
+  EvalRunDetail,
   FinancialFact,
   MarketQuote,
+  NewsArticle,
+  OptionSnapshot,
   PortfolioSummary,
   ProviderHealth,
   ResearchRecord,
@@ -18,21 +24,108 @@ import { formatDualTime } from '../../lib/time'
 import { AppShell } from '../layout/app-shell'
 import { TradingViewWidget } from '../market/tradingview-widget'
 import { TradingViewTickerList } from '../market/tradingview-ticker-list'
+import { FinancialFactsDisclosure, SecFilingsDisclosure } from '../research/research-evidence-browser'
 import { ResearchRunControl } from '../research/research-run-control'
 import { StateBoundary } from '../states/state-boundary'
 import { LiveRunTrace } from '../trace/live-run-trace'
 import { PageHeading, Signal } from '../ui/product-ui'
 
+function alertEvidence(value: unknown) {
+  return JSON.stringify(value, null, 2)
+}
+
+function unique(items: string[]) {
+  return [...new Set(items)]
+}
+
+export function ApiEvalPage({ detail, asOf }: { detail: EvalRunDetail; asOf: string }) {
+  const { run } = detail
+  return <AppShell currentPath="/eval">
+    <PageHeading asOf={asOf} eyebrow="Govern · API Mode" title="Eval & Admin" summary="Persisted, version-pinned evaluation evidence. No Fixture report was substituted." />
+    <article className="terminal-section first-section" aria-labelledby="persisted-eval-title">
+      <div className="section-heading"><div><p className="section-kicker">Measured evidence</p><h2 id="persisted-eval-title">Persisted evaluation run</h2></div><Signal tone={run.passed ? 'healthy' : 'failure'}>{run.status}</Signal></div>
+      <dl className="metric-list"><div><dt>Dataset</dt><dd>{run.datasetVersion}</dd></div><div><dt>Cases</dt><dd>{run.caseCount}</dd></div><div><dt>Data cutoff</dt><dd><time dateTime={run.dataCutoff}>{formatDualTime(run.dataCutoff).newYork}</time></dd></div><div><dt>Gate policy</dt><dd>{run.gatePolicyVersion}</dd></div></dl>
+      <section aria-label="Pinned evaluation versions"><h3>Version pins</h3><dl className="pin-list"><div><dt>Model</dt><dd>{run.modelVersion}</dd></div><div><dt>Prompt</dt><dd>{run.promptVersion}</dd></div><div><dt>Research scoring</dt><dd>{run.researchScoringPolicyVersion}</dd></div><div><dt>Risk</dt><dd>{run.riskPolicyVersion}</dd></div><div><dt>Execution</dt><dd>{run.executionPolicyVersion}</dd></div><div><dt>Confidence</dt><dd>{run.confidencePolicyVersion}</dd></div></dl></section>
+      <div className="table-scroll" tabIndex={0}><table aria-label="Persisted evaluation metrics"><thead><tr><th>Metric</th><th>Value</th><th>Cases</th></tr></thead><tbody>{detail.metrics.map((metric) => <tr key={metric.name}><th scope="row">{metric.name}</th><td>{metric.value}</td><td>{metric.caseIds.length}</td></tr>)}</tbody></table></div>
+      <div className="table-scroll" tabIndex={0}><table aria-label="Regression gates"><thead><tr><th>Gate</th><th>Observed</th><th>Threshold</th><th>Result</th></tr></thead><tbody>{detail.gates.map((gate) => <tr key={gate.name}><th scope="row">{gate.name}</th><td>{gate.observed ?? 'Unavailable'}</td><td>{gate.comparison} {gate.threshold}</td><td><Signal tone={gate.passed ? 'healthy' : 'failure'}>{gate.passed ? 'PASS' : 'FAIL'}</Signal></td></tr>)}</tbody></table></div>
+      <p className="muted-copy">Summary SHA-256 · <code>{run.summaryHash}</code></p>
+    </article>
+  </AppShell>
+}
+
+export function ApiAlertsPage({ alerts, asOf }: { alerts: AlertRecord[]; asOf: string }) {
+  return (
+    <AppShell currentPath="/alerts">
+      <PageHeading
+        asOf={asOf}
+        eyebrow="Monitor · API Mode"
+        title="Alerts"
+        summary="Persisted point-in-time alert facts. No Fixture data was substituted."
+      />
+      <StateBoundary state={alerts.length === 0 ? {
+        kind: 'empty',
+        title: 'No persisted alerts',
+        message: 'Configure monitored symbols and monitoring thresholds before the alert worker can persist matching events.',
+        actionHref: '/watchlist',
+        actionLabel: 'Configure alert monitoring',
+      } : { kind: 'success' }}>
+        <section className="terminal-section first-section" aria-labelledby="persisted-alerts-title">
+          <div className="section-heading">
+            <div><p className="section-kicker">Persisted records</p><h2 id="persisted-alerts-title">Alert stream</h2></div>
+            <span className="muted-copy">PIT cutoff · {formatDualTime(asOf).newYork}</span>
+          </div>
+          <ul className="lineage-list" aria-label="Persisted alerts">
+            {alerts.map((alert) => <li key={alert.id} id={`alert-${alert.id}`}>
+              <div className="section-heading">
+                <div>
+                  <Signal tone={alert.severity}>{alert.severity}</Signal>
+                  <h3><Link href={`/research/${alert.symbol}`} aria-label={`${alert.symbol} research`}>{alert.symbol}</Link></h3>
+                </div>
+                <strong>{formatPercent(alert.materiality, { signed: false })}</strong>
+              </div>
+              <p>{alert.ruleId} · {alert.ruleVersion}</p>
+              <dl className="decision-facts">
+                <div><dt>Event time</dt><dd><time dateTime={alert.eventTime}>{formatDualTime(alert.eventTime).newYork}</time></dd></div>
+                <div><dt>Recorded</dt><dd><time dateTime={alert.createdAt}>{formatDualTime(alert.createdAt).newYork}</time></dd></div>
+                <div><dt>Acknowledgement</dt><dd>{alert.acknowledgedAt
+                  ? <><time dateTime={alert.acknowledgedAt}>{formatDualTime(alert.acknowledgedAt).newYork}</time> · {alert.acknowledgedBy}</>
+                  : 'Not acknowledged'}</dd></div>
+                <div><dt>Alert key</dt><dd><code>{alert.alertKey}</code></dd></div>
+              </dl>
+              <details>
+                <summary>Conditions, metrics, and data quality</summary>
+                <div className="decision-facts">
+                  <div><dt>Conditions</dt><dd><pre>{alertEvidence(alert.conditions)}</pre></dd></div>
+                  <div><dt>Metrics</dt><dd><pre>{alertEvidence(alert.metrics)}</pre></dd></div>
+                  <div><dt>Data quality</dt><dd><pre>{alertEvidence(alert.dataQuality)}</pre></dd></div>
+                </div>
+              </details>
+              <p><small>Correlation ID · <code>{alert.correlationId}</code></small></p>
+              <p><Link href="/runs/latest">Open latest run trace</Link></p>
+            </li>)}
+          </ul>
+        </section>
+      </StateBoundary>
+    </AppShell>
+  )
+}
+
 export function ApiCollectionPage({
+  actionHref,
+  actionLabel,
   asOf,
   count,
   currentPath,
+  emptyMessage,
   emptyTitle,
   title,
 }: {
+  actionHref?: string
+  actionLabel?: string
   asOf: string
   count: number
   currentPath: string
+  emptyMessage: string
   emptyTitle: string
   title: string
 }) {
@@ -42,7 +135,9 @@ export function ApiCollectionPage({
       <StateBoundary state={count === 0 ? {
         kind: 'empty',
         title: emptyTitle,
-        message: 'The authoritative backend returned no records at this point-in-time cutoff.',
+        message: emptyMessage,
+        actionHref,
+        actionLabel,
       } : { kind: 'success' }}>
         <section className="terminal-section first-section" aria-label={`${title} persisted records`}>
           <p className="section-kicker">Persisted records</p><h2>{count}</h2>
@@ -94,43 +189,52 @@ export function ApiRunMetadataPage({ run, report }: { run: ResearchRun; report?:
 }
 
 export function ApiTodayPage({
+  alerts = [],
   asOf,
   health,
   portfolio,
   quotes,
+  research = [],
   unavailableDomains = [],
 }: {
+  alerts?: AlertRecord[]
   asOf: string
   health: ProviderHealth | null
   portfolio: PortfolioSummary | null
   quotes: MarketQuote[]
+  research?: ResearchRecord[]
   unavailableDomains?: string[]
 }) {
   const unavailableProviders = health ? Object.entries(health.providers)
     .filter(([, provider]) => !provider.configured || provider.status === 'FAILURE' || provider.status === 'UNAVAILABLE')
     .map(([name]) => name.toUpperCase()) : ['Provider health']
-  const unique = (items: string[]) => [...new Set(items)]
   const providerDomains = unavailableDomains.filter((domain) => /provider/i.test(domain))
   const marketDomains = unavailableDomains.filter((domain) => /market|quote/i.test(domain))
   const decisionDomains = unavailableDomains.filter(
     (domain) => !providerDomains.includes(domain) && !marketDomains.includes(domain),
   )
-  const decisionFacts = [...decisionDomains, 'Research decisions', 'Alerts']
-  if (!portfolio?.latestNav) decisionFacts.push('Portfolio NAV')
+  const decisionFacts = [...decisionDomains]
+  if (portfolio && !portfolio.latestNav) decisionFacts.push('Portfolio NAV')
   const groups = [
     { label: 'Provider', items: unique([...providerDomains, ...unavailableProviders]) },
-    { label: 'Market Data', items: unique([...marketDomains, 'Market regime']) },
+    { label: 'Market Data', items: unique(marketDomains) },
     { label: 'Decision Domain', items: unique(decisionFacts) },
   ].filter((group) => group.items.length)
   return (
     <AppShell currentPath="/">
       <PageHeading asOf={asOf} eyebrow="Decision workspace · API Mode" title="Today" summary="Current persisted facts, with unavailable domains left explicit." />
-      <StateBoundary compact state={{
-        kind: 'degraded',
+      <StateBoundary compact state={groups.length ? {
+        kind: 'degraded' as const,
         title: 'Some decision facts are unavailable',
         message: 'Available backend facts remain visible. No Fixture data was substituted.',
+        actionHref: '/watchlist',
+        actionLabel: 'Review watchlist',
         groups,
-      }}>
+      } : { kind: 'success' as const }}>
+        {health ? <section className="terminal-section first-section" aria-labelledby="provider-health-title">
+          <div className="section-heading"><div><p className="section-kicker">Runtime coverage</p><h2 id="provider-health-title">Provider health</h2></div><span className="muted-copy">{health.mode} · read only</span></div>
+          <ul className="plain-list" aria-label="Provider health facts">{Object.entries(health.providers).map(([name, provider]) => <li key={name}><strong>{name.toUpperCase()}</strong><p>{provider.coverage ? `${name.toUpperCase()} · ${provider.coverage} · ${provider.status ?? 'UNAVAILABLE'}` : `${provider.mode} · ${provider.status ?? 'UNAVAILABLE'}`}</p></li>)}</ul>
+        </section> : null}
         <section className="terminal-section first-section" aria-labelledby="live-market-title">
           <div className="section-heading">
             <div><p className="section-kicker">External current market</p><h2 id="live-market-title">Market watchlist</h2></div>
@@ -150,6 +254,14 @@ export function ApiTodayPage({
             </ul>
           </details>
         </section>
+        {research.length ? <section className="terminal-section" aria-labelledby="today-research-title">
+          <div className="section-heading"><div><p className="section-kicker">Latest persisted conclusions</p><h2 id="today-research-title">Research decisions</h2></div><Link href={`/research/${research[0].symbol}`}>Open research</Link></div>
+          <ul className="lineage-list">{research.map((record) => <li key={record.id}><div className="section-heading"><strong>{record.symbol}</strong>{record.opinion ? <Signal tone={record.opinion}>{record.opinion}</Signal> : null}</div><p>{record.summary}</p><small>Confidence {formatPercent(record.confidence, { signed: false })} · cutoff <time dateTime={record.asOf}>{formatDualTime(record.asOf).newYork}</time></small></li>)}</ul>
+        </section> : null}
+        {alerts.length ? <section className="terminal-section" aria-labelledby="today-alerts-title">
+          <div className="section-heading"><div><p className="section-kicker">Actionable persisted events</p><h2 id="today-alerts-title">Alerts</h2></div><Link href="/alerts">View all</Link></div>
+          <ul className="lineage-list">{alerts.map((alert) => <li key={alert.id}><div className="section-heading"><strong>{alert.symbol}</strong><Signal tone={alert.severity}>{alert.severity}</Signal></div><p>{alert.ruleId} · {alert.ruleVersion}</p><small>Materiality {formatPercent(alert.materiality, { signed: false })} · <time dateTime={alert.eventTime}>{formatDualTime(alert.eventTime).newYork}</time></small></li>)}</ul>
+        </section> : null}
         <section className="terminal-section" aria-labelledby="paper-portfolio-title">
           <p className="section-kicker">Paper only</p><h2 id="paper-portfolio-title">Paper portfolio</h2>
           {portfolio?.latestNav
@@ -164,8 +276,11 @@ export function ApiTodayPage({
 export function ApiResearchPage({
   asOf,
   dataQuality,
+  earningsEvents = [],
   financialFacts,
   idempotencyKey,
+  newsArticles = [],
+  optionSnapshots = [],
   quote,
   records,
   secFilings,
@@ -174,22 +289,26 @@ export function ApiResearchPage({
 }: {
   asOf: string
   dataQuality: DataQuality[]
+  earningsEvents?: EarningsEvent[]
   financialFacts: FinancialFact[]
   idempotencyKey: string
+  newsArticles?: NewsArticle[]
+  optionSnapshots?: OptionSnapshot[]
   quote: MarketQuote | null
   records: ResearchRecord[]
   secFilings: SecFiling[]
   symbol: string
   unavailableDomains?: string[]
 }) {
-  const missing = [
+  const latestRecord = records[0]
+  const previousRecords = records.slice(1)
+  const missing = unique([
     ...unavailableDomains,
     ...(!quote ? ['Current market reference'] : []),
     ...(!records.length ? ['Research'] : []),
     ...(!secFilings.length ? ['SEC filings'] : []),
     ...(!financialFacts.length ? ['Fundamentals'] : []),
-    'Earnings', 'News', 'Options', 'Analyst targets',
-  ]
+  ])
   const state = missing.length ? {
     kind: 'degraded' as const,
     title: records.length && !quote ? 'Current market reference unavailable' : 'Research evidence unavailable',
@@ -200,46 +319,76 @@ export function ApiResearchPage({
     <AppShell currentPath={`/research/${symbol}`}>
       <PageHeading asOf={asOf} eyebrow="Research · API Mode" title={`${symbol} research`} summary="Persisted research only; current market reference remains separate from historical decision evidence." />
       <StateBoundary state={state}>
+        {latestRecord ? <section className="decision-hero" aria-label="Latest research conclusion">
+          <div>
+            <p className="section-kicker">Latest research conclusion · {symbol}</p>
+            <h2>{latestRecord.opinion ? <Signal tone={latestRecord.opinion}>{latestRecord.opinion}</Signal> : 'Opinion unavailable'}</h2>
+            <p className="thesis-copy">{latestRecord.summary}</p>
+            <p className="research-freshness">Evidence cutoff <time dateTime={latestRecord.asOf}>{formatDualTime(latestRecord.asOf).newYork}</time></p>
+          </div>
+          <dl className="decision-facts"><div><dt>Confidence</dt><dd>{formatPercent(latestRecord.confidence, { signed: false })}</dd></div><div><dt>Direction</dt><dd>{latestRecord.direction}</dd></div><div><dt>Horizon</dt><dd>{latestRecord.horizon}</dd></div></dl>
+        </section> : null}
         <ResearchRunControl idempotencyKey={idempotencyKey} symbol={symbol} />
-        {quote ? <section className="decision-hero" aria-label="Latest persisted market quote">
+        {quote ? <section className="decision-hero" aria-label="Current market reference">
           <div><p className="section-kicker">Current market reference</p><h2>{quote.symbol}</h2><p className="thesis-copy">{formatMoney(quote.close, 'USD')}</p></div>
           <dl className="decision-facts"><div><dt>Provider</dt><dd>{quote.provider}</dd></div><div><dt>Coverage</dt><dd>{quote.coverage}</dd></div><div><dt>Available</dt><dd>{formatDualTime(quote.availableAt).newYork}</dd></div></dl>
         </section> : <p className="unavailable-value">Current quote unavailable.</p>}
         <p className="muted-copy">TradingView is a current-market reference only; it is not point-in-time decision evidence.</p>
         <TradingViewWidget kind="symbol-overview" symbol={symbol} />
-        {records.map((record) => <article className="terminal-section" key={record.id}>
-          <p className="section-kicker">Persisted thesis</p><h2>{record.direction}</h2><p>{record.summary}</p>
-          <dl className="decision-facts"><div><dt>Opinion</dt><dd>{record.opinion ? <Signal tone={record.opinion}>{record.opinion}</Signal> : 'Unavailable'}</dd></div><div><dt>Confidence</dt><dd>{formatPercent(record.confidence, { signed: false })}</dd></div><div><dt>Horizon</dt><dd>{record.horizon}</dd></div></dl>
-        </article>)}
-        {secFilings.length ? <section className="terminal-section" aria-labelledby="sec-filings-heading">
-          <p className="section-kicker">Persisted evidence</p><h2 id="sec-filings-heading">SEC filings</h2>
-          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted SEC filings"><thead><tr><th>Form</th><th>Filed</th><th>Report period</th><th>Accession</th><th>Available</th><th>Raw source</th></tr></thead><tbody>
-            {secFilings.map((filing) => <tr key={filing.id}><td>{filing.form}</td><td>{filing.filingDate}</td><td>{filing.reportDate ?? 'Unavailable'}</td><td>{filing.accessionNumber}</td><td>{formatDualTime(filing.availableAt).newYork}</td><td><code>{filing.documentRawObjectKey}</code></td></tr>)}
-          </tbody></table></div>
-        </section> : null}
-        {financialFacts.length ? <section className="terminal-section" aria-labelledby="financial-facts-heading">
-          <p className="section-kicker">Point-in-time fundamentals</p><h2 id="financial-facts-heading">Financial facts</h2>
-          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted financial facts"><thead><tr><th>Concept</th><th>Value</th><th>Period</th><th>Mapping</th><th>Accession</th><th>Available</th></tr></thead><tbody>
-            {financialFacts.map((fact) => <tr key={fact.id}><td>{fact.canonicalConcept ?? fact.sourceConcept}</td><td>{formatDecimal(fact.value)} {fact.currency ?? fact.unit}</td><td>{fact.periodStart} — {fact.periodEnd}</td><td>{fact.mappingStatus}</td><td>{fact.accessionNumber}</td><td>{formatDualTime(fact.availableAt).newYork}</td></tr>)}
-          </tbody></table></div>
-        </section> : null}
-        {dataQuality.length ? <section className="terminal-section" aria-labelledby="sec-quality-heading">
-          <p className="section-kicker">Raw quality dimensions</p><h2 id="sec-quality-heading">SEC data quality</h2>
+        {previousRecords.length ? <details className="terminal-section research-disclosure">
+          <summary>Decision history · {previousRecords.length} previous</summary>
+          {previousRecords.map((record) => <article key={record.id}>
+            <p className="section-kicker">Previous persisted thesis</p><h2>{record.direction}</h2><p>{record.summary}</p>
+            <dl className="decision-facts"><div><dt>Opinion</dt><dd>{record.opinion ? <Signal tone={record.opinion}>{record.opinion}</Signal> : 'Unavailable'}</dd></div><div><dt>Confidence</dt><dd>{formatPercent(record.confidence, { signed: false })}</dd></div><div><dt>Horizon</dt><dd>{record.horizon}</dd></div><div><dt>As of</dt><dd><time dateTime={record.asOf}>{formatDualTime(record.asOf).newYork}</time></dd></div></dl>
+          </article>)}
+        </details> : null}
+        {secFilings.length ? <SecFilingsDisclosure filings={secFilings} /> : null}
+        {financialFacts.length ? <FinancialFactsDisclosure facts={financialFacts} filings={secFilings} /> : null}
+        {earningsEvents.length ? <details className="terminal-section research-disclosure">
+          <summary>Earnings events · {earningsEvents.length}</summary>
+          <h2>Earnings events</h2>
+          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted earnings events"><thead><tr><th>Event date</th><th>Fiscal end</th><th>Estimate</th><th>Provider</th><th>Event time</th><th>Available</th><th>Provenance</th></tr></thead><tbody>{earningsEvents.map((event) => <tr key={event.id}><td>{event.eventDate}</td><td>{event.fiscalDateEnd}</td><td>{event.estimate ? `${formatDecimal(event.estimate)} ${event.currency ?? ''}` : 'Unavailable'}</td><td>{event.provider}</td><td><time dateTime={event.eventTime}>{formatDualTime(event.eventTime).newYork}</time></td><td><time dateTime={event.availableAt}>{formatDualTime(event.availableAt).newYork}</time></td><td><code>{event.rawObjectKey}</code><small>{event.contentHash}</small></td></tr>)}</tbody></table></div>
+        </details> : null}
+        {newsArticles.length ? <details className="terminal-section research-disclosure">
+          <summary>News · {newsArticles.length}</summary>
+          <h2>News</h2>
+          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted news articles"><thead><tr><th>Headline</th><th>Source</th><th>Summary</th><th>Provider</th><th>Event time</th><th>Available</th><th>Provenance</th></tr></thead><tbody>{newsArticles.map((article) => <tr key={article.id}><th>{article.headline}</th><td>{article.source}</td><td>{article.summary}</td><td>{article.provider}</td><td><time dateTime={article.eventTime}>{formatDualTime(article.eventTime).newYork}</time></td><td><time dateTime={article.availableAt}>{formatDualTime(article.availableAt).newYork}</time></td><td><code>{article.rawObjectKey}</code><small>{article.contentHash}</small></td></tr>)}</tbody></table></div>
+        </details> : null}
+        {optionSnapshots.length ? <details className="terminal-section research-disclosure">
+          <summary>Options · {optionSnapshots.length}</summary>
+          <h2>Options</h2>
+          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted option snapshots"><thead><tr><th>Feed</th><th>Payload</th><th>Provider</th><th>Event time</th><th>Available</th><th>Provenance</th></tr></thead><tbody>{optionSnapshots.map((snapshot) => <tr key={snapshot.id}><td>{snapshot.feedType}</td><td><pre>{alertEvidence(snapshot.payload)}</pre></td><td>{snapshot.provider}</td><td><time dateTime={snapshot.eventTime}>{formatDualTime(snapshot.eventTime).newYork}</time></td><td><time dateTime={snapshot.availableAt}>{formatDualTime(snapshot.availableAt).newYork}</time></td><td><code>{snapshot.rawObjectKey}</code><small>{snapshot.contentHash}</small></td></tr>)}</tbody></table></div>
+        </details> : null}
+        {dataQuality.length ? <details className="terminal-section research-disclosure">
+          <summary>SEC data quality · {dataQuality.length}</summary>
+          <h2 id="sec-quality-heading">SEC data quality</h2>
           <div className="table-scroll" tabIndex={0}><table aria-label="Persisted SEC data quality"><thead><tr><th>Dataset</th><th>Dimension</th><th>Status</th><th>Freshness</th><th>Delay</th><th>Conflict</th><th>Observed</th></tr></thead><tbody>
             {dataQuality.map((quality) => <tr key={quality.id}><td>{quality.dataset}</td><td>{quality.dimension}</td><td>{quality.status}</td><td>{quality.freshness ?? 'Unavailable'}</td><td>{quality.delay ?? 'Unavailable'}</td><td>{quality.conflict ? 'Yes' : 'No'}</td><td>{formatDualTime(quality.observedAt).newYork}</td></tr>)}
           </tbody></table></div>
-        </section> : null}
+        </details> : null}
       </StateBoundary>
     </AppShell>
   )
 }
 
 export function ApiPortfolioPage({ asOf, portfolio }: { asOf: string; portfolio: PortfolioSummary }) {
+  const history = portfolio.performanceHistory
+  const current = history.at(-1) ?? portfolio.latestNav
+  const previous = history.at(-2)
+  const peak = history.reduce<typeof current>((highest, point) => (
+    !highest || compareDecimals(point.nav, highest.nav) > 0 ? point : highest
+  ), null)
+  const dayReturn = current && previous ? decimalChange(current.nav, previous.nav) : null
+  const drawdown = current && peak ? decimalChange(current.nav, peak.nav) : null
+  const normalizedNav = normalizeDecimalSeries(history.map((point) => point.nav))
+  const coordinates = normalizedNav.map((value, index) => ({
+    x: history.length === 1 ? 500 : index * 1000 / (history.length - 1),
+    y: 210 - value * 170,
+  }))
+  const navLine = coordinates.map((point, index) => `${index ? 'L' : 'M'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
+  const navArea = coordinates.length ? `${navLine} L 1000 220 L 0 220 Z` : ''
   const missing = [
     ...(!portfolio.latestNav ? ['NAV history'] : []),
-    ...(!portfolio.positions.length ? ['Positions'] : []),
-    ...(!portfolio.riskDecisions.length ? ['Risk decisions'] : []),
-    ...(!portfolio.fills.length ? ['Paper fills'] : []),
   ]
   return (
     <AppShell currentPath="/portfolio">
@@ -263,11 +412,23 @@ export function ApiPortfolioPage({ asOf, portfolio }: { asOf: string; portfolio:
         </form> : <>
           <section className="portfolio-snapshot" aria-label="Portfolio snapshot">
             <div><p className="section-kicker">Paper portfolio</p><h2>Persisted snapshot</h2><p>As of <time dateTime={asOf}>{formatDualTime(asOf).newYork}</time></p></div>
-            <dl><div><dt>Net asset value</dt><dd>{portfolio.latestNav ? formatMoney(portfolio.latestNav.nav, 'USD') : <span className="unavailable-value">Unavailable</span>}</dd></div><div><dt>Day return</dt><dd className="unavailable-value">Unavailable</dd></div><div><dt>Current drawdown</dt><dd className="unavailable-value">Unavailable</dd></div><div><dt>Available cash</dt><dd>{portfolio.cash ? formatMoney(portfolio.cash.balance, portfolio.cash.currency) : <span className="unavailable-value">Unavailable</span>}</dd></div></dl>
+            <dl><div><dt>Net asset value</dt><dd>{portfolio.latestNav ? formatMoney(portfolio.latestNav.nav, 'USD') : <span className="unavailable-value">Unavailable</span>}</dd></div><div><dt>Day return</dt><dd className={dayReturn ? undefined : 'unavailable-value'}>{dayReturn ? formatPercent(dayReturn) : 'Unavailable'}</dd></div><div><dt>Current drawdown</dt><dd className={drawdown ? undefined : 'unavailable-value'}>{drawdown ? formatPercent(drawdown) : 'Unavailable'}</dd></div><div><dt>Available cash</dt><dd>{portfolio.cash ? formatMoney(portfolio.cash.balance, portfolio.cash.currency) : <span className="unavailable-value">Unavailable</span>}</dd></div></dl>
           </section>
+          {history.length ? <section className="terminal-section" aria-labelledby="portfolio-history-title">
+            <div className="section-heading"><div><p className="section-kicker">Decimal-derived history</p><h2 id="portfolio-history-title">NAV performance</h2></div><span className="muted-copy">{history.length} persisted snapshots</span></div>
+            <figure className="api-performance-chart"><svg aria-label="Net asset value history" preserveAspectRatio="none" role="img" viewBox="0 0 1000 240"><defs><linearGradient id="api-nav-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopOpacity="0.25" /><stop offset="100%" stopOpacity="0" /></linearGradient></defs><line className="chart-baseline" x1="0" x2="1000" y1="220" y2="220" /><path className="chart-area" d={navArea} /><path className="chart-line" d={navLine} /></svg><figcaption>Persisted paper NAV through <time dateTime={history.at(-1)?.availableAt}>{formatDualTime(history.at(-1)!.availableAt).newYork}</time></figcaption></figure>
+          </section> : null}
           <section className="terminal-section" aria-label="Paper trading evidence availability">
-            <p className="section-kicker">Persisted evidence</p><h2>Evidence availability</h2>
+            <p className="section-kicker">Persisted evidence</p><h2>Audit evidence</h2>
             <dl className="evidence-counts"><div><dt>Positions</dt><dd>{portfolio.positions.length}</dd></div><div><dt>Risk decisions</dt><dd>{portfolio.riskDecisions.length}</dd></div><div><dt>Paper fills</dt><dd>{portfolio.fills.length}</dd></div><div><dt>Cash ledger entries</dt><dd>{portfolio.cashLedger.length}</dd></div></dl>
+            <h3>Positions and P&amp;L</h3>
+            {portfolio.positions.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Paper positions"><thead><tr><th>Symbol</th><th>Quantity</th><th>Average cost</th><th>Market price</th><th>Market value</th><th>Unrealized P&amp;L</th><th>Price available</th></tr></thead><tbody>{portfolio.positions.map((position) => <tr key={position.symbol}><th>{position.symbol}</th><td>{formatDecimal(position.quantity)}</td><td>{formatMoney(position.averageCost, 'USD')}</td><td>{position.marketPrice ? formatMoney(position.marketPrice, 'USD') : 'Unavailable'}</td><td>{position.marketValue ? formatMoney(position.marketValue, 'USD') : 'Unavailable'}</td><td>{position.unrealizedPnl ? formatMoney(position.unrealizedPnl, 'USD') : 'Unavailable'}</td><td>{position.priceAvailableAt ? <time dateTime={position.priceAvailableAt}>{formatDualTime(position.priceAvailableAt).newYork}</time> : 'Unavailable'}</td></tr>)}</tbody></table></div> : <p className="unavailable-value">No positions persisted at this cutoff.</p>}
+            <h3>Risk decisions</h3>
+            {portfolio.riskDecisions.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Risk decisions"><thead><tr><th>Symbol</th><th>Status</th><th>Requested</th><th>Approved</th><th>Side</th><th>Reasons</th><th>Policy</th><th>Decided</th></tr></thead><tbody>{portfolio.riskDecisions.map((decision) => <tr key={decision.id}><th>{decision.symbol}</th><td><Signal tone={decision.status}>{decision.status}</Signal></td><td>{formatPercent(decision.requestedWeight, { signed: false })}</td><td>{formatPercent(decision.approvedWeight, { signed: false })}</td><td>{decision.authorizedSide ?? 'None'}</td><td>{decision.reasonCodes.join(', ') || 'None'}</td><td>{decision.riskPolicyVersionId}</td><td><time dateTime={decision.decidedAt}>{formatDualTime(decision.decidedAt).newYork}</time></td></tr>)}</tbody></table></div> : <p className="unavailable-value">No risk decisions persisted at this cutoff.</p>}
+            <h3>Paper fills</h3>
+            {portfolio.fills.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Paper fills"><thead><tr><th>Symbol</th><th>Side</th><th>Quantity</th><th>Price</th><th>Fee</th><th>Filled</th><th>Policy</th></tr></thead><tbody>{portfolio.fills.map((fill) => <tr key={fill.id}><th>{fill.symbol}</th><td>{fill.side}</td><td>{formatDecimal(fill.quantity)}</td><td>{formatMoney(fill.price, 'USD')}</td><td>{formatMoney(fill.fee, 'USD')}</td><td><time dateTime={fill.filledAt}>{formatDualTime(fill.filledAt).newYork}</time></td><td>{fill.executionPolicyVersionId}</td></tr>)}</tbody></table></div> : <p className="unavailable-value">No paper fills persisted at this cutoff.</p>}
+            <h3>Cash ledger</h3>
+            {portfolio.cashLedger.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Cash ledger"><thead><tr><th>Account</th><th>Debit</th><th>Credit</th><th>Transaction</th><th>Occurred</th><th>Reversal</th></tr></thead><tbody>{portfolio.cashLedger.map((entry) => <tr key={entry.id}><th>{entry.account}</th><td>{formatMoney(entry.debit, 'USD')}</td><td>{formatMoney(entry.credit, 'USD')}</td><td>{entry.transactionId}</td><td><time dateTime={entry.occurredAt}>{formatDualTime(entry.occurredAt).newYork}</time></td><td>{entry.reversalOfId ?? 'None'}</td></tr>)}</tbody></table></div> : <p className="unavailable-value">No cash ledger entries persisted at this cutoff.</p>}
           </section>
         </>}
       </StateBoundary>
@@ -283,7 +444,9 @@ export function ApiWeeklyReviewPage({ asOf, detail }: { asOf: string; detail: We
       <StateBoundary state={partial ? {
         kind: 'degraded',
         title: 'Weekly review has no matured outcomes',
-        message: 'The persisted review remains visible; missing outcomes are not substituted.',
+        message: 'The persisted review remains visible. Wait for eligible decision outcomes to mature; missing outcomes are not substituted and no review is started here.',
+        actionHref: '/research',
+        actionLabel: 'Review research decisions',
         providers: ['Matured outcomes'],
       } : { kind: 'success' }}>
         <section className="terminal-section first-section" aria-label="Weekly outcome summary">
@@ -322,7 +485,7 @@ export function ApiFailurePage({ currentPath, title }: { currentPath: string; ti
   return (
     <AppShell currentPath={currentPath}>
       <PageHeading asOf={asOf} eyebrow="API Mode" title={title} summary="The backend response could not be safely rendered." />
-      <StateBoundary state={{ kind: 'failure', title: `${title} unavailable`, message: 'The API was unavailable or returned an invalid contract. No Fixture data was substituted.', retryHref: currentPath }} />
+      <StateBoundary state={{ kind: 'failure', title: `${title} unavailable`, message: 'The API was unavailable or returned an invalid contract. No Fixture data was substituted.', retry: true }} />
     </AppShell>
   )
 }

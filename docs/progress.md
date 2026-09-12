@@ -3350,3 +3350,371 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   probes subsequently agreed to the millisecond; the unchanged failing case then passed 1/1, and
   the full gate passed with the counts above. No timestamp assertion or migration behavior was
   weakened to hide the Docker clock resynchronization.
+
+## 2026-09-09 — Frontend P1 closure, ordered batch 1
+
+- Watchlist PIT/staleness RED: `pnpm --dir web test --run tests/watchlist-route.test.tsx
+  --reporter=verbose` exited 1 with 10 passed / 1 failed because the page displayed the latest
+  Watchlist configuration timestamp instead of the `decision_time` used by the quote query, and
+  old persisted quotes had no stale label. GREEN: the route now uses the exact query cutoff and
+  quotes older than the backend's 24-hour fallback ceiling retain their exact persistence time
+  while displaying `STALE` and its reason. Related Watchlist tests exited 0: 3 files / 47 passed;
+  TypeScript exited 0.
+- Run Trace latest-alias RED: focused Vitest exited 1 with 15 passed / 2 failed because no latest
+  client existed and `/runs/latest` was forwarded into the UUID detail endpoint. The focused API
+  contract test exited 1 with HTTP 422. GREEN: `GET /api/v1/research-runs/latest` selects only
+  RESEARCH runs whose aware `decision_time` is at or before the requested cutoff; the web route
+  resolves that alias before loading report/SSE data by the persisted UUID. Focused frontend tests
+  exited 0 with 2 files / 17 passed; focused API contract tests exited 0 with 2 passed.
+- Portfolio initialization RED: focused frontend testing exited 1 with 9 passed / 1 failed because
+  authoritative zero-length activity collections were labelled unavailable; the isolated database
+  test exited 1 because initialization wrote two ledger rows but no NAV row. GREEN: initialization
+  writes the opening NAV in the same transaction as the audited double-entry funding and remains
+  idempotent; zero positions, risk decisions and fills are rendered as authoritative empty history.
+  Focused frontend tests exited 0 with 10 passed; the complete initialization integration file
+  exited 0 with 5 passed.
+- Research hierarchy RED: focused component tests exited 1 with 2 failures because all persisted
+  theses and the complete SEC/XBRL payload were rendered at equal visual priority. GREEN: the newest
+  opinion, confidence, direction, horizon, summary and evidence cutoff now form one decision-first
+  conclusion; prior decisions and the complete SEC filing, financial-fact and quality tables remain
+  auditable behind closed-by-default disclosures. Related tests exited 0 with 19 passed. The live SEC
+  browser regression now deliberately opens each disclosure before asserting its persisted lineage.
+- TradingView mobile containment RED: focused tests exited 1 with 2 failures because the Symbol
+  Overview had neither a bounded horizontal scroll surface nor keyboard access. GREEN: only the
+  overview widget receives an internally scrollable mobile width, focus treatment and a named region;
+  the first browser accessibility run then correctly found its missing ARIA role (serious), a focused
+  RED test reproduced it, and the role fix passed 8/8 component tests plus the desktop/mobile axe
+  scan with zero serious or critical owned-DOM violations.
+- Watchlist density RED: the configuration regression exited 1 because zero symbol disclosures
+  existed. GREEN: each persisted or Fixture symbol retains all research, monitoring, threshold,
+  earnings and removal controls inside a closed-by-default settings disclosure; related tests exited
+  0 with 19 passed.
+- Recovery-action RED: `tests/page-states.test.tsx` exited 1 with 6 passed / 2 failed because Empty
+  and Degraded states exposed no accessible action. GREEN: the shared state contract supports an
+  explicit labelled destination, API collection pages link back to Today, Today links to Watchlist,
+  and an empty Weekly Review links to the latest Research run. The related 3-file suite exited 0 with
+  25 passed; TypeScript and ESLint exited 0.
+- Browser evidence: the broad mixed-environment Playwright attempt ran 34 tests and intentionally
+  exposed configuration-specific failures (API-only Watchlist persistence without FastAPI, a missing
+  generated Fixture evaluation report), plus the ARIA issue above and a development-server focus
+  race. After the ARIA fix, the accessibility cases passed in both profiles; the Skip-link case was
+  isolated from Next development recompilation and passed 2/2 across desktop/mobile. Route/readability
+  coverage in the broad run otherwise passed, including no document-level mobile overflow. TradingView
+  continues to emit its third-party iframe preload/credentials warning; owned code cannot safely alter
+  that cross-origin preload policy, so it remains a non-blocking external-console limitation.
+- Complete frontend verification exited 0: 30 files / 178 Vitest tests passed, followed sequentially
+  by TypeScript, ESLint and the Next.js production build. The first `make verify` attempt exited 1 at
+  Ruff formatting for two new test files; the second passed Ruff, Mypy and Alembic but exited 1 because
+  the new latest-run route made the committed OpenAPI snapshot stale. After deterministic formatting
+  and `scripts/export_openapi.py`, the final fresh `make verify` exited 0: Ruff format/check clean for
+  326 files, Mypy clean for 283 source files, no Alembic drift, OpenAPI/MCP/dependency checks passed,
+  backend 737 passed / 5 optional live-provider tests skipped, frontend 30 files / 178 passed, and
+  TypeScript, ESLint and Next.js production build passed. `git diff --check` exited 0.
+
+## 2026-09-09 — M8.1 frontend product closure, FRE-29 Alerts checkpoint
+
+- Linear milestone `M8.1 Frontend Product Closure` now tracks FRE-29, FRE-30, FRE-31, FRE-32,
+  FRE-33, FRE-34, FRE-35, FRE-36, FRE-37, FRE-38 and FRE-39. FRE-29 is the active issue; the
+  implementation sequence and locked boundaries are recorded in
+  `docs/plans/2026-09-09-frontend-product-closure.md`.
+- Alert API contract RED: `npm test -- --run tests/live-data-api.test.ts` exited 1 with 11 passed /
+  2 failed because the client returned unchecked snake-case records and accepted numeric money-like
+  materiality plus a naive timestamp. GREEN: the typed parser validates the full Pydantic response,
+  including Decimal strings, aware instants, symbol and enum constraints, conditions, metrics, data
+  quality, acknowledgement and correlation provenance. The rerun exited 0 with 13/13 passed.
+- Alert page RED: `npm test -- --run tests/api-pages.test.tsx
+  tests/api-boundary-routing.test.tsx` exited 1 with 17 passed / 2 failed because API mode rendered
+  only a count placeholder. GREEN: the API surface now renders severity, symbol/research destination,
+  materiality, rule/version, event and recorded time, acknowledgement, deterministic condition/
+  metric/data-quality evidence, correlation ID and a clearly labelled latest-run audit destination.
+  The rerun exited 0 with 2 files / 19 tests passed. Empty results remain explicit and API mode never
+  imports Fixture data.
+- Focused verification exited 0 with 3 files / 32 tests passed. ESLint exited 0. The Next.js
+  production build exited 0 and generated all routes. Complete frontend Vitest exited 0 with 30
+  files / 182 tests passed and no skips. Existing jsdom local-storage and cross-realm AbortSignal
+  diagnostics remain non-failing test noise tracked for the later FRE-38 console-quality task.
+- This is a local FRE-29 implementation checkpoint. `make verify`, commit, push, PR, Linear review
+  transition and Notion completion update are not yet claimed; Eval API persistence remains a
+  separate contract-review task within FRE-29.
+
+## 2026-09-09 — M8.1 frontend product closure, FRE-29 Eval persistence
+
+- Eval persistence RED: the new integration test first failed during collection because no
+  persistence module existed. The first implementation then correctly exposed an idempotency bug:
+  psycopg did not provide a reliable `rowcount` for `ON CONFLICT DO NOTHING`, so a replay attempted
+  duplicate child metrics. GREEN: the write path now uses `RETURNING id`, atomically persists one
+  version-pinned run with 38 normalized metrics and 18 gate results, rejects naive timestamps and
+  conflicting evidence hashes, and makes all three tables database-level append-only. Related
+  persistence/schema/append-only testing exited 0 with 15 passed.
+- CLI persistence RED: the explicit persistence contract failed with unrecognized arguments.
+  GREEN: `scripts/run_offline_eval.py` accepts paired `--persist-database-url` and `--run-id`
+  arguments, hashes the generated summary, and commits the run and normalized evidence in one
+  transaction. The runner remains side-effect free unless both arguments are supplied.
+- REST contract RED: the locked Eval endpoints returned an empty page and 404 placeholder. GREEN:
+  list and detail now enforce `created_at <= decision_time`; list is deterministically cursor
+  paginated, while detail returns exact dataset/model/prompt/four policy/gate versions, cutoff,
+  summary hash, raw metric evidence and regression-gate outcomes. The OpenAPI snapshot was
+  regenerated from FastAPI. Focused backend persistence and REST tests exited 0 with 5 passed.
+- API-mode frontend RED: focused Vitest exited 1 because no typed detail client existed and the
+  route still rendered a count placeholder. GREEN: strict parsers reject numeric Decimal values,
+  naive timestamps, malformed hashes and invalid enums; the latest persisted run now renders its
+  status, cutoff, version pins, metric table, gate table and summary digest. Empty/failure behavior
+  stays explicit and does not import Fixture reports. Focused frontend testing exited 0 with 2
+  files / 22 passed; complete frontend Vitest exited 0 with 30 files / 184 passed; ESLint and the
+  Next.js production build exited 0.
+- Migration verification initially found constraint names that had been prefixed twice. A destructive
+  local downgrade was rejected to protect possibly valuable Eval rows, so migration 0039 performs
+  an idempotent, data-preserving compatibility rename only when legacy names exist. Fresh databases
+  receive the canonical names directly from 0038. `alembic upgrade head` and `alembic check` exited
+  0 with no new operations; the head downgrade-to-0024-and-upgrade regression passed 1/1.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI checks passed, backend 742 passed / 5 optional live-provider
+  tests skipped, frontend 30 files / 184 passed, and TypeScript, ESLint and the Next.js production
+  build passed. Existing jsdom local-storage and cross-realm AbortSignal diagnostics remain
+  non-failing test noise tracked by FRE-38. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-09 — M8.1 frontend product closure, FRE-30 authoritative Today state
+
+- Today state RED: `npm test -- --run tests/home.test.tsx
+  tests/api-route-degradation.test.tsx` exited 1 with 3 failures because API mode always declared
+  Research decisions, Alerts and Market regime unavailable, even when the corresponding persisted
+  facts were available. The new success regression also proved that Alerts and Research were not
+  requested or rendered.
+- GREEN: Today now requests Watchlist configuration, current persisted quotes, provider health,
+  paper-portfolio summary, Alerts and per-symbol Research concurrently where possible. Its
+  unavailable groups are derived only from rejected responses, provider coverage, quote quality and
+  missing symbols. A successful empty collection remains an authoritative empty fact; a partial
+  failure preserves every fulfilled fact and never imports Fixture data. Provider health, current
+  research conclusions, Alerts, paper NAV and the exact aware PIT cutoff are rendered when supplied
+  by their locked contracts. No Market Context success is invented because the current locked REST
+  surface does not expose one.
+- Focused verification exited 0 with 2 files / 7 tests passed. Complete frontend Vitest exited 0
+  with 30 files / 185 tests passed. ESLint, TypeScript and the Next.js production build all exited
+  0. Existing jsdom local-storage and cross-realm AbortSignal diagnostics remain expected,
+  non-failing test noise tracked by FRE-38.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI checks passed, backend 742 passed / 5 optional live-provider
+  tests skipped, frontend 30 files / 185 passed, and TypeScript, ESLint and the Next.js production
+  build passed. `git diff --check` exited 0. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-09 — M8.1 frontend product closure, FRE-33 paper Portfolio evidence
+
+- Portfolio contract RED: `npm test -- --run tests/live-data-api.test.ts
+  tests/api-pages.test.tsx` exited 1 with 2 failures. The server client returned Position fields in
+  raw snake case, omitted normalized timestamps and policy fields for the audit records, and the page
+  hard-coded day return and drawdown as unavailable despite persisted NAV history.
+- GREEN: the API boundary now validates and normalizes every Position, RiskDecision, PaperFill,
+  CashLedger and PortfolioNav field. Decimal values must remain strings, timestamps must remain aware,
+  and nullable market facts remain explicit. The page derives day return and current drawdown with
+  scaled BigInt Decimal arithmetic, using floating-point values only for normalized SVG coordinates,
+  and renders persisted NAV history plus horizontally contained audit tables for positions/P&L, risk
+  decisions, paper fills and cash ledger entries. Empty arrays are labelled as authoritative empty
+  history, while nullable values display Unavailable. No live-broker control or path was added.
+- Focused verification exited 0 with 2 files / 28 tests passed, followed by TypeScript exit 0.
+  Complete frontend verification exited 0 with 30 files / 187 tests passed; ESLint and the Next.js
+  production build also exited 0. Existing jsdom local-storage and cross-realm AbortSignal diagnostics
+  remain expected non-failing test noise tracked by FRE-38.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI checks passed, backend 742 passed / 5 optional live-provider
+  tests skipped, frontend 30 files / 187 passed, and TypeScript, ESLint and the Next.js production
+  build passed. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-09 — M8.1 frontend product closure, FRE-31 persisted Research domains
+
+- Research-domain REST RED: the new PIT integration test exited 1 with a missing
+  `news_articles` response key. GREEN: `/api/v1/stocks/{symbol}/research` now returns strict,
+  read-only NewsArticle, EarningsEvent and OptionSnapshot records with provider, event time,
+  availability, content hash and raw-object provenance. Queries enforce
+  `available_at <= decision_time`, exclude superseded earnings revisions and reject Fixture
+  provider rows in API mode. Analyst Targets remains explicitly unavailable because the
+  authoritative schema has no persisted analyst-target object; no synthetic substitute was added.
+- The Fixture exclusion regression passed 1/1 after the implementation. A sandboxed attempt
+  exited 1 because localhost PostgreSQL access was denied; the authorized database run exited 0.
+  The complete market-data read integration file then exited 0 with 18/18 passed.
+- Frontend RED exited 1 with 3 expected failures because the strict client exposed none of the
+  new arrays and the Research page rendered no persisted-domain tables. GREEN: the parser now
+  validates Decimal strings, aware timestamps, content hashes and provenance; the page renders
+  Earnings, News and Options evidence tables and keeps Analyst Targets visibly unavailable.
+  Focused frontend verification exited 0 with 2 files / 30 tests passed; complete frontend
+  verification exited 0 with 30 files / 189 tests passed, followed by TypeScript, ESLint and the
+  Next.js production build, all exit 0.
+- The first OpenAPI export exited 2 because the sandbox denied the user-level uv cache. Retrying
+  with repository-local `UV_CACHE_DIR=.uv-cache` exited 0 and refreshed the committed contract.
+  The first `make verify` exited 2 only at Ruff import ordering; Ruff's deterministic fix corrected
+  the two affected import blocks and its focused rerun exited 0. Final `make verify` exited 0:
+  Ruff format/check clean for 330 files, Mypy clean for 285 source files, Alembic drift and
+  OpenAPI/MCP/dependency checks passed, backend 743 passed / 5 optional live-provider tests skipped,
+  frontend 30 files / 189 passed, and TypeScript, ESLint and the Next.js production build passed.
+  Existing jsdom local-storage and cross-realm AbortSignal diagnostics remain non-failing test noise
+  tracked by FRE-38. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-10 — M8.1 frontend product closure, FRE-37 Watchlist trends and earnings
+
+- Watchlist contract RED: `npm test -- --run tests/live-data-api.test.ts
+  tests/watchlist-route.test.tsx` exited 1 with 3 expected failures because no historical-bars
+  client existed and the page requested neither price history nor research enrichment. GREEN:
+  the strict API client now validates point-in-time daily bars, Decimal strings, aware timestamps
+  and complete provider/raw-object provenance; the Watchlist route requests bars and research with
+  one shared aware decision cutoff. The focused rerun exited 0 with 2 files / 31 tests passed, and
+  TypeScript exited 0.
+- A follow-up stale-history RED exited 1 because a fresh quote could conceal an independently stale
+  trend series. GREEN: quote freshness and trend freshness are evaluated and explained separately.
+  Persisted earnings display the next event date and exact provider, availability, raw key and hash;
+  an authoritative empty schedule and an unavailable earnings domain remain visibly distinct. Failed
+  enrichment preserves fulfilled market facts and never imports Fixture data.
+- Complete frontend verification exited 0: 30 files / 193 Vitest tests passed, followed by ESLint,
+  TypeScript and the Next.js production build. Existing jsdom local-storage and cross-realm
+  AbortSignal diagnostics remain non-failing test noise tracked by FRE-38.
+- Playwright browser verification against local FastAPI/PostgreSQL API mode rendered 11 persisted
+  symbols with compact accessible trend graphics, calculated changes, exact PIT cutoffs and stale
+  labels. Desktop 1440px and mobile 390px both reported no document-level horizontal overflow;
+  keyboard traversal reached interactive navigation/theme controls. Missing research enrichment was
+  shown as Degraded without Fixture fallback. Temporary browser and application servers were closed
+  after verification.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 743 passed / 5 optional
+  live-provider tests skipped, frontend 30 files / 193 passed, and TypeScript, ESLint and the
+  Next.js production build passed. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-12 — M8.1 frontend product closure, FRE-39 protected Watchlist deletion
+
+- Confirmation RED: `pnpm --dir web test -- --run
+  tests/watchlist-delete-confirmation.test.tsx` exited 1 with 4/4 new tests failing because the
+  existing Delete control immediately submitted its Server Action and exposed no named confirmation
+  dialog. GREEN replaces that one-activation path with an `alertdialog` that names the symbol,
+  explains that only paper-research monitoring settings are removed, and requires an explicit
+  `Confirm remove {symbol}` action.
+- Keyboard lifecycle RED: the focused five-test command exited 1 with 1 failed / 4 passed because
+  Tab could leave the modal confirmation. GREEN starts focus on the safe Cancel action, wraps
+  forward/backward keyboard focus between Cancel and Confirm, closes on Escape or Cancel without
+  changing unsaved settings, and restores focus to the originating Delete button. The focused rerun
+  exited 0 with 5/5 passed.
+- Submission feedback disables Confirm while the Server Action is pending, announces the pending
+  state, and prevents duplicate activation. Success is announced as status and closes the dialog;
+  failure is announced as alert while leaving a retry path. Existing API-mode deletion remains a
+  single FastAPI call, with no Fixture import, brokerage action or other side effect.
+- Related Watchlist regression testing exited 0 with 4 files / 54 tests passed. TypeScript and ESLint
+  each exited 0. The first real-API Playwright run exited 1 before reaching deletion because its
+  setup expected an obsolete exact Degraded title; the captured page proved the current truthful
+  state was `Research enrichment unavailable`. After replacing that unrelated title dependency with
+  the stable `Discover · API Mode` boundary, desktop and 393px mobile real FastAPI/PostgreSQL runs
+  exited 0 with 2 passed / 2 mode-specific skipped. The controlled unavailable-API matrix also
+  exited 0 with 2 passed / 2 mode-specific skipped and confirmed no Fixture fallback.
+- The first `make verify` exited 2 after Ruff and Mypy passed because the sandbox rejected localhost
+  PostgreSQL access. The authorized rerun exited 0: Ruff format/check clean for 330 files, Mypy clean
+  for 285 source files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 743 passed /
+  5 optional live-provider tests skipped, frontend 32 files / 204 passed, and TypeScript, ESLint and
+  the Next.js production build passed. Existing jsdom local-storage, cross-realm AbortSignal and
+  third-party color-environment diagnostics remain non-failing noise tracked by FRE-38. No commit,
+  push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-12 — M8.1 frontend product closure, FRE-36 workflow-aware recovery
+
+- Empty-state RED: `npm test -- --run tests/api-boundary-routing.test.tsx
+  tests/page-states.test.tsx` exited 1 with 4 failed / 12 passed. Alerts still used generic
+  recovery copy, Weekly Review and Eval looped through Today, and Failure offered a navigation link
+  instead of an in-place retry. GREEN routes Alerts to persisted Watchlist monitoring controls,
+  routes Weekly Review to the Research decision prerequisite, and leaves operator-only Eval without
+  a misleading browser producer.
+- Degraded-state RED: `npm test -- --run tests/api-pages.test.tsx` exited 1 with 1 failed / 14
+  passed because a persisted Weekly Review without matured outcomes linked to the latest trace.
+  GREEN now explains the maturity prerequisite and links to Research decisions without starting a
+  review automatically.
+- Shared-boundary integration initially exited 1 with 26 failed / 173 passed because `useRouter`
+  was invoked by every StateBoundary state. Root-cause correction isolated the hook in the rendered
+  Retry control, preserving server-compatible Success, Loading, Empty and Degraded states. The
+  corrected complete frontend command exited 0 with 31 files / 199 tests passed, followed by
+  TypeScript, ESLint and the Next.js production build, all exit 0.
+- Playwright against an intentionally unavailable API opened
+  `/alerts?symbol=NVDA&threshold=7`, rendered an explicit API Failure with no Fixture fallback, and
+  retained the full route and both query parameters after clicking `Try again`. The accessible
+  control remained visible at a 390px viewport. The only console errors were the expected structured
+  `live-data-route-failure` records for the unavailable test endpoint. Temporary browser and Next.js
+  processes were closed after verification.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 743 passed / 5 optional
+  live-provider tests skipped, frontend 31 files / 199 passed, and TypeScript, ESLint and the
+  Next.js production build passed. No run, notification, policy activation, brokerage action, push,
+  PR or merge is claimed by this checkpoint.
+
+## 2026-09-11 — M8.1 frontend product closure, FRE-32 searchable SEC evidence
+
+- Primary RED: `npm test -- --run tests/api-pages.test.tsx` exited 1 with 1 failed / 14 passed
+  because the Research page exposed neither `Search SEC filings` nor financial-fact filters. GREEN:
+  the new client evidence browser adds deferred client-side search, category and period filters,
+  live result counts, explicit no-match/reset states and contained scroll regions while preserving
+  every filing/fact identifier, accession, provider-derived availability and raw-object key.
+- Real-data review found that 68 unmapped source concepts initially polluted both the latest-value
+  summary and category selector. Its regression RED exited 1; GREEN groups them under one
+  `UNMAPPED` category, preserves all rows in the audit table and limits the summary to canonical
+  concepts. A second financial-accuracy RED exited 1 because a cumulative YTD value could win an
+  equal-end-date tie; the deterministic selector now orders by period end, then the later period
+  start, availability and record ID, and displays the complete period range. Focused verification
+  exited 0 with 15/15 tests, followed by TypeScript and ESLint, both exit 0.
+- Complete frontend verification exited 0 with 30 files / 194 tests passed and the Next.js
+  production build passed. Existing jsdom local-storage and cross-realm AbortSignal diagnostics
+  remain non-failing test noise tracked by FRE-38.
+- Playwright against local FastAPI/PostgreSQL API mode rendered 20 persisted SEC filings and 100
+  persisted financial facts with no Fixture substitution. Searching `10-Q` returned 3/20 filings;
+  the newest-value summary rendered 3 canonical concepts and the category selector rendered All,
+  NET_INCOME, OPERATING_CASH_FLOW, REVENUE and UNMAPPED. The browser reported 0 console errors;
+  48 warnings came from the isolated TradingView iframe. Desktop and 390px mobile viewports had no
+  document-level horizontal overflow, while the 1319px and 2934px audit tables remained contained
+  in 314px `overflow-x: auto` regions. Temporary browser and application servers were closed.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 743 passed / 5 optional
+  live-provider tests skipped, frontend 30 files / 194 passed, and TypeScript, ESLint and the
+  Next.js production build passed. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-11 — M8.1 frontend product closure, FRE-34 contextual Research navigation
+
+- Navigation RED: `npm test -- --run tests/product-shell.test.tsx` exited 1 with 2 failed / 3
+  passed because the global Research destination remained hard-coded to `/research/NVDA` and did
+  not preserve a current MSFT context. GREEN: neutral pages now target `/research`, while an open
+  detail page retains its exact `/research/{symbol}` destination and current-page semantics.
+- Directory RED first confirmed the missing module, then the behavioral RED exited 1 with 2/2
+  failures because no authoritative selector or empty-universe state existed. GREEN adds a dynamic
+  `/research` route backed by the current mode's Watchlist universe, an accessible native symbol
+  selector, direct contextual links, and newest-first persisted Research records queried at one
+  aware decision cutoff. Fixture data is dynamically imported only in explicit Fixture mode.
+- A review RED exited 1 because a failed per-symbol Research read was silently indistinguishable
+  from no history. GREEN keeps the symbol selectable, reports the affected symbols as Degraded and
+  explicitly states that no Fixture history was substituted. Focused verification exited 0 with
+  2 files / 9 tests passed; complete frontend verification exited 0 with 31 files / 199 tests
+  passed, followed by TypeScript, ESLint and the Next.js production build, all exit 0.
+- Playwright against real FastAPI/PostgreSQL API mode rendered 11 authoritative Watchlist symbols
+  and only 3 persisted recent Research records (AVGO, BE and NVDA). Selecting NVDA produced
+  `/research/NVDA`; the detail-page Research navigation retained that same href and `aria-current`.
+  Desktop and 390px mobile had no document-level horizontal overflow and the browser reported 0
+  console errors. TradingView iframe warnings remained isolated third-party diagnostics. Temporary
+  browser and application servers were closed after verification.
+- Final `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285 source
+  files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 743 passed / 5 optional
+  live-provider tests skipped, frontend 31 files / 199 passed, and TypeScript, ESLint and the
+  Next.js production build passed. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-13 — PR #22 merge-gate remediation
+
+- GitHub Actions `CI / Verify` initially exited 1 before tests because Docker Hub rejected
+  `minio/minio:latest`. The Compose dependency is now pinned to the public official Quay release
+  `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z` at immutable manifest digest
+  `sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`; its registry manifest
+  returned HTTP 200 and advertises both amd64 and arm64 images.
+- Point-in-time RED covered late-created research runs, late evaluation metrics/gates and reports
+  requested before their durable facts existed. The focused backend command exited 1 with the
+  expected visibility failures. GREEN applies aware `decision_time` cutoffs to run metadata,
+  closed research-report lineage and evaluation children; the related contract/integration suite
+  exited 0 with 36 passed.
+- Availability RED proved configured provider credentials could hide missing News and Options
+  domains despite zero persisted facts. GREEN derives availability exclusively from visible
+  persisted rows, so credentials never masquerade as data.
+- Destructive-interaction RED proved Watchlist removal could still be cancelled visually while its
+  server action was pending. GREEN disables Cancel, ignores Escape during persistence and prevents
+  duplicate submission. Focused frontend verification exited 0 with 2 files / 23 passed; TypeScript
+  and ESLint exited 0 without warnings.
+- The first complete `make verify` exited 1 on a test-file formatting difference; after mechanical
+  formatting, the second run exited 1 on the expected stale OpenAPI snapshot. The generated API
+  contract was refreshed. The final `make verify` exited 0: Ruff format/check clean for 330 files,
+  Mypy clean for 285 source files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend
+  744 passed / 5 optional live-provider tests skipped, frontend 32 files / 205 passed, and
+  TypeScript, ESLint and the Next.js production build passed.

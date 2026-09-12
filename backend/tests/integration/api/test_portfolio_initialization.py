@@ -13,6 +13,7 @@ from stock_platform.infrastructure.db.models.tables import (
     cash_ledger,
     paper_portfolio_config,
     portfolio_initialization_request,
+    portfolio_nav,
 )
 from stock_platform.settings import Settings
 
@@ -77,6 +78,13 @@ def test_singleton_paper_portfolio_initialization_is_audited_and_idempotent(
                 .mappings()
                 .all()
             )
+            nav_rows = (
+                connection.execute(
+                    select(portfolio_nav).where(portfolio_nav.c.portfolio_id == config["id"])
+                )
+                .mappings()
+                .all()
+            )
         historical = client.get(
             "/api/v1/portfolio", params={"decision_time": effective_at.isoformat()}
         )
@@ -100,7 +108,13 @@ def test_singleton_paper_portfolio_initialization_is_audited_and_idempotent(
             },
             "initialized_at": effective_at.isoformat().replace("+00:00", "Z"),
             "cash": {"balance": "100000", "currency": "USD"},
-            "latest_nav": None,
+            "latest_nav": {
+                "id": str(nav_rows[0]["id"]),
+                "event_time": effective_at.isoformat().replace("+00:00", "Z"),
+                "portfolio_id": "10000000-0000-0000-0000-000000000001",
+                "nav": "100000",
+                "available_at": effective_at.isoformat().replace("+00:00", "Z"),
+            },
             "positions": [],
             "risk_decisions": [],
             "orders": [],
@@ -126,10 +140,19 @@ def test_singleton_paper_portfolio_initialization_is_audited_and_idempotent(
                 ],
                 key=lambda row: row["account"],
             ),
-            "performance_history": [],
+            "performance_history": [
+                {
+                    "id": str(nav_rows[0]["id"]),
+                    "event_time": effective_at.isoformat().replace("+00:00", "Z"),
+                    "portfolio_id": "10000000-0000-0000-0000-000000000001",
+                    "nav": "100000",
+                    "available_at": effective_at.isoformat().replace("+00:00", "Z"),
+                }
+            ],
         }
 
         assert len(rows) == 2
+        assert len(nav_rows) == 1
         assert {row["account"] for row in rows} == {
             "ASSET:CASH",
             "EQUITY:OPENING_BALANCE",

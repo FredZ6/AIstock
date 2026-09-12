@@ -27,6 +27,9 @@ REQUIRED_TABLES = {
     "order_intent",
     "paper_fill",
     "cash_ledger",
+    "eval_run",
+    "eval_metric",
+    "regression_gate_result",
 }
 
 
@@ -133,6 +136,36 @@ def test_decision_pins_four_policies_and_replay_inputs(engine: Engine) -> None:
     }
     assert required <= columns.keys()
     assert all(columns[name]["nullable"] is False for name in required)
+
+
+def test_evaluation_read_model_pins_versions_and_normalizes_measured_results(
+    engine: Engine,
+) -> None:
+    run_columns = {column["name"]: column for column in inspect(engine).get_columns("eval_run")}
+    required_run_columns = {
+        "id",
+        "status",
+        "passed",
+        "mode",
+        "dataset_version",
+        "case_count",
+        "data_cutoff",
+        "model_version",
+        "prompt_version",
+        "research_scoring_policy_version",
+        "risk_policy_version",
+        "execution_policy_version",
+        "confidence_policy_version",
+        "gate_policy_version",
+        "summary_hash",
+        "created_at",
+    }
+    assert required_run_columns <= run_columns.keys()
+    assert all(run_columns[name]["nullable"] is False for name in required_run_columns)
+    assert ("eval_run_id", "eval_run", "id") in _foreign_key_targets(engine, "eval_metric")
+    assert ("eval_run_id", "eval_run", "id") in _foreign_key_targets(
+        engine, "regression_gate_result"
+    )
 
 
 def test_external_data_and_quality_dimensions_are_raw_facts(engine: Engine) -> None:

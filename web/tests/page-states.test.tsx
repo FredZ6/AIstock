@@ -1,9 +1,16 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { StateBoundary } from '../components/states/state-boundary'
 
+const refresh = vi.fn()
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh }),
+}))
+
 describe('StateBoundary', () => {
+  beforeEach(() => refresh.mockReset())
   it('announces loading without presenting stale content as current', () => {
     render(<StateBoundary state={{ kind: 'loading', label: 'Today data' }} />)
 
@@ -18,6 +25,8 @@ describe('StateBoundary', () => {
           kind: 'empty',
           title: 'No watchlist symbols',
           message: 'Add a symbol to begin daily research.',
+          actionHref: '/watchlist',
+          actionLabel: 'Configure watchlist',
         }}
       />,
     )
@@ -25,6 +34,7 @@ describe('StateBoundary', () => {
     expect(screen.getByRole('status', { name: 'No watchlist symbols' })).toHaveTextContent(
       'Add a symbol to begin daily research.',
     )
+    expect(screen.getByRole('link', { name: 'Configure watchlist' })).toHaveAttribute('href', '/watchlist')
   })
 
   it('marks stale data with its exact last-updated timestamp', () => {
@@ -72,6 +82,8 @@ describe('StateBoundary', () => {
           title: 'Provider coverage degraded',
           message: 'Available evidence is shown with reduced coverage.',
           providers: ['SEC', 'Options'],
+          actionHref: '/watchlist',
+          actionLabel: 'Review provider coverage',
         }}
       >
         <p>Partial market context</p>
@@ -85,6 +97,7 @@ describe('StateBoundary', () => {
     const disclosure = screen.getByText('2 unavailable facts').closest('details')
     expect(disclosure).not.toHaveAttribute('open')
     expect(screen.getByText('Partial market context')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Review provider coverage' })).toHaveAttribute('href', '/watchlist')
   })
 
   it('keeps available records visible when a response is partial', () => {
@@ -113,14 +126,16 @@ describe('StateBoundary', () => {
           kind: 'failure',
           title: 'Today data unavailable',
           message: 'The request failed before a trustworthy snapshot was available.',
-          retryHref: '/',
+          retry: true,
         }}
       />,
     )
 
     expect(screen.getByRole('alert')).toHaveAccessibleName('Today data unavailable')
     expect(screen.getByRole('alert')).toHaveClass('surface-card')
-    expect(screen.getByRole('link', { name: 'Try again' })).toHaveAttribute('href', '/')
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('link', { name: 'Try again' })).not.toBeInTheDocument()
   })
 
   it('renders successful content without an artificial status wrapper', () => {

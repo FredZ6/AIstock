@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { FormEvent, useState } from 'react'
 
 import type { ApiWatchlistItem, WatchlistSnapshot } from '../../lib/product-types'
-import type { LiveDataStatus, MarketQuote } from '../../lib/server/live-data-api'
+import type { EarningsEvent, LiveDataStatus, MarketBar, MarketQuote } from '../../lib/server/live-data-api'
 import { formatMoney, formatPercent } from '../../lib/format'
 import { parseAwareInstant } from '../../lib/time'
 import { formatDualTime } from '../../lib/time'
@@ -15,13 +15,39 @@ import { FixtureNotice, PageHeading, QualityFacts, Signal } from '../ui/product-
 import { WatchlistApiControls } from './watchlist-api-controls'
 import { companyName } from './watchlist-display'
 
-export function ApiWatchlistPage({ asOf, items, missingSymbols = [], quoteStatus = 'SUCCESS', quotes }: { asOf: string; items: ApiWatchlistItem[]; missingSymbols?: string[]; quoteStatus?: LiveDataStatus; quotes: MarketQuote[] }) {
+export function ApiWatchlistPage({
+  asOf,
+  earningsBySymbol = {},
+  historiesBySymbol = {},
+  items,
+  missingSymbols = [],
+  quoteStatus = 'SUCCESS',
+  quotes,
+}: {
+  asOf: string
+  earningsBySymbol?: Record<string, EarningsEvent[]>
+  historiesBySymbol?: Record<string, MarketBar[]>
+  items: ApiWatchlistItem[]
+  missingSymbols?: string[]
+  quoteStatus?: LiveDataStatus
+  quotes: MarketQuote[]
+}) {
   const hasCompleteMarketQuotes = quoteStatus === 'SUCCESS' && items.length > 0 && missingSymbols.length === 0 && quotes.length === items.length
+  const missingTrends = items.filter((item) => (historiesBySymbol[item.symbol]?.length ?? 0) < 2)
+  const staleTrends = items.filter((item) => {
+    const latest = historiesBySymbol[item.symbol]?.at(-1)
+    return latest
+      ? parseAwareInstant(asOf).getTime() - parseAwareInstant(latest.availableAt).getTime() > 24 * 60 * 60 * 1000
+      : false
+  })
+  const missingEarnings = items.filter((item) => !(item.symbol in earningsBySymbol))
   const missing = [
     ...(quoteStatus === 'DEGRADED' ? ['Market quote quality'] : []),
     ...(hasCompleteMarketQuotes || quoteStatus === 'DEGRADED' ? [] : missingSymbols.length ? missingSymbols.map((symbol) => `${symbol} market quote`) : ['Market data']),
+    ...missingTrends.map((item) => `${item.symbol} trend`),
+    ...staleTrends.map((item) => `${item.symbol} trend stale`),
     'Research',
-    'Earnings',
+    ...missingEarnings.map((item) => `${item.symbol} earnings`),
     'Decision history',
   ]
   return (
@@ -40,7 +66,7 @@ export function ApiWatchlistPage({ asOf, items, missingSymbols = [], quoteStatus
           : 'Persisted schedules and thresholds remain usable. Missing facts are never replaced with Fixture data.',
         providers: missing,
       }}>
-        <WatchlistApiControls items={items} quotes={quotes} />
+        <WatchlistApiControls asOf={asOf} earningsBySymbol={earningsBySymbol} historiesBySymbol={historiesBySymbol} items={items} quotes={quotes} />
       </StateBoundary>
     </AppShell>
   )
@@ -54,7 +80,7 @@ export function WatchlistFailurePage({ asOf }: { asOf: string }) {
         kind: 'failure',
         title: 'Watchlist unavailable',
         message: 'FastAPI did not return a valid Watchlist response. Fixture data was not substituted.',
-        retryHref: '/watchlist',
+        retry: true,
       }} />
     </AppShell>
   )
@@ -112,11 +138,11 @@ export function WatchlistPage({ snapshot }: { snapshot: WatchlistSnapshot }) {
             <button type="submit">Add to watchlist</button>
           </form>
         </div>
-        <div className="watchlist-config-list">{symbols.map((item) => <section aria-label={`${item.symbol} settings`} key={item.symbol}><div className="watchlist-config-heading"><h4>{item.symbol}</h4><span><Signal tone={item.portfolioAction}>{item.portfolioAction}</Signal></span></div><div className="watchlist-settings">
+        <div className="watchlist-config-list">{symbols.map((item) => <section aria-label={`${item.symbol} settings`} key={item.symbol}><details><summary>{item.symbol} settings · {item.portfolioAction}</summary><div className="watchlist-config-heading"><h4>{item.symbol}</h4><span><Signal tone={item.portfolioAction}>{item.portfolioAction}</Signal></span></div><div className="watchlist-settings">
                 <label><input type="checkbox" checked={item.dailyResearch} onChange={(event) => updateSymbol(item.symbol, { dailyResearch: event.target.checked })} /> <span>{item.symbol} daily research</span></label>
                 <label><input type="checkbox" checked={item.intradayMonitoring} onChange={(event) => updateSymbol(item.symbol, { intradayMonitoring: event.target.checked })} /> <span>{item.symbol} intraday monitoring</span></label>
                 <label><span>{item.symbol} alert threshold</span><input aria-label={`${item.symbol} alert threshold`} inputMode="decimal" value={item.alertThreshold} onChange={(event) => updateSymbol(item.symbol, { alertThreshold: event.target.value })} /></label>
-              </div><p className="watchlist-setting-note">Next earnings: {item.nextEarningsAt ? <time dateTime={item.nextEarningsAt}>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(parseAwareInstant(item.nextEarningsAt))}</time> : 'Not in fixture'}</p></section>)}</div>
+              </div><p className="watchlist-setting-note">Next earnings: {item.nextEarningsAt ? <time dateTime={item.nextEarningsAt}>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(parseAwareInstant(item.nextEarningsAt))}</time> : 'Not in fixture'}</p></details></section>)}</div>
         </section>
         <TradingViewTickerList symbols={symbols.map((item) => item.symbol)} />
       </section>
