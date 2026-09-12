@@ -3692,3 +3692,29 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 743 passed / 5 optional
   live-provider tests skipped, frontend 31 files / 199 passed, and TypeScript, ESLint and the
   Next.js production build passed. No push, PR or merge is claimed by this checkpoint.
+
+## 2026-09-13 — PR #22 merge-gate remediation
+
+- GitHub Actions `CI / Verify` initially exited 1 before tests because Docker Hub rejected
+  `minio/minio:latest`. The Compose dependency is now pinned to the public official Quay release
+  `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z` at immutable manifest digest
+  `sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`; its registry manifest
+  returned HTTP 200 and advertises both amd64 and arm64 images.
+- Point-in-time RED covered late-created research runs, late evaluation metrics/gates and reports
+  requested before their durable facts existed. The focused backend command exited 1 with the
+  expected visibility failures. GREEN applies aware `decision_time` cutoffs to run metadata,
+  closed research-report lineage and evaluation children; the related contract/integration suite
+  exited 0 with 36 passed.
+- Availability RED proved configured provider credentials could hide missing News and Options
+  domains despite zero persisted facts. GREEN derives availability exclusively from visible
+  persisted rows, so credentials never masquerade as data.
+- Destructive-interaction RED proved Watchlist removal could still be cancelled visually while its
+  server action was pending. GREEN disables Cancel, ignores Escape during persistence and prevents
+  duplicate submission. Focused frontend verification exited 0 with 2 files / 23 passed; TypeScript
+  and ESLint exited 0 without warnings.
+- The first complete `make verify` exited 1 on a test-file formatting difference; after mechanical
+  formatting, the second run exited 1 on the expected stale OpenAPI snapshot. The generated API
+  contract was refreshed. The final `make verify` exited 0: Ruff format/check clean for 330 files,
+  Mypy clean for 285 source files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend
+  744 passed / 5 optional live-provider tests skipped, frontend 32 files / 205 passed, and
+  TypeScript, ESLint and the Next.js production build passed.

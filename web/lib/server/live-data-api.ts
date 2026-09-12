@@ -671,9 +671,10 @@ export async function createResearchRun(
 }
 
 export async function getResearchRun(options: LiveDataClientOptions, runId: string): Promise<ResearchRun> {
+  const query = new URLSearchParams({ decision_time: options.decisionTime })
   return researchRun(await requestJson(
     options,
-    `/api/v1/research-runs/${encodeURIComponent(runId)}`,
+    `/api/v1/research-runs/${encodeURIComponent(runId)}?${query}`,
   ))
 }
 
@@ -686,7 +687,8 @@ export async function getResearchRunReport(
   options: LiveDataClientOptions,
   runId: string,
 ): Promise<ResearchRunReport> {
-  const value = await requestJson(options, `/api/v1/research-runs/${encodeURIComponent(runId)}/report`)
+  const query = new URLSearchParams({ decision_time: options.decisionTime })
+  const value = await requestJson(options, `/api/v1/research-runs/${encodeURIComponent(runId)}/report?${query}`)
   return contract(() => {
     const source = record(value, 'research_report')
     const thesis = record(source.thesis, 'research_report.thesis')

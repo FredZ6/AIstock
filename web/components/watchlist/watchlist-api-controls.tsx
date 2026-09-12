@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useEffect, useRef, useState } from 'react'
+import { useActionState, useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { useFormStatus } from 'react-dom'
 
@@ -82,7 +82,10 @@ function PersistedSettings({ asOf, earnings, item }: { asOf: string; earnings?: 
   const update = updateWatchlistAction.bind(null, item.symbol)
   const remove = deleteWatchlistAction.bind(null, item.symbol)
   const [updateState, updateAction] = useActionState(update, initialWatchlistActionState)
-  const [deleteState, deleteAction] = useActionState(remove, initialWatchlistActionState)
+  const [deleteState, deleteAction, deletePending] = useActionState(
+    remove,
+    initialWatchlistActionState,
+  )
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const deleteTriggerRef = useRef<HTMLButtonElement>(null)
   const cancelDeleteRef = useRef<HTMLButtonElement>(null)
@@ -93,10 +96,11 @@ function PersistedSettings({ asOf, earnings, item }: { asOf: string; earnings?: 
       .format(new Date(`${nextEarnings.eventDate}T00:00:00Z`))
     : null
 
-  function closeDeleteConfirmation() {
+  const closeDeleteConfirmation = useCallback(() => {
+    if (deletePending) return
     setConfirmingDelete(false)
     deleteTriggerRef.current?.focus()
-  }
+  }, [deletePending])
 
   useEffect(() => {
     if (confirmingDelete) cancelDeleteRef.current?.focus()
@@ -104,7 +108,7 @@ function PersistedSettings({ asOf, earnings, item }: { asOf: string; earnings?: 
 
   useEffect(() => {
     if (deleteState.status === 'success') closeDeleteConfirmation()
-  }, [deleteState.status])
+  }, [closeDeleteConfirmation, deleteState.status])
 
   return (
     <div className="watchlist-api-actions">
@@ -142,7 +146,7 @@ function PersistedSettings({ asOf, earnings, item }: { asOf: string; earnings?: 
         aria-modal="true"
         className="confirmation-backdrop"
         onKeyDown={(event) => {
-          if (event.key === 'Escape') {
+          if (event.key === 'Escape' && !deletePending) {
             event.preventDefault()
             closeDeleteConfirmation()
           }
@@ -165,7 +169,7 @@ function PersistedSettings({ asOf, earnings, item }: { asOf: string; earnings?: 
           <h4 id={`delete-${item.symbol}-title`}>Remove {item.symbol} from watchlist?</h4>
           <p id={`delete-${item.symbol}-description`}>This removes {item.symbol} monitoring settings from the paper-research watchlist.</p>
           <div className="confirmation-actions">
-            <button onClick={closeDeleteConfirmation} ref={cancelDeleteRef} type="button">Cancel</button>
+            <button disabled={deletePending} onClick={closeDeleteConfirmation} ref={cancelDeleteRef} type="button">Cancel</button>
             <form action={deleteAction}>
               <DeleteSubmitButton buttonRef={confirmDeleteRef} symbol={item.symbol} />
             </form>

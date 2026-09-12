@@ -112,11 +112,15 @@ describe('Watchlist deletion confirmation', () => {
     const confirm = screen.getByRole('button', { name: 'Confirm remove NVDA' })
     fireEvent.click(confirm)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Removing NVDA…' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
     expect(screen.getByRole('status')).toHaveTextContent('Removing NVDA from watchlist.')
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' })
+    expect(screen.getByRole('alertdialog', { name: 'Remove NVDA from watchlist?' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Removing NVDA…' }))
 
     expect(deleteItem).toHaveBeenCalledTimes(1)
     await act(async () => settle?.({ message: 'NVDA deleted.', status: 'success', symbol: 'NVDA' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
   })
 
   it('announces persistence failure and keeps the confirmation available for retry', async () => {

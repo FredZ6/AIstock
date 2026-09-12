@@ -9,6 +9,7 @@ import {
   getHistoricalBars,
   getMarketQuotes,
   getLatestResearchRun,
+  getResearchRun,
   getPortfolioSummary,
   getProviderHealth,
   getStockResearch,
@@ -134,6 +135,23 @@ describe('live data API client', () => {
     )
   })
 
+  it('loads a named research run at the requested point-in-time cutoff', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      data_cutoff: options.decisionTime,
+      decision_time: options.decisionTime,
+      run_id: '10000000-0000-0000-0000-000000000099',
+      run_type: 'RESEARCH',
+      status: 'COMPLETED',
+      symbol: 'NVDA',
+    }))
+
+    await expect(getResearchRun({ ...options, fetchImpl }, 'run-1')).resolves.toMatchObject({ symbol: 'NVDA' })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://api.test/api/v1/research-runs/run-1?decision_time=${encodeURIComponent(options.decisionTime)}`,
+      expect.objectContaining({ cache: 'no-store' }),
+    )
+  })
+
   it('parses the closed research report without weakening Decimal or timestamp contracts', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       run_id: 'run-1',
@@ -150,6 +168,10 @@ describe('live data API client', () => {
       evidence: [{ rawObjectKey: 'sec/raw.json' }],
       decisionDiff: { generator: 'DETERMINISTIC_CODE' },
     })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://api.test/api/v1/research-runs/run-1/report?decision_time=${encodeURIComponent(options.decisionTime)}`,
+      expect.objectContaining({ cache: 'no-store' }),
+    )
   })
 
   it('admits a research run with one point-in-time cutoff and a stable idempotency key', async () => {

@@ -19,6 +19,7 @@ from stock_platform.api.dependencies import (
 from stock_platform.api.main import app
 from stock_platform.application.learning.promotion import HumanActor
 from stock_platform.infrastructure.db.models.tables import (
+    agent_run,
     alert_event,
     eval_metric,
     eval_run,
@@ -227,26 +228,88 @@ def test_idempotency_replays_equal_requests_and_rejects_key_reuse(client: TestCl
     assert error(conflict)["code"] == "IDEMPOTENCY_CONFLICT"
 
 
-def test_latest_research_run_is_point_in_time_bounded(client: TestClient) -> None:
-    earlier = research_request("NVDA")
-    future = research_request("MSFT")
-    future["decision_time"] = "2026-08-23T21:00:00+00:00"
-    future["data_cutoff"] = future["decision_time"]
-    first = client.post(
-        "/api/v1/research-runs",
-        headers={"Idempotency-Key": f"latest-earlier-{uuid4()}"},
-        json=earlier,
-    )
-    client.post(
-        "/api/v1/research-runs",
-        headers={"Idempotency-Key": f"latest-future-{uuid4()}"},
-        json=future,
-    )
+def test_latest_research_run_is_point_in_time_bounded(
+    client: TestClient,
+    api_engine: Engine,
+) -> None:
+    cutoff = datetime.now(UTC)
+    visible_id = uuid4()
+    late_id = uuid4()
+    with api_engine.begin() as connection:
+        connection.execute(
+            insert(agent_run),
+            [
+                {
+                    "id": visible_id,
+                    "run_type": "RESEARCH",
+                    "idempotency_key": f"latest-visible-{visible_id}",
+                    "request_hash": "a" * 64,
+                    "request_payload": {"symbol": "NVDA"},
+                    "symbol": "NVDA",
+                    "decision_time": cutoff - timedelta(minutes=2),
+                    "data_cutoff": cutoff - timedelta(minutes=2),
+                    "created_at": cutoff - timedelta(minutes=1),
+                },
+                {
+                    "id": late_id,
+                    "run_type": "RESEARCH",
+                    "idempotency_key": f"latest-late-{late_id}",
+                    "request_hash": "b" * 64,
+                    "request_payload": {"symbol": "MSFT"},
+                    "symbol": "MSFT",
+                    "decision_time": cutoff - timedelta(seconds=30),
+                    "data_cutoff": cutoff - timedelta(seconds=30),
+                    "created_at": cutoff + timedelta(minutes=1),
+                },
+            ],
+        )
+    try:
+        response = client.get(
+            "/api/v1/research-runs/latest", params={"decision_time": cutoff.isoformat()}
+        )
 
-    response = client.get("/api/v1/research-runs/latest?decision_time=2026-08-22T21:00:00Z")
+        assert response.status_code == 200
+        assert response.json()["run_id"] == str(visible_id)
+    finally:
+        with api_engine.begin() as connection:
+            connection.execute(agent_run.delete().where(agent_run.c.id.in_((visible_id, late_id))))
 
-    assert response.status_code == 200
-    assert response.json() == first.json()
+
+def test_research_run_lookup_is_point_in_time_bounded(
+    client: TestClient,
+    api_engine: Engine,
+) -> None:
+    cutoff = datetime.now(UTC)
+    run_id = uuid4()
+    with api_engine.begin() as connection:
+        connection.execute(
+            insert(agent_run).values(
+                id=run_id,
+                run_type="RESEARCH",
+                idempotency_key=f"lookup-late-{run_id}",
+                request_hash="c" * 64,
+                request_payload={"symbol": "NVDA"},
+                symbol="NVDA",
+                decision_time=cutoff - timedelta(minutes=1),
+                data_cutoff=cutoff - timedelta(minutes=1),
+                created_at=cutoff + timedelta(minutes=1),
+            )
+        )
+    try:
+        hidden = client.get(
+            f"/api/v1/research-runs/{run_id}",
+            params={"decision_time": cutoff.isoformat()},
+        )
+        visible = client.get(
+            f"/api/v1/research-runs/{run_id}",
+            params={"decision_time": (cutoff + timedelta(minutes=2)).isoformat()},
+        )
+
+        assert hidden.status_code == 404
+        assert visible.status_code == 200
+    finally:
+        with api_engine.begin() as connection:
+            connection.execute(agent_run.delete().where(agent_run.c.id == run_id))
 
 
 def test_admission_limit_is_durable_and_cancellation_releases_capacity(
@@ -420,6 +483,28 @@ def test_evaluation_runs_are_point_in_time_bounded_detailed_and_paginated(
             )
         )
         connection.execute(
+            insert(eval_metric).values(
+                eval_run_id=run_ids[0],
+                metric_name="future_metric",
+                metric_value="1.00",
+                case_ids=["future-case"],
+                case_hashes=["f" * 64],
+                created_at=cutoff + timedelta(minutes=1),
+            )
+        )
+        connection.execute(
+            insert(regression_gate_result).values(
+                eval_run_id=run_ids[0],
+                metric_name="future_metric",
+                comparison="AT_LEAST",
+                threshold="0.50",
+                observed="1.00",
+                passed=True,
+                reason="future result",
+                created_at=cutoff + timedelta(minutes=1),
+            )
+        )
+        connection.execute(
             insert(eval_run).values(
                 id=uuid4(),
                 status="FAILED",
@@ -495,8 +580,14 @@ def test_missing_resources_and_actions_use_the_error_envelope(client: TestClient
         id="reviewer", authenticated=True
     )
     requests = (
-        client.get(f"/api/v1/research-runs/{missing}"),
-        client.get(f"/api/v1/research-runs/{missing}/report"),
+        client.get(
+            f"/api/v1/research-runs/{missing}",
+            params={"decision_time": datetime.now(UTC).isoformat()},
+        ),
+        client.get(
+            f"/api/v1/research-runs/{missing}/report",
+            params={"decision_time": datetime.now(UTC).isoformat()},
+        ),
         client.get(
             f"/api/v1/evals/runs/{missing}",
             params={"decision_time": datetime.now(UTC).isoformat()},

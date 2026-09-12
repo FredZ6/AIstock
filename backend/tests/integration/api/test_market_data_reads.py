@@ -715,6 +715,16 @@ def test_research_read_exposes_only_pit_eligible_persisted_research_domains(
     client, connection = market_client
     cutoff = datetime(2026, 8, 21, 20, tzinfo=UTC)
     available_at = cutoff - timedelta(hours=1)
+    unavailable = client.get(
+        "/api/v1/stocks/MSFT/research", params={"decision_time": cutoff.isoformat()}
+    )
+    assert unavailable.status_code == 200
+    assert unavailable.json()["unavailable_domains"] == [
+        "ANALYST_TARGETS",
+        "NEWS",
+        "EARNINGS",
+        "OPTIONS",
+    ]
     security_id = uuid4()
     connection.execute(security.insert().values(id=security_id, instrument_type="COMMON_STOCK"))
     connection.execute(

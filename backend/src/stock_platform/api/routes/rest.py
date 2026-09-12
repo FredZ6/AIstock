@@ -655,6 +655,7 @@ def get_latest_research_run(
             .where(
                 agent_run.c.run_type == "RESEARCH",
                 agent_run.c.decision_time <= cutoff,
+                agent_run.c.created_at <= cutoff,
             )
             .order_by(agent_run.c.decision_time.desc(), agent_run.c.created_at.desc())
             .limit(1)
@@ -668,9 +669,19 @@ def get_latest_research_run(
 
 
 @router.get("/research-runs/{run_id}", response_model=RunResponse)
-def get_research_run(run_id: UUID, connection: ConnectionDependency) -> RunResponse:
+def get_research_run(
+    run_id: UUID,
+    decision_time: datetime,
+    connection: ConnectionDependency,
+) -> RunResponse:
+    cutoff = _aware_query_time(decision_time, "decision_time")
     row = (
-        connection.execute(select(agent_run).where(agent_run.c.id == run_id))
+        connection.execute(
+            select(agent_run).where(
+                agent_run.c.id == run_id,
+                agent_run.c.created_at <= cutoff,
+            )
+        )
         .mappings()
         .one_or_none()
     )
@@ -703,11 +714,21 @@ def cancel_research_run(run_id: UUID, connection: ConnectionDependency) -> RunRe
 
 
 @router.get("/research-runs/{run_id}/report", response_model=ResearchRunReportResponse)
-def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[str, Any]:
+def get_research_report(
+    run_id: UUID,
+    decision_time: datetime,
+    connection: ConnectionDependency,
+) -> dict[str, Any]:
+    cutoff = _aware_query_time(decision_time, "decision_time")
     thesis = (
         connection.execute(
             select(investment_thesis)
-            .where(investment_thesis.c.run_id == run_id)
+            .join(agent_run, agent_run.c.id == investment_thesis.c.run_id)
+            .where(
+                investment_thesis.c.run_id == run_id,
+                agent_run.c.created_at <= cutoff,
+                investment_thesis.c.created_at <= cutoff,
+            )
             .order_by(investment_thesis.c.created_at.desc())
             .limit(1)
         )
@@ -719,7 +740,10 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
     opinion = (
         connection.execute(
             select(research_opinion)
-            .where(research_opinion.c.thesis_id == thesis["id"])
+            .where(
+                research_opinion.c.thesis_id == thesis["id"],
+                research_opinion.c.created_at <= cutoff,
+            )
             .order_by(research_opinion.c.created_at.desc())
             .limit(1)
         )
@@ -757,7 +781,11 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
                 confidence_policy_version,
                 confidence_policy_version.c.id == decision_snapshot.c.confidence_policy_version_id,
             )
-            .where(decision_snapshot.c.thesis_id == thesis["id"])
+            .where(
+                decision_snapshot.c.thesis_id == thesis["id"],
+                decision_snapshot.c.available_at <= cutoff,
+                decision_snapshot.c.created_at <= cutoff,
+            )
             .order_by(decision_snapshot.c.created_at.desc())
             .limit(1)
         )
@@ -797,9 +825,23 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
                     raw_data_object,
                     raw_data_object.c.id == normalized_record.c.raw_data_object_id,
                 )
-                .outerjoin(claim, claim.c.evidence_id == evidence_item.c.id)
+                .outerjoin(
+                    claim,
+                    and_(
+                        claim.c.evidence_id == evidence_item.c.id,
+                        claim.c.created_at <= cutoff,
+                    ),
+                )
             )
-            .where(thesis_evidence_link.c.thesis_id == thesis["id"])
+            .where(
+                thesis_evidence_link.c.thesis_id == thesis["id"],
+                thesis_evidence_link.c.created_at <= cutoff,
+                evidence_item.c.created_at <= cutoff,
+                derived_metric.c.created_at <= cutoff,
+                normalized_record.c.created_at <= cutoff,
+                raw_data_object.c.available_at <= cutoff,
+                raw_data_object.c.ingested_at <= cutoff,
+            )
             .order_by(evidence_item.c.id, claim.c.created_at, claim.c.id)
         )
         .mappings()
@@ -833,7 +875,11 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
     gaps = (
         connection.execute(
             select(evidence_gap)
-            .where(evidence_gap.c.run_id == run_id)
+            .where(
+                evidence_gap.c.run_id == run_id,
+                evidence_gap.c.observed_at <= cutoff,
+                evidence_gap.c.created_at <= cutoff,
+            )
             .order_by(evidence_gap.c.observed_at, evidence_gap.c.id)
         )
         .mappings()
@@ -841,7 +887,10 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
     )
     diff = (
         connection.execute(
-            select(decision_diff).where(decision_diff.c.decision_id == decision["id"])
+            select(decision_diff).where(
+                decision_diff.c.decision_id == decision["id"],
+                decision_diff.c.created_at <= cutoff,
+            )
         )
         .mappings()
         .one()
@@ -888,7 +937,6 @@ def get_research_report(run_id: UUID, connection: ConnectionDependency) -> dict[
 def get_stock_research(
     symbol: str,
     connection: ConnectionDependency,
-    settings: SettingsDependency,
     decision_time: datetime,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     cursor: str | None = None,
@@ -1099,11 +1147,11 @@ def get_stock_research(
         .all()
     )
     unavailable_domains = ["ANALYST_TARGETS"]
-    if not news_rows and not (settings.alpaca_data_key and settings.alpaca_data_secret):
+    if not news_rows:
         unavailable_domains.append("NEWS")
-    if not earnings_rows and not settings.alpha_vantage_api_key:
+    if not earnings_rows:
         unavailable_domains.append("EARNINGS")
-    if not option_rows and not (settings.alpaca_data_key and settings.alpaca_data_secret):
+    if not option_rows:
         unavailable_domains.append("OPTIONS")
     return {
         "decision_time": cutoff,
@@ -1885,6 +1933,7 @@ def get_eval_run(
                 eval_metric.c.case_hashes,
             )
             .where(eval_metric.c.eval_run_id == eval_run_id)
+            .where(eval_metric.c.created_at <= cutoff)
             .order_by(eval_metric.c.metric_name)
         )
         .mappings()
@@ -1901,6 +1950,7 @@ def get_eval_run(
                 regression_gate_result.c.reason,
             )
             .where(regression_gate_result.c.eval_run_id == eval_run_id)
+            .where(regression_gate_result.c.created_at <= cutoff)
             .order_by(regression_gate_result.c.metric_name)
         )
         .mappings()
