@@ -3576,6 +3576,38 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   live-provider tests skipped, frontend 30 files / 193 passed, and TypeScript, ESLint and the
   Next.js production build passed. No push, PR or merge is claimed by this checkpoint.
 
+## 2026-09-12 — M8.1 frontend product closure, FRE-39 protected Watchlist deletion
+
+- Confirmation RED: `pnpm --dir web test -- --run
+  tests/watchlist-delete-confirmation.test.tsx` exited 1 with 4/4 new tests failing because the
+  existing Delete control immediately submitted its Server Action and exposed no named confirmation
+  dialog. GREEN replaces that one-activation path with an `alertdialog` that names the symbol,
+  explains that only paper-research monitoring settings are removed, and requires an explicit
+  `Confirm remove {symbol}` action.
+- Keyboard lifecycle RED: the focused five-test command exited 1 with 1 failed / 4 passed because
+  Tab could leave the modal confirmation. GREEN starts focus on the safe Cancel action, wraps
+  forward/backward keyboard focus between Cancel and Confirm, closes on Escape or Cancel without
+  changing unsaved settings, and restores focus to the originating Delete button. The focused rerun
+  exited 0 with 5/5 passed.
+- Submission feedback disables Confirm while the Server Action is pending, announces the pending
+  state, and prevents duplicate activation. Success is announced as status and closes the dialog;
+  failure is announced as alert while leaving a retry path. Existing API-mode deletion remains a
+  single FastAPI call, with no Fixture import, brokerage action or other side effect.
+- Related Watchlist regression testing exited 0 with 4 files / 54 tests passed. TypeScript and ESLint
+  each exited 0. The first real-API Playwright run exited 1 before reaching deletion because its
+  setup expected an obsolete exact Degraded title; the captured page proved the current truthful
+  state was `Research enrichment unavailable`. After replacing that unrelated title dependency with
+  the stable `Discover · API Mode` boundary, desktop and 393px mobile real FastAPI/PostgreSQL runs
+  exited 0 with 2 passed / 2 mode-specific skipped. The controlled unavailable-API matrix also
+  exited 0 with 2 passed / 2 mode-specific skipped and confirmed no Fixture fallback.
+- The first `make verify` exited 2 after Ruff and Mypy passed because the sandbox rejected localhost
+  PostgreSQL access. The authorized rerun exited 0: Ruff format/check clean for 330 files, Mypy clean
+  for 285 source files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 743 passed /
+  5 optional live-provider tests skipped, frontend 32 files / 204 passed, and TypeScript, ESLint and
+  the Next.js production build passed. Existing jsdom local-storage, cross-realm AbortSignal and
+  third-party color-environment diagnostics remain non-failing noise tracked by FRE-38. No commit,
+  push, PR or merge is claimed by this checkpoint.
+
 ## 2026-09-12 — M8.1 frontend product closure, FRE-36 workflow-aware recovery
 
 - Empty-state RED: `npm test -- --run tests/api-boundary-routing.test.tsx

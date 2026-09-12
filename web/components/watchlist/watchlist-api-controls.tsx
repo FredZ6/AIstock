@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState } from 'react'
+import { useActionState, useEffect, useRef, useState } from 'react'
+import type { RefObject } from 'react'
 import { useFormStatus } from 'react-dom'
 
 import {
@@ -26,6 +27,16 @@ const MAX_VISIBLE_QUOTE_AGE_MS = 24 * 60 * 60 * 1000
 function SubmitButton({ label, pendingLabel }: { label: string; pendingLabel: string }) {
   const { pending } = useFormStatus()
   return <button disabled={pending} type="submit">{pending ? pendingLabel : label}</button>
+}
+
+function DeleteSubmitButton({ buttonRef, symbol }: { buttonRef: RefObject<HTMLButtonElement | null>; symbol: string }) {
+  const { pending } = useFormStatus()
+  return <>
+    <button className="danger-button" disabled={pending} ref={buttonRef} type="submit">
+      {pending ? `Removing ${symbol}…` : `Confirm remove ${symbol}`}
+    </button>
+    {pending ? <span aria-live="polite" className="sr-only" role="status">Removing {symbol} from watchlist.</span> : null}
+  </>
 }
 
 function ActionMessage({ state }: { state: WatchlistActionState }) {
@@ -72,11 +83,28 @@ function PersistedSettings({ asOf, earnings, item }: { asOf: string; earnings?: 
   const remove = deleteWatchlistAction.bind(null, item.symbol)
   const [updateState, updateAction] = useActionState(update, initialWatchlistActionState)
   const [deleteState, deleteAction] = useActionState(remove, initialWatchlistActionState)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null)
+  const cancelDeleteRef = useRef<HTMLButtonElement>(null)
+  const confirmDeleteRef = useRef<HTMLButtonElement>(null)
   const nextEarnings = earnings?.find((event) => event.eventDate >= asOf.slice(0, 10))
   const earningsDate = nextEarnings
     ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
       .format(new Date(`${nextEarnings.eventDate}T00:00:00Z`))
     : null
+
+  function closeDeleteConfirmation() {
+    setConfirmingDelete(false)
+    deleteTriggerRef.current?.focus()
+  }
+
+  useEffect(() => {
+    if (confirmingDelete) cancelDeleteRef.current?.focus()
+  }, [confirmingDelete])
+
+  useEffect(() => {
+    if (deleteState.status === 'success') closeDeleteConfirmation()
+  }, [deleteState.status])
 
   return (
     <div className="watchlist-api-actions">
@@ -101,10 +129,50 @@ function PersistedSettings({ asOf, earnings, item }: { asOf: string; earnings?: 
         <SubmitButton label={`Save ${item.symbol} settings`} pendingLabel={`Saving ${item.symbol}…`} />
         <ActionMessage state={updateState} />
       </form>
-      <form action={deleteAction}>
-        <SubmitButton label={`Delete ${item.symbol}`} pendingLabel={`Deleting ${item.symbol}…`} />
-        <ActionMessage state={deleteState} />
-      </form>
+      <button
+        onClick={() => setConfirmingDelete(true)}
+        ref={deleteTriggerRef}
+        type="button"
+      >
+        Delete {item.symbol}
+      </button>
+      {confirmingDelete ? <div
+        aria-labelledby={`delete-${item.symbol}-title`}
+        aria-describedby={`delete-${item.symbol}-description`}
+        aria-modal="true"
+        className="confirmation-backdrop"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            closeDeleteConfirmation()
+          }
+          if (event.key === 'Tab') {
+            const first = cancelDeleteRef.current
+            const last = confirmDeleteRef.current
+            if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault()
+              first?.focus()
+            } else if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault()
+              last?.focus()
+            }
+          }
+        }}
+        role="alertdialog"
+      >
+        <div className="confirmation-dialog">
+          <p className="section-kicker">Confirm removal</p>
+          <h4 id={`delete-${item.symbol}-title`}>Remove {item.symbol} from watchlist?</h4>
+          <p id={`delete-${item.symbol}-description`}>This removes {item.symbol} monitoring settings from the paper-research watchlist.</p>
+          <div className="confirmation-actions">
+            <button onClick={closeDeleteConfirmation} ref={cancelDeleteRef} type="button">Cancel</button>
+            <form action={deleteAction}>
+              <DeleteSubmitButton buttonRef={confirmDeleteRef} symbol={item.symbol} />
+            </form>
+          </div>
+        </div>
+      </div> : null}
+      <ActionMessage state={deleteState} />
       {nextEarnings ? <details className="watchlist-provenance-details">
         <summary>Next earnings {earningsDate}</summary>
         <p>{nextEarnings.provider} · available <time dateTime={nextEarnings.availableAt}>{formatDualTime(nextEarnings.availableAt).newYork}</time></p>
