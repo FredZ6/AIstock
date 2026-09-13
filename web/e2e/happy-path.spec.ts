@@ -109,6 +109,18 @@ test('theme and reduced-motion preferences preserve a calm readable surface', as
   expect(transitionDurationSeconds).toBeLessThanOrEqual(0.00001)
 })
 
+test('core workflows reflow at 200% text zoom without page-level horizontal scrolling', async ({ page }) => {
+  await page.setViewportSize({ height: 900, width: 768 })
+
+  for (const [path, heading] of pages) {
+    await page.goto(path)
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' })
+    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible()
+    const layout = await inspectHorizontalOverflow(page)
+    expect(layout.fits, `${path} overflowed at 200% text zoom: ${JSON.stringify(layout)}`).toBe(true)
+  }
+})
+
 test('compact layouts expose every destination through an explicit navigation menu', async ({ page }) => {
   await page.setViewportSize({ height: 852, width: 393 })
   await page.goto('/')

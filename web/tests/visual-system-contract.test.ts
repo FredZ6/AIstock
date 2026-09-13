@@ -60,4 +60,34 @@ describe('visual system contract', () => {
       /@media \(max-width: 48rem\)[\s\S]*\.market-widget-symbol-overview \.tradingview-widget-container__widget\s*\{[^}]*min-width:/s,
     )
   })
+
+  it('uses an editorial terminal hierarchy instead of repeated glass cards', () => {
+    expect(css).toContain('--radius-section: 0.5rem;')
+    expect(css).toContain('--radius-control: 0.4rem;')
+    expect(css).toContain('--font-caption: 0.75rem;')
+    expect(css).toContain('--font-data: 0.875rem;')
+
+    expect(css).toMatch(
+      /\.surface-card\s*\{[^}]*box-shadow:\s*none;[^}]*backdrop-filter:\s*none;/s,
+    )
+    expect(css).toMatch(
+      /\.terminal-section\s*\{[^}]*border-radius:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s,
+    )
+  })
+
+  it('keeps secondary labels legible and financial values aligned', () => {
+    expect(css).toMatch(/thead th\s*\{[^}]*font-size:\s*var\(--font-caption\)/s)
+    expect(css).toMatch(/tbody th, tbody td\s*\{[^}]*font-size:\s*var\(--font-data\)/s)
+    expect(css).toContain('font-variant-numeric: tabular-nums lining-nums;')
+  })
+
+  it('preserves state meaning without relying on color alone', () => {
+    expect(css).toMatch(
+      /\.state-surface\[data-state\]\s*\{[^}]*border-inline-start:\s*0\.25rem solid/s,
+    )
+    expect(css).toMatch(
+      /\.state-surface\[data-state="failure"\]\s*\{[^}]*border-inline-start-color:\s*var\(--negative\)/s,
+    )
+    expect(css).toMatch(/\.state-label::before\s*\{[^}]*content:\s*"Status · "/s)
+  })
 })
