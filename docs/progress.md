@@ -3718,3 +3718,29 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   Mypy clean for 285 source files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend
   744 passed / 5 optional live-provider tests skipped, frontend 32 files / 205 passed, and
   TypeScript, ESLint and the Next.js production build passed.
+
+## 2026-09-13 — M8.1 frontend product closure, FRE-35 audit-ready visual system
+
+- Visual contract RED: `pnpm --dir web test -- --run tests/visual-system-contract.test.ts`
+  exited 1 with 3 expected failures because the shared UI still used large generic card radii,
+  glass shadows and undersized data labels, and state meaning lacked a redundant textual marker.
+  GREEN introduces compact section/control radii, readable caption/data type floors, tabular lining
+  numerals and a flattened editorial terminal hierarchy. The corrected command exited 0 with 32
+  files / 208 tests passed.
+- State surfaces now pair their visible state name with a `Status` prefix and a semantic leading
+  rail, so Failure and Degraded meaning does not depend on background color alone. Structural app
+  chrome retains restrained translucency while data sections, tables, market references,
+  performance summaries and benchmark panels no longer repeat decorative glass shadows.
+- Browser verification exited 0 with 14/14 Playwright happy-path checks across the locked desktop
+  and compact viewports, 200% text zoom and reduced motion. The accessibility matrix exited 0 with
+  2/2 tests across all eight routes on desktop and mobile, with no serious or critical axe
+  violations. API-unavailable visual review rendered the explicit Failure boundary without loading
+  Fixture facts.
+- Frontend lint and the Next.js production build each exited 0. The first `make verify` exited 2
+  before checks because the sandbox DNS could not download the locked `ormsgpack` wheel. The
+  authorized, otherwise identical rerun exited 0: Ruff format/check clean for 330 files, Mypy clean
+  for 285 source files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 744 passed /
+  5 optional live-provider tests skipped, frontend 32 files / 208 passed, and TypeScript, ESLint and
+  the Next.js production build passed. Existing jsdom local-storage and cross-realm AbortSignal
+  diagnostics remain non-failing test noise tracked by FRE-38. No commit, push, PR or merge is
+  claimed by this checkpoint.
