@@ -3744,3 +3744,27 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   the Next.js production build passed. Existing jsdom local-storage and cross-realm AbortSignal
   diagnostics remain non-failing test noise tracked by FRE-38. No commit, push, PR or merge is
   claimed by this checkpoint.
+
+## 2026-09-13 — M8.1 frontend product closure, FRE-38 TradingView containment
+
+- Containment RED: `pnpm --dir web exec vitest run tests/tradingview-containment.test.tsx
+  --reporter=dot` exited 1 with 3/3 expected failures because embeds injected immediately, had no
+  application-owned script marker and exposed no accessible failure fallback.
+- GREEN adds one shared 320px near-viewport admission boundary, limits each host to one owned
+  script and preserves direct TradingView links when the external script fails. Focused regression,
+  TypeScript and ESLint commands all exited 0; the focused suite passed 3 files / 16 tests.
+- The first browser attempt exited 1 before launching because the sandbox rejected the local
+  Next.js listener with `EPERM`. The authorized identical failure-path rerun exited 0 with 2/2
+  desktop/mobile tests. The complete browser and accessibility matrix then exited 0 with 18/18
+  tests, including all eight routes, the locked viewport matrix, 200% text zoom and no serious or
+  critical host-document axe violations.
+- Complete frontend Vitest exited 0 with 33 files / 211 tests, and the production Next.js build
+  exited 0. Existing deliberate API-failure diagnostics, jsdom local-storage and cross-realm
+  AbortSignal warnings remain non-failing test output. Cross-origin TradingView iframe warnings are
+  now explicitly documented as third-party internals outside the owned console/accessibility gate;
+  the iframe remains excluded from every decision-time evidence and lineage assertion.
+- Final authorized `make verify` exited 0: Ruff format/check clean for 330 files, Mypy clean for 285
+  source files, Alembic drift and OpenAPI/MCP/dependency checks passed, backend 744 passed / 5
+  optional live-provider tests skipped, frontend 33 files / 211 passed, and TypeScript, ESLint and
+  the Next.js production build passed. No Fixture fallback, decision-time evidence mutation,
+  brokerage path, commit, push, PR or merge is claimed by this checkpoint.

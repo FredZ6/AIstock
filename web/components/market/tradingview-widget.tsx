@@ -1,6 +1,12 @@
 'use client'
 
-import { createContext, useContext, useEffect, useRef } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
+
+import {
+  configureOwnedTradingViewScript,
+  useTradingViewAdmission,
+} from './tradingview-containment'
+import type { TradingViewLoadState } from './tradingview-containment'
 
 type Theme = 'dark' | 'light'
 type WidgetKind = 'mini-chart' | 'symbol-overview'
@@ -60,44 +66,48 @@ function widgetConfig(kind: WidgetKind, symbol: string | undefined, theme: Theme
 export function TradingViewWidget({ kind, symbol }: { kind: WidgetKind; symbol?: string }) {
   const container = useRef<HTMLDivElement>(null)
   const theme = useContext(MarketThemeContext)
+  const [loadState, setLoadState] = useState<TradingViewLoadState>('deferred')
+  const admitted = useTradingViewAdmission(container, Boolean(theme && widgetConfig(kind, symbol, theme)))
   const label = `${symbol} current market ${kind === 'symbol-overview' ? 'overview' : 'chart'}`
+  const normalizedSymbol = symbol?.trim().toUpperCase()
+  const externalUrl = normalizedSymbol
+    ? `https://www.tradingview.com/symbols/${encodeURIComponent(normalizedSymbol)}/`
+    : 'https://www.tradingview.com/markets/stocks-usa/'
 
   useEffect(() => {
     const target = container.current
     const config = theme && widgetConfig(kind, symbol, theme)
-    if (!target || !config) return
+    if (!target || !config || !admitted) return
 
     const timer = window.setTimeout(() => {
+      if (target.querySelector('script[data-tradingview-owned]')) return
+      setLoadState('loading')
       target.replaceChildren()
       const widget = document.createElement('div')
       widget.className = 'tradingview-widget-container__widget'
-      const attribution = document.createElement('div')
-      attribution.className = 'tradingview-widget-copyright'
-      const link = document.createElement('a')
-      link.href = symbol
-        ? `https://www.tradingview.com/symbols/${encodeURIComponent(symbol.toUpperCase())}/`
-        : 'https://www.tradingview.com/markets/stocks-usa/'
-      link.rel = 'noopener nofollow'
-      link.target = '_blank'
-      link.textContent = symbol ? `${symbol.toUpperCase()} market data` : 'US technology markets'
-      attribution.append(link, ' by TradingView')
 
       const script = document.createElement('script')
       script.async = true
       script.src = scripts[kind]
       script.type = 'text/javascript'
       script.textContent = JSON.stringify(config)
-      target.append(widget, attribution, script)
+      configureOwnedTradingViewScript(script, `${kind}:${normalizedSymbol}`, setLoadState)
+      target.append(widget, script)
     }, 0)
 
     return () => {
       window.clearTimeout(timer)
+      const script = target.querySelector('script[data-tradingview-owned]') as HTMLScriptElement | null
+      if (script) {
+        script.onload = null
+        script.onerror = null
+      }
       target.replaceChildren()
     }
-  }, [kind, symbol, theme])
+  }, [admitted, kind, normalizedSymbol, symbol, theme])
 
   return (
-    <section aria-label={label} className={`market-widget market-widget-${kind}`}>
+    <section aria-label={label} className={`market-widget market-widget-${kind} market-widget-${loadState}`}>
       <div className="market-widget-heading">
         <span>Current market reference</span>
         <small>Not decision-time evidence</small>
@@ -109,6 +119,24 @@ export function TradingViewWidget({ kind, symbol }: { kind: WidgetKind; symbol?:
         role={kind === 'symbol-overview' ? 'region' : undefined}
         tabIndex={kind === 'symbol-overview' ? 0 : undefined}
       />
+      {loadState !== 'ready' ? (
+        <div
+          aria-label={loadState === 'failed' ? 'Current market reference unavailable' : undefined}
+          className="market-widget-fallback"
+          role={loadState === 'failed' ? 'status' : undefined}
+        >
+          <span>
+            {loadState === 'failed'
+              ? 'TradingView could not be loaded.'
+              : loadState === 'deferred'
+                ? 'Current market chart loads when this section nears the viewport.'
+                : 'Loading current market reference…'}
+          </span>
+          <a href={externalUrl} rel="noopener nofollow" target="_blank">
+            Open {normalizedSymbol ?? 'US stock markets'} on TradingView
+          </a>
+        </div>
+      ) : null}
     </section>
   )
 }

@@ -109,6 +109,18 @@ test('theme and reduced-motion preferences preserve a calm readable surface', as
   expect(transitionDurationSeconds).toBeLessThanOrEqual(0.00001)
 })
 
+test('a blocked TradingView embed retains an accessible current-market fallback', async ({ page }) => {
+  await page.goto('/research/NVDA')
+  const widget = page.getByRole('region', { name: 'NVDA current market overview' })
+  await widget.scrollIntoViewIfNeeded()
+
+  await expect(widget.getByRole('status', { name: 'Current market reference unavailable' }))
+    .toContainText('TradingView could not be loaded')
+  await expect(widget.getByRole('link', { name: 'Open NVDA on TradingView' }))
+    .toHaveAttribute('href', 'https://www.tradingview.com/symbols/NVDA/')
+  await expect(widget).toContainText('Not decision-time evidence')
+})
+
 test('core workflows reflow at 200% text zoom without page-level horizontal scrolling', async ({ page }) => {
   await page.setViewportSize({ height: 900, width: 768 })
 
