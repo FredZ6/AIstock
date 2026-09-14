@@ -390,17 +390,16 @@ button:hover { box-shadow: 0 0.65rem 1.5rem -0.85rem oklch(34% 0.08 255 / 0.4); 
 .market-widget-heading span { color: var(--signal); font-size: 0.65rem; font-weight: 760; letter-spacing: 0.08em; text-transform: uppercase; }
 .market-widget-heading small { color: var(--text-tertiary); font-size: 0.66rem; }
 .market-widget-symbol-overview { height: clamp(25rem, 52vw, 38rem); margin-top: clamp(1.25rem, 3vw, 2.25rem); }
-.market-widget-symbol-overview .tradingview-widget-container { height: calc(100% - 2.85rem); }
-.market-widget-symbol-overview:not(.market-widget-ready) .tradingview-widget-container { height: calc(100% - 5.35rem); }
+.market-widget-symbol-overview .tradingview-widget-container { height: calc(100% - 5.35rem); }
 .market-widget-mini-chart { height: 14rem; }
-.market-widget-mini-chart .tradingview-widget-container { height: calc(100% - 2.85rem); }
+.market-widget-mini-chart .tradingview-widget-container { height: calc(100% - 5.35rem); }
 .tradingview-widget-container, .tradingview-widget-container__widget { width: 100%; height: 100%; }
 .tradingview-widget-copyright { padding: 0.2rem 0.75rem; color: var(--text-tertiary); font-size: 0.58rem; text-align: right; }
 .tradingview-widget-copyright a { color: var(--signal); text-decoration-line: underline; text-decoration-thickness: 0.08em; }
 .mini-chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 1rem; margin-top: 1.25rem; }
 .market-reference-list { overflow: hidden; margin-top: 1.25rem; border: 1px solid var(--line-soft); border-radius: var(--radius-section); background: var(--ink-raised); box-shadow: none; }
 .market-reference-widget { width: 100%; background: var(--ink-raised); }
-.market-reference-widget:not(.market-widget-ready) .tradingview-widget-container { height: calc(100% - 2.5rem); }
+.market-reference-widget .tradingview-widget-container { height: calc(100% - 2.5rem); }
 .market-reference-widget .tradingview-widget-container__widget { height: calc(100% - 1.35rem); }
 .market-widget-placeholder { display: grid; min-height: 12rem; place-items: center; margin: 0; padding: 2rem; color: var(--text-tertiary); font-size: 0.76rem; text-align: center; }
 .market-widget-fallback { display: flex; min-height: 2.5rem; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.55rem 0.75rem; border-top: 1px solid var(--line-soft); color: var(--text-tertiary); font-size: 0.68rem; }

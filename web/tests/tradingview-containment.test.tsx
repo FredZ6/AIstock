@@ -91,4 +91,36 @@ describe('TradingView containment', () => {
     expect(screen.getByRole('link', { name: 'Open US stock markets on TradingView' }))
       .toHaveAttribute('href', 'https://www.tradingview.com/markets/stocks-usa/')
   })
+
+  it('does not replace an owned watchlist script for an equivalent symbol array', async () => {
+    const view = render(
+      <MarketThemeContext.Provider value="light">
+        <TradingViewTickerList symbols={['NVDA', 'MSFT']} />
+      </MarketThemeContext.Provider>,
+    )
+    const region = screen.getByRole('region', { name: 'Current market reference' })
+    await waitFor(() => expect(region.querySelector('script')).toBeInTheDocument())
+    const originalScript = region.querySelector('script')
+
+    view.rerender(
+      <MarketThemeContext.Provider value="light">
+        <TradingViewTickerList symbols={['NVDA', 'MSFT']} />
+      </MarketThemeContext.Provider>,
+    )
+
+    await waitFor(() => expect(region.querySelector('script')).toBe(originalScript))
+  })
+
+  it('keeps the external fallback link after the provider script reports loaded', async () => {
+    render(
+      <MarketThemeContext.Provider value="light">
+        <TradingViewWidget kind="mini-chart" symbol="NVDA" />
+      </MarketThemeContext.Provider>,
+    )
+    const widget = screen.getByLabelText('NVDA current market chart')
+    await waitFor(() => expect(widget.querySelector('script')).toBeInTheDocument())
+    fireEvent.load(widget.querySelector('script')!)
+
+    expect(screen.getByRole('link', { name: 'Open NVDA on TradingView' })).toBeInTheDocument()
+  })
 })

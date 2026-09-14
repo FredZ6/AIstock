@@ -61,6 +61,12 @@ describe('visual system contract', () => {
     )
   })
 
+  it('reserves visible fallback space in compact portfolio charts', () => {
+    expect(css).toMatch(
+      /\.market-widget-mini-chart \.tradingview-widget-container\s*\{[^}]*height:\s*calc\(100% - 5\.35rem\)/,
+    )
+  })
+
   it('uses an editorial terminal hierarchy instead of repeated glass cards', () => {
     expect(css).toContain('--radius-section: 0.5rem;')
     expect(css).toContain('--radius-control: 0.4rem;')

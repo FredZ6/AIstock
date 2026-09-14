@@ -68,7 +68,7 @@ test('a reviewer traces a Today conclusion through report, evidence, provider, T
 })
 
 test('keyboard focus is visible and the document does not overflow its viewport', async ({ page }) => {
-  await page.goto('/watchlist')
+  await page.goto('/watchlist', { waitUntil: 'networkidle' })
   await page.keyboard.press('Tab')
   await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused()
   await expect(page.getByRole('link', { name: 'Skip to main content' })).toHaveCSS('outline-style', 'solid')
@@ -119,6 +119,12 @@ test('a blocked TradingView embed retains an accessible current-market fallback'
   await expect(widget.getByRole('link', { name: 'Open NVDA on TradingView' }))
     .toHaveAttribute('href', 'https://www.tradingview.com/symbols/NVDA/')
   await expect(widget).toContainText('Not decision-time evidence')
+
+  await page.goto('/portfolio')
+  const miniChart = page.locator('section.market-widget-mini-chart').first()
+  await miniChart.scrollIntoViewIfNeeded()
+  await expect(miniChart.getByRole('status', { name: 'Current market reference unavailable' }))
+    .toBeVisible()
 })
 
 test('core workflows reflow at 200% text zoom without page-level horizontal scrolling', async ({ page }) => {

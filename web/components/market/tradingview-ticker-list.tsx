@@ -1,10 +1,11 @@
 'use client'
 
-import { useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 
 import { MarketThemeContext } from './tradingview-widget'
 import {
-  configureOwnedTradingViewScript,
+  clearOwnedTradingViewHost,
+  mountOwnedTradingViewScript,
   useTradingViewAdmission,
 } from './tradingview-containment'
 import type { TradingViewLoadState } from './tradingview-containment'
@@ -29,17 +30,17 @@ function tradingViewSymbols(symbols: string[]) {
 export function TradingViewTickerList({ symbols }: { symbols: string[] }) {
   const container = useRef<HTMLDivElement>(null)
   const theme = useContext(MarketThemeContext)
-  const normalized = useMemo(() => tradingViewSymbols(symbols), [symbols])
+  const normalized = tradingViewSymbols(symbols)
+  const normalizedKey = JSON.stringify(normalized)
   const [loadState, setLoadState] = useState<TradingViewLoadState>('deferred')
   const admitted = useTradingViewAdmission(container, Boolean(theme && normalized.length))
 
   useEffect(() => {
     const target = container.current
     if (!target || normalized.length === 0 || !theme || !admitted) return
+    const configSymbols = JSON.parse(normalizedKey) as Array<{ displayName: string; name: string }>
 
     const timer = window.setTimeout(() => {
-      if (target.querySelector('script[data-tradingview-owned]')) return
-      setLoadState('loading')
       const widget = document.createElement('div')
       widget.className = 'tradingview-widget-container__widget'
       widget.setAttribute('aria-label', 'TradingView current market tickers')
@@ -48,42 +49,29 @@ export function TradingViewTickerList({ symbols }: { symbols: string[] }) {
       placeholder.textContent = 'Loading current market reference…'
       widget.append(placeholder)
 
-      const attribution = document.createElement('div')
-      attribution.className = 'tradingview-widget-copyright'
-      const link = document.createElement('a')
-      link.href = 'https://www.tradingview.com/markets/stocks-usa/'
-      link.rel = 'noopener nofollow'
-      link.target = '_blank'
-      link.textContent = 'Market data'
-      attribution.append(link, ' by TradingView')
-
-      const script = document.createElement('script')
-      script.async = true
-      script.src = scriptUrl
-      script.type = 'text/javascript'
-      script.textContent = JSON.stringify({
-        colorTheme: theme,
-        height: '100%',
-        locale: 'en',
-        showSymbolLogo: true,
-        symbolsGroups: [{ name: 'Technology watchlist', symbols: normalized }],
-        title: 'Technology watchlist',
-        width: '100%',
+      mountOwnedTradingViewScript({
+        target,
+        owner: 'market-quotes',
+        source: scriptUrl,
+        config: {
+          colorTheme: theme,
+          height: '100%',
+          locale: 'en',
+          showSymbolLogo: true,
+          symbolsGroups: [{ name: 'Technology watchlist', symbols: configSymbols }],
+          title: 'Technology watchlist',
+          width: '100%',
+        },
+        content: [widget],
+        onStateChange: setLoadState,
       })
-      configureOwnedTradingViewScript(script, 'market-quotes', setLoadState)
-      target.replaceChildren(widget, attribution, script)
     }, 0)
 
     return () => {
       window.clearTimeout(timer)
-      const script = target.querySelector('script[data-tradingview-owned]') as HTMLScriptElement | null
-      if (script) {
-        script.onload = null
-        script.onerror = null
-      }
-      target.replaceChildren()
+      clearOwnedTradingViewHost(target)
     }
-  }, [admitted, normalized, theme])
+  }, [admitted, normalized.length, normalizedKey, theme])
 
   return (
     <section aria-label="Current market reference" className="market-reference-list" data-evidence-scope="external-current-market">
@@ -102,13 +90,13 @@ export function TradingViewTickerList({ symbols }: { symbols: string[] }) {
               : 'Current market reference unavailable'}
           </p>
         </div>
-        {normalized.length > 0 && loadState !== 'ready' ? (
+        {normalized.length > 0 ? (
           <div
             aria-label={loadState === 'failed' ? 'Current market reference unavailable' : undefined}
             className="market-widget-fallback"
             role={loadState === 'failed' ? 'status' : undefined}
           >
-            <span>{loadState === 'failed' ? 'TradingView could not be loaded.' : null}</span>
+            <span>{loadState === 'failed' ? 'TradingView could not be loaded.' : 'External current-market source'}</span>
             <a
               href="https://www.tradingview.com/markets/stocks-usa/"
               rel="noopener nofollow"

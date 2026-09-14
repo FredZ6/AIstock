@@ -28,12 +28,40 @@ export function useTradingViewAdmission(target: RefObject<HTMLElement | null>, e
   return admitted
 }
 
-export function configureOwnedTradingViewScript(
-  script: HTMLScriptElement,
-  owner: string,
+export function mountOwnedTradingViewScript({
+  target,
+  owner,
+  source,
+  config,
+  content,
+  onStateChange,
+}: {
+  target: HTMLElement
+  owner: string
+  source: string
+  config: object
+  content: HTMLElement[]
   onStateChange: (state: TradingViewLoadState) => void,
-) {
+}) {
+  if (target.querySelector('script[data-tradingview-owned]')) return
+
+  onStateChange('loading')
+  const script = document.createElement('script')
+  script.async = true
+  script.src = source
+  script.type = 'text/javascript'
+  script.textContent = JSON.stringify(config)
   script.dataset.tradingviewOwned = owner
   script.onload = () => onStateChange('ready')
   script.onerror = () => onStateChange('failed')
+  target.replaceChildren(...content, script)
+}
+
+export function clearOwnedTradingViewHost(target: HTMLElement) {
+  const script = target.querySelector('script[data-tradingview-owned]') as HTMLScriptElement | null
+  if (script) {
+    script.onload = null
+    script.onerror = null
+  }
+  target.replaceChildren()
 }

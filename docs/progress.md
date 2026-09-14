@@ -3768,3 +3768,23 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   optional live-provider tests skipped, frontend 33 files / 211 passed, and TypeScript, ESLint and
   the Next.js production build passed. No Fixture fallback, decision-time evidence mutation,
   brokerage path, commit, push, PR or merge is claimed by this checkpoint.
+- Pre-landing two-axis review found three P1 gaps: equivalent inline symbol arrays could recreate
+  the owned script, a script `load` event removed the only direct external fallback before iframe
+  success was knowable, and fixed-height Portfolio mini charts clipped their failure footer. The
+  regression RED exited 1 with 3 failed / 10 passed. GREEN stabilizes effect dependencies by the
+  normalized symbol value, keeps the application-owned external link available in every load state,
+  reserves footer height in overview/list/mini-chart layouts, and centralizes mount/cleanup. The
+  focused rerun exited 0 with 4 files / 26 tests; TypeScript and ESLint also exited 0.
+- The repaired full frontend suite exited 0 with 33 files / 214 tests and production build exit 0.
+  The first complete browser rerun passed 17/18 but exposed a pre-existing Next.js Fast Refresh
+  timing race: the mobile keyboard test pressed Tab while a dev-server full reload was settling.
+  The isolated mobile test then passed 3/3. Waiting for `networkidle` at that navigation boundary
+  made the gate deterministic; the fresh complete browser/accessibility matrix exited 0 with 18/18.
+- The first post-review `make verify` reached the integration suite but exited 2 with 2 failures /
+  21 setup-teardown errors because MinIO rejected signed requests as `RequestTimeTooSkewed`; the
+  Codex environment crossed from Sep 13 to Sep 14 during the gate. Host, MinIO and Redis clocks
+  subsequently matched exactly, and the original MinIO plus Redis/Celery failures passed 2/2 on an
+  isolated rerun. The fresh unchanged `make verify` then exited 0: Ruff format/check clean for 330
+  files, Mypy clean for 285 source files, Alembic drift and OpenAPI/MCP/dependency checks passed,
+  backend 744 passed / 5 optional live-provider tests skipped, frontend 33 files / 214 passed, and
+  TypeScript, ESLint and the Next.js production build passed.

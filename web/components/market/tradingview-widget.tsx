@@ -3,7 +3,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 
 import {
-  configureOwnedTradingViewScript,
+  clearOwnedTradingViewHost,
+  mountOwnedTradingViewScript,
   useTradingViewAdmission,
 } from './tradingview-containment'
 import type { TradingViewLoadState } from './tradingview-containment'
@@ -80,29 +81,21 @@ export function TradingViewWidget({ kind, symbol }: { kind: WidgetKind; symbol?:
     if (!target || !config || !admitted) return
 
     const timer = window.setTimeout(() => {
-      if (target.querySelector('script[data-tradingview-owned]')) return
-      setLoadState('loading')
-      target.replaceChildren()
       const widget = document.createElement('div')
       widget.className = 'tradingview-widget-container__widget'
-
-      const script = document.createElement('script')
-      script.async = true
-      script.src = scripts[kind]
-      script.type = 'text/javascript'
-      script.textContent = JSON.stringify(config)
-      configureOwnedTradingViewScript(script, `${kind}:${normalizedSymbol}`, setLoadState)
-      target.append(widget, script)
+      mountOwnedTradingViewScript({
+        target,
+        owner: `${kind}:${normalizedSymbol}`,
+        source: scripts[kind],
+        config,
+        content: [widget],
+        onStateChange: setLoadState,
+      })
     }, 0)
 
     return () => {
       window.clearTimeout(timer)
-      const script = target.querySelector('script[data-tradingview-owned]') as HTMLScriptElement | null
-      if (script) {
-        script.onload = null
-        script.onerror = null
-      }
-      target.replaceChildren()
+      clearOwnedTradingViewHost(target)
     }
   }, [admitted, kind, normalizedSymbol, symbol, theme])
 
@@ -119,24 +112,24 @@ export function TradingViewWidget({ kind, symbol }: { kind: WidgetKind; symbol?:
         role={kind === 'symbol-overview' ? 'region' : undefined}
         tabIndex={kind === 'symbol-overview' ? 0 : undefined}
       />
-      {loadState !== 'ready' ? (
-        <div
-          aria-label={loadState === 'failed' ? 'Current market reference unavailable' : undefined}
-          className="market-widget-fallback"
-          role={loadState === 'failed' ? 'status' : undefined}
-        >
-          <span>
-            {loadState === 'failed'
-              ? 'TradingView could not be loaded.'
-              : loadState === 'deferred'
-                ? 'Current market chart loads when this section nears the viewport.'
-                : 'Loading current market reference…'}
-          </span>
-          <a href={externalUrl} rel="noopener nofollow" target="_blank">
-            Open {normalizedSymbol ?? 'US stock markets'} on TradingView
-          </a>
-        </div>
-      ) : null}
+      <div
+        aria-label={loadState === 'failed' ? 'Current market reference unavailable' : undefined}
+        className="market-widget-fallback"
+        role={loadState === 'failed' ? 'status' : undefined}
+      >
+        <span>
+          {loadState === 'failed'
+            ? 'TradingView could not be loaded.'
+            : loadState === 'deferred'
+              ? 'Current market chart loads when this section nears the viewport.'
+              : loadState === 'loading'
+                ? 'Loading current market reference…'
+                : 'External current-market source'}
+        </span>
+        <a href={externalUrl} rel="noopener nofollow" target="_blank">
+          Open {normalizedSymbol ?? 'US stock markets'} on TradingView
+        </a>
+      </div>
     </section>
   )
 }
