@@ -111,6 +111,25 @@ describe('TradingView containment', () => {
     await waitFor(() => expect(region.querySelector('script')).toBe(originalScript))
   })
 
+  it('does not replace an owned symbol script for equivalent normalized input', async () => {
+    const view = render(
+      <MarketThemeContext.Provider value="light">
+        <TradingViewWidget kind="mini-chart" symbol="NVDA" />
+      </MarketThemeContext.Provider>,
+    )
+    const widget = screen.getByLabelText('NVDA current market chart')
+    await waitFor(() => expect(widget.querySelector('script')).toBeInTheDocument())
+    const originalScript = widget.querySelector('script')
+
+    view.rerender(
+      <MarketThemeContext.Provider value="light">
+        <TradingViewWidget kind="mini-chart" symbol=" nvda " />
+      </MarketThemeContext.Provider>,
+    )
+
+    await waitFor(() => expect(widget.querySelector('script')).toBe(originalScript))
+  })
+
   it('keeps the external fallback link after the provider script reports loaded', async () => {
     render(
       <MarketThemeContext.Provider value="light">

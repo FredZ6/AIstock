@@ -68,16 +68,19 @@ export function TradingViewWidget({ kind, symbol }: { kind: WidgetKind; symbol?:
   const container = useRef<HTMLDivElement>(null)
   const theme = useContext(MarketThemeContext)
   const [loadState, setLoadState] = useState<TradingViewLoadState>('deferred')
-  const admitted = useTradingViewAdmission(container, Boolean(theme && widgetConfig(kind, symbol, theme)))
-  const label = `${symbol} current market ${kind === 'symbol-overview' ? 'overview' : 'chart'}`
   const normalizedSymbol = symbol?.trim().toUpperCase()
+  const admitted = useTradingViewAdmission(
+    container,
+    Boolean(theme && widgetConfig(kind, normalizedSymbol, theme)),
+  )
+  const label = `${normalizedSymbol} current market ${kind === 'symbol-overview' ? 'overview' : 'chart'}`
   const externalUrl = normalizedSymbol
     ? `https://www.tradingview.com/symbols/${encodeURIComponent(normalizedSymbol)}/`
     : 'https://www.tradingview.com/markets/stocks-usa/'
 
   useEffect(() => {
     const target = container.current
-    const config = theme && widgetConfig(kind, symbol, theme)
+    const config = theme && widgetConfig(kind, normalizedSymbol, theme)
     if (!target || !config || !admitted) return
 
     const timer = window.setTimeout(() => {
@@ -97,7 +100,7 @@ export function TradingViewWidget({ kind, symbol }: { kind: WidgetKind; symbol?:
       window.clearTimeout(timer)
       clearOwnedTradingViewHost(target)
     }
-  }, [admitted, kind, normalizedSymbol, symbol, theme])
+  }, [admitted, kind, normalizedSymbol, theme])
 
   return (
     <section aria-label={label} className={`market-widget market-widget-${kind} market-widget-${loadState}`}>

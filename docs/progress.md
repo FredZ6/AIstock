@@ -3788,3 +3788,17 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   files, Mypy clean for 285 source files, Alembic drift and OpenAPI/MCP/dependency checks passed,
   backend 744 passed / 5 optional live-provider tests skipped, frontend 33 files / 214 passed, and
   TypeScript, ESLint and the Next.js production build passed.
+- Remote PR #24 pre-landing review found one remaining containment gap: equivalent single-symbol
+  inputs such as `NVDA` and ` nvda ` still recreated the owned TradingView script. The targeted RED
+  run confirmed the new regression test failed; the package-script invocation also ran the full
+  frontend suite and exposed one unrelated timing-sensitive Watchlist announcement failure. After
+  using the normalized symbol as the only widget configuration/effect dependency, the exact focused
+  Vitest run exited 0 with 1 passed / 5 skipped. The interrupted pnpm workspace-link rebuild was
+  restored from the locked content-addressable store with no package downloads or lockfile change.
+- The repaired containment plus Watchlist timing regression rerun exited 0 with 11/11 tests. Fresh
+  `make verify` exited 0: backend 744 passed / 5 optional live-provider tests skipped, frontend 33
+  files / 215 passed, and Ruff, Mypy, Alembic/OpenAPI/MCP/dependency checks, TypeScript, ESLint and
+  the production build passed. A broad local Playwright invocation initially reused an unrelated
+  site already listening on port 3000 and was stopped after producing invalid cross-project results;
+  the CI-equivalent isolated rerun used `CI=true` on port 31038 and passed the complete affected
+  desktop/mobile browser and accessibility matrix, 18/18.
