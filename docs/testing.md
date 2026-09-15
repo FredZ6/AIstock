@@ -47,3 +47,16 @@ Generated evidence is ignored by Git. Regenerate it rather than committing stale
 Tests that require provider credentials or network entitlements use explicit `live` markers and
 skip with a reason when unavailable. A skip is not a pass. Fixture Mode remains the credential-free
 release path and never claims current market data.
+
+## Third-party market-reference boundary
+
+TradingView embeds are optional, current-market context. They are lazy-loaded near the viewport,
+own exactly one script inside each application container, and retain an accessible direct-link
+fallback when the script is blocked or fails. They are never persisted evidence and must never be
+presented as facts available at a historical decision time.
+
+Browser tests intentionally abort TradingView requests to verify the application-owned fallback.
+Console warnings emitted inside a successfully loaded cross-origin TradingView iframe cannot be
+inspected, suppressed, or remediated by this repository. Owned accessibility and console gates
+therefore cover the host document and fallback UI, while excluding third-party iframe internals;
+the external frame remains isolated from all decision and lineage assertions.
