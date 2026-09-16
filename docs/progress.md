@@ -3838,3 +3838,36 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   files, Alembic drift plus OpenAPI/MCP/dependency checks passed, backend 751 passed / 5 optional
   live-provider tests skipped, frontend 33 files / 215 passed, and TypeScript, ESLint and the Next.js
   production build passed. The managed paper runtime remains available locally for the next issue.
+
+## 2026-09-16 — M8.2 live runtime closure, FRE-41
+
+- Runtime bootstrap RED proved the managed paper runtime did not dispatch an initial Alpaca refresh.
+  GREEN adds idempotent daily and Watchlist ingestion task dispatch after the worker/Beat processes
+  are started. The focused runtime suite exited 0 with 6/6 passed. A real managed restart scheduled
+  the durable workflow, and all 11 configured Watchlist symbols advanced from the Sep 3 history to
+  Sep 15 market bars with ALPACA/IEX provenance persisted through MinIO and PostgreSQL.
+- Frontend refresh was implemented through repeated RED/GREEN cycles. API Today, Watchlist and Stock
+  Research now mount one shared 60-second Next Router refresh boundary. It refreshes only while the
+  document is visible and the browser is online, clears its interval on unmount, remains invisible
+  in the visual layout and is absent from Fixture Watchlist. No API failure can trigger a Fixture
+  substitution. The focused frontend command exited 0 with 3 files / 33 tests passed; TypeScript and
+  ESLint also exited 0.
+- The first related-suite rerun exposed that the hidden refresh description incorrectly reused
+  `role=status`, making the existing Degraded state non-unique. The element was corrected to static
+  screen-reader text while retaining its accessible label. The first complete frontend gate then
+  exposed four Home tests without the standard Next navigation mock; the test fixture was aligned
+  with the existing route-test pattern and passed 5/5.
+- Browser verification against the real local API exited 0 for Today, Watchlist and NVDA Research
+  on desktop, plus Watchlist and Research at 390px. All pages exposed the bounded refresh contract;
+  Watchlist and Research displayed Sep 16 persisted ALPACA/IEX data; Research displayed persisted
+  SEC filings and financial facts. Both 390px pages reported `scrollWidth === innerWidth === 390`,
+  and the browser console reported 0 errors / 0 warnings. Failure/Degraded messaging continued to
+  state that no Fixture data was substituted.
+- The first `make verify` attempt exited 2 because the sandbox rejected localhost PostgreSQL access;
+  the identical authorized rerun reached the frontend and exposed the missing Home router fixture
+  above. After that regression fix, the fresh complete `make verify` exited 0: Ruff format/check clean
+  for 334 files, Mypy clean for 288 source files, Alembic drift plus OpenAPI/MCP/dependency checks
+  passed, backend 751 passed / 5 optional live-provider tests skipped, frontend 34 files / 219 passed,
+  and TypeScript, ESLint and the Next.js production build passed. The runtime was stopped gracefully
+  before the gate, then restarted for the final mobile browser check and remains available locally;
+  volumes and persisted data were not deleted.

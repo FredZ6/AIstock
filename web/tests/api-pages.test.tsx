@@ -98,6 +98,9 @@ describe('API mode pages', () => {
     render(<ApiTodayPage asOf="2026-08-29T09:30:00Z" health={health} portfolio={emptyPortfolio} quotes={[quote]} />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Live data refresh')).toHaveTextContent(
+      'Persisted data refreshes every 60 seconds while this page is visible.',
+    )
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
     expect(screen.getAllByText(/ALPACA · IEX/)).toHaveLength(2)
     expect(screen.getByRole('region', { name: 'Current market reference' })).toBeInTheDocument()
@@ -113,6 +116,7 @@ describe('API mode pages', () => {
     render(<ApiResearchPage asOf="2026-08-29T09:30:00Z" dataQuality={[]} financialFacts={[]} idempotencyKey="research-form-1" quote={quote} records={[]} secFilings={[]} symbol="NVDA" />)
 
     expect(screen.getByRole('heading', { name: 'NVDA research' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Live data refresh')).toBeInTheDocument()
     expect(screen.getByRole('status', { name: 'Research evidence unavailable' })).toBeInTheDocument()
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Research symbol' })).toHaveValue('NVDA')

@@ -29,6 +29,7 @@ import { ResearchRunControl } from '../research/research-run-control'
 import { StateBoundary } from '../states/state-boundary'
 import { LiveRunTrace } from '../trace/live-run-trace'
 import { PageHeading, Signal } from '../ui/product-ui'
+import { LiveDataRefresh } from './live-data-refresh'
 
 function alertEvidence(value: unknown) {
   return JSON.stringify(value, null, 2)
@@ -222,6 +223,7 @@ export function ApiTodayPage({
   ].filter((group) => group.items.length)
   return (
     <AppShell currentPath="/">
+      <LiveDataRefresh />
       <PageHeading asOf={asOf} eyebrow="Decision workspace · API Mode" title="Today" summary="Current persisted facts, with unavailable domains left explicit." />
       <StateBoundary compact state={groups.length ? {
         kind: 'degraded' as const,
@@ -317,6 +319,7 @@ export function ApiResearchPage({
   } : { kind: 'success' as const }
   return (
     <AppShell currentPath={`/research/${symbol}`}>
+      <LiveDataRefresh />
       <PageHeading asOf={asOf} eyebrow="Research · API Mode" title={`${symbol} research`} summary="Persisted research only; current market reference remains separate from historical decision evidence." />
       <StateBoundary state={state}>
         {latestRecord ? <section className="decision-hero" aria-label="Latest research conclusion">

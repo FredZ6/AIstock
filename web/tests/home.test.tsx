@@ -1,6 +1,10 @@
 import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}))
+
 describe('home page', () => {
   afterEach(() => {
     vi.useRealTimers()

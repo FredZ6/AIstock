@@ -34,6 +34,10 @@ def test_paper_runtime_plan_is_complete_and_separates_ingestion_queue() -> None:
         "alpaca-stream",
         "web",
     )
+    assert plan.bootstrap_tasks == (
+        "stock_platform.workers.schedules.schedule_alpaca_daily_ingestion",
+        "stock_platform.workers.schedules.schedule_alpaca_watchlist_ingestion",
+    )
     commands = {process.name: process.command for process in plan.processes}
     assert "--queues=celery" in commands["scheduler-worker"]
     assert "--queues=ingestion-low" in commands["ingestion-worker"]

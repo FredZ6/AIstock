@@ -23,6 +23,7 @@ class RuntimePlan:
     infrastructure: tuple[str, ...]
     migration: tuple[str, ...]
     processes: tuple[ManagedProcess, ...]
+    bootstrap_tasks: tuple[str, ...]
     environment: tuple[tuple[str, str], ...]
 
 
@@ -155,6 +156,10 @@ def build_runtime_plan(repo_root: Path, environment: Mapping[str, str]) -> Runti
                 ("pnpm", "--dir", "web", "dev", "--hostname", "127.0.0.1"),
                 "http://127.0.0.1:3000/",
             ),
+        ),
+        bootstrap_tasks=(
+            "stock_platform.workers.schedules.schedule_alpaca_daily_ingestion",
+            "stock_platform.workers.schedules.schedule_alpaca_watchlist_ingestion",
         ),
         environment=tuple(sorted(child_environment.items())),
     )

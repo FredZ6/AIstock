@@ -71,6 +71,20 @@ class PaperRuntime:
         subprocess.run(self.plan.migration, cwd=ROOT, env=self.environment, check=True)
         for spec in self.plan.processes:
             self._start_process(spec)
+        celery = str(ROOT / ".venv" / "bin" / "celery")
+        for task in self.plan.bootstrap_tasks:
+            subprocess.run(
+                (
+                    celery,
+                    "-A",
+                    "stock_platform.workers.celery_app:celery_app",
+                    "call",
+                    task,
+                ),
+                cwd=ROOT,
+                env=self.environment,
+                check=True,
+            )
         for spec in self.plan.processes:
             if spec.ready_url is not None:
                 wait_for_url(spec.ready_url, self.processes)

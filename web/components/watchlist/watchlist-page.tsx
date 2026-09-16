@@ -9,6 +9,7 @@ import { formatMoney, formatPercent } from '../../lib/format'
 import { parseAwareInstant } from '../../lib/time'
 import { formatDualTime } from '../../lib/time'
 import { AppShell } from '../layout/app-shell'
+import { LiveDataRefresh } from '../live/live-data-refresh'
 import { TradingViewTickerList } from '../market/tradingview-ticker-list'
 import { StateBoundary } from '../states/state-boundary'
 import { FixtureNotice, PageHeading, QualityFacts, Signal } from '../ui/product-ui'
@@ -52,6 +53,7 @@ export function ApiWatchlistPage({
   ]
   return (
     <AppShell currentPath="/watchlist">
+      <LiveDataRefresh />
       <PageHeading
         asOf={asOf}
         eyebrow="Discover · API Mode"
