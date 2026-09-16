@@ -1017,6 +1017,10 @@ def test_schema_drift_preserves_raw_lineage_and_dead_letters_the_job(
         assert connection.execute(select(func.count()).select_from(market_bar)).scalar_one() == 0
     assert job["state"] == "DEAD_LETTER"
     assert attempt["error_class"] == "SCHEMA_DRIFT"
+    assert attempt["error_detail"] == {
+        "error_type": "ValueError",
+        "message": "Alpaca bars payload is missing bars",
+    }
     engine.dispose()
 
 

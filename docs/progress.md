@@ -3802,3 +3802,39 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   site already listening on port 3000 and was stopped after producing invalid cross-project results;
   the CI-equivalent isolated rerun used `CI=true` on port 31038 and passed the complete affected
   desktop/mobile browser and accessibility matrix, 18/18.
+
+## 2026-09-16 — M8.2 live runtime closure, FRE-40
+
+- Linear milestone `M8.2 Live Runtime & Data Availability` and sequential issues FRE-40 through
+  FRE-44 were created from the runtime/data-availability audit. FRE-40 and the project were moved to
+  `In Progress`; implementation started from `main@be3c6b8` on `codex/m8-2-live-runtime` while the
+  existing untracked `.gstack/` directory remained untouched.
+- Runtime-plan RED exited 2 during collection because `stock_platform.operations.paper_runtime` did
+  not exist. GREEN adds `make paper-runtime`, which fails closed unless paper/API mode, explicit IEX
+  credentials and an operator-verified entitlement are configured. It starts healthy PostgreSQL,
+  MinIO and Redis, applies Alembic, then supervises FastAPI, separate scheduler and `ingestion-low`
+  workers, Beat, the read-only Alpaca WebSocket supervisor and Next.js. The focused suite exited 0
+  with 6/6 passed.
+- The first real startup reached healthy infrastructure and migrations but exited 2 because pnpm
+  forwarded a literal `--` to Next.js. A regression RED exited 1; removing the extra separator made
+  the focused runtime and provider contract suite pass 11/11. The second startup reported ready at
+  `http://127.0.0.1:3000`. A concurrent invocation was rejected with exit 2. `Ctrl-C` removed the API,
+  Web and worker listeners without deleting volumes, and the same command then restarted cleanly.
+- Append-only diagnosis traced the latest Alpaca failure to 12 historical `price_bars` jobs with
+  `SCHEMA_DRIFT / ValueError`. Their immutable MinIO envelopes contained the valid no-data response
+  `{"bars": null, ...}`. The null-bars RED exited 1; GREEN treats an explicit `null` as an empty
+  window while still rejecting a missing or non-list `bars` field. Future dead letters now persist
+  the bounded deterministic exception message in addition to its type.
+- The corrected durable scheduler created 11 new Alpaca price-bar jobs. All 11 reached `SUCCEEDED`;
+  `/api/v1/providers/health` returned paper/read-only `SUCCESS`, explicit `IEX`, latest job
+  `SUCCEEDED` and quality `PASS`. Historical dead letters were preserved. Raw objects,
+  normalization dispatches and quality facts continued through the existing MinIO/PostgreSQL
+  lineage; no Fixture fallback or brokerage path was introduced.
+- `RUN_ALPACA_LIVE_SMOKE=1 ./scripts/verify-ingestion.sh` exited 0: the recovery, concurrency,
+  pagination, MinIO/PostgreSQL lineage and security matrix passed 76/76, and the real read-only
+  Alpaca contract passed 1/1; SEC and Alpha live smokes were explicitly skipped because their flags
+  were not requested for this issue.
+- Final `make verify` exited 0: Ruff format/check clean for 334 files, Mypy clean for 288 source
+  files, Alembic drift plus OpenAPI/MCP/dependency checks passed, backend 751 passed / 5 optional
+  live-provider tests skipped, frontend 33 files / 215 passed, and TypeScript, ESLint and the Next.js
+  production build passed. The managed paper runtime remains available locally for the next issue.

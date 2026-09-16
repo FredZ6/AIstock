@@ -639,7 +639,10 @@ def execute_alpaca_ingestion_job(
             store.dead_letter(
                 lease,
                 error_class=IngestionErrorClass.SCHEMA_DRIFT,
-                error_detail={"error_type": type(error).__name__},
+                error_detail={
+                    "error_type": type(error).__name__,
+                    "message": str(error)[:256],
+                },
                 now=failed_at,
             )
             return False

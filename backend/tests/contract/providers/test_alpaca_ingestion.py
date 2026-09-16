@@ -134,6 +134,28 @@ def test_daily_bar_uses_official_regular_session_not_midnight_anchor_session() -
     assert bar.payload["timeframe"] == "1Day"
 
 
+def test_null_bars_is_a_valid_empty_alpaca_window() -> None:
+    normalizer = importlib.import_module(
+        "stock_platform.application.ingestion.normalizers.alpaca"
+    ).AlpacaNormalizer()
+    batch = ProviderBatch(
+        provider="ALPACA",
+        feed_type=FeedType.PRICE_BARS,
+        symbol=Symbol("NVDA"),
+        query_as_of=OBSERVED_AT,
+        observed_at=OBSERVED_AT,
+        body=b'{"bars":null,"next_page_token":null,"symbol":"NVDA"}',
+        headers={
+            "X-AIStock-Verified-Coverage": "IEX",
+            "X-AIStock-Timeframe": "1Min",
+        },
+        next_page_token=None,
+        rate_limit=ProviderRateLimit(),
+    )
+
+    assert normalizer.normalize_batch(batch) == ()
+
+
 def test_recorded_alpaca_ws_events_decode_without_fact_table_expansion() -> None:
     events = AlpacaStreamDecoder().decode_batch(
         (FIXTURES / "ws_events.json").read_bytes(),

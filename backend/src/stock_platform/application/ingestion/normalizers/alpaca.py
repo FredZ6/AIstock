@@ -100,7 +100,11 @@ class AlpacaNormalizer:
         batch: ProviderBatch,
         document: dict[str, object],
     ) -> tuple[AlpacaBar, ...]:
-        raw_bars = document.get("bars")
+        if "bars" not in document:
+            raise ValueError("Alpaca bars payload is missing bars")
+        raw_bars = document["bars"]
+        if raw_bars is None:
+            raw_bars = []
         if not isinstance(raw_bars, list):
             raise ValueError("Alpaca bars payload is missing bars")
         response_symbol = document.get("symbol")

@@ -96,11 +96,19 @@ The read surface includes `/api/v1/market-data/quotes`, `/api/v1/market-data/bar
 database read fails, the affected route renders an explicit Failure or Degraded state; it never
 loads the fixture snapshot as a recovery path.
 
-For continuous local ingestion, run one Celery worker for the default scheduler queue, one for the
-`ingestion-low` persistence queue, Celery Beat, and the read-only Alpaca stream supervisor in
-separate terminals. All processes must source the gitignored root `.env`; the frontend uses the
-separate gitignored `web/.env.local`. The Alpaca process connects only to Market Data and has no
-brokerage or live-order path.
+For continuous local ingestion, start the complete managed runtime from one terminal:
+
+```bash
+make paper-runtime
+```
+
+The command fails closed unless the gitignored root `.env` selects paper mode with explicit IEX
+Market Data credentials and `web/.env.local` selects API mode. It starts PostgreSQL, MinIO and Redis,
+applies migrations, then supervises FastAPI, separate scheduler and `ingestion-low` Celery workers,
+Celery Beat, the read-only Alpaca stream supervisor and Next.js. Readiness is reported only after the
+API and web respond. A concurrent second runtime is rejected; `Ctrl-C` stops child processes without
+deleting Docker volumes. Process logs are written under `.runtime/logs`. The Alpaca process connects
+only to Market Data and has no brokerage or live-order path.
 
 Fixture manifests identify their synthetic provenance and license; they are not real quotations,
 filings, analyst research, or news. API Mode uses read-only Alpaca Market Data/News, SEC EDGAR, and
