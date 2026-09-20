@@ -81,6 +81,15 @@ def build_runtime_plan(repo_root: Path, environment: Mapping[str, str]) -> Runti
         "UV_CACHE_DIR": str(root / ".uv-cache"),
         "WEB_DATA_MODE": "api",
     }
+    bootstrap_tasks = [
+        "stock_platform.workers.schedules.schedule_alpaca_daily_ingestion",
+        "stock_platform.workers.schedules.schedule_alpaca_watchlist_ingestion",
+    ]
+    if environment.get("SEC_USER_AGENT", "").strip():
+        bootstrap_tasks.append("stock_platform.workers.schedules.schedule_sec_daily_ingestion")
+    if environment.get("ALPHA_VANTAGE_API_KEY", "").strip():
+        bootstrap_tasks.append("stock_platform.workers.schedules.schedule_alpha_earnings_calendar")
+
     return RuntimePlan(
         infrastructure=("postgres", "minio", "redis"),
         migration=(
@@ -115,7 +124,7 @@ def build_runtime_plan(repo_root: Path, environment: Mapping[str, str]) -> Runti
                     "--pool=solo",
                     "--concurrency=1",
                     "--loglevel=INFO",
-                    "--queues=celery",
+                    "--queues=control",
                     "--hostname=scheduler@%h",
                     "--pidfile=",
                 ),
@@ -132,6 +141,36 @@ def build_runtime_plan(repo_root: Path, environment: Mapping[str, str]) -> Runti
                     "--loglevel=INFO",
                     "--queues=ingestion-low",
                     "--hostname=ingestion@%h",
+                    "--pidfile=",
+                ),
+            ),
+            ManagedProcess(
+                "research-ingestion-worker",
+                (
+                    celery,
+                    "-A",
+                    celery_app,
+                    "worker",
+                    "--pool=solo",
+                    "--concurrency=1",
+                    "--loglevel=INFO",
+                    "--queues=research-ingestion",
+                    "--hostname=research-ingestion@%h",
+                    "--pidfile=",
+                ),
+            ),
+            ManagedProcess(
+                "stream-worker",
+                (
+                    celery,
+                    "-A",
+                    celery_app,
+                    "worker",
+                    "--pool=solo",
+                    "--concurrency=1",
+                    "--loglevel=INFO",
+                    "--queues=stream-events,celery",
+                    "--hostname=stream@%h",
                     "--pidfile=",
                 ),
             ),
@@ -157,10 +196,7 @@ def build_runtime_plan(repo_root: Path, environment: Mapping[str, str]) -> Runti
                 "http://127.0.0.1:3000/",
             ),
         ),
-        bootstrap_tasks=(
-            "stock_platform.workers.schedules.schedule_alpaca_daily_ingestion",
-            "stock_platform.workers.schedules.schedule_alpaca_watchlist_ingestion",
-        ),
+        bootstrap_tasks=tuple(bootstrap_tasks),
         environment=tuple(sorted(child_environment.items())),
     )
 

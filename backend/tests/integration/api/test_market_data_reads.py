@@ -699,8 +699,14 @@ def test_research_read_includes_only_point_in_time_sec_facts(
     assert len(response.json()["sec_filings"]) == 1
     assert response.json()["sec_filings"][0]["accession_number"] == "0001045810-26-000001"
     assert response.json()["sec_filings"][0]["document_raw_object_key"] == "live/SEC/filing.txt"
+    assert response.json()["sec_filings"][0]["event_time"] == "2026-08-19T20:00:00Z"
+    assert response.json()["sec_filings"][0]["content_hash"] == "b" * 64
+    assert response.json()["sec_filings"][0]["raw_object_key"] == "live/SEC/filing.txt"
     assert response.json()["financial_facts"][0]["canonical_concept"] == "REVENUE"
     assert response.json()["financial_facts"][0]["value"] == "30000"
+    assert response.json()["financial_facts"][0]["event_time"] == "2026-08-19T20:00:00Z"
+    assert response.json()["financial_facts"][0]["content_hash"] == "a" * 64
+    assert response.json()["financial_facts"][0]["raw_object_key"] == "live/SEC/submissions.json"
     assert {item["accession_number"] for item in response.json()["sec_filings"]} == {
         "0001045810-26-000001"
     }
@@ -725,6 +731,17 @@ def test_research_read_exposes_only_pit_eligible_persisted_research_domains(
         "EARNINGS",
         "OPTIONS",
     ]
+    assert unavailable.json()["unavailable_reasons"] == {
+        "ANALYST_TARGETS": (
+            "Unsupported until an authoritative provider, schema, and license are approved."
+        ),
+        "NEWS": "No point-in-time eligible Alpaca News record exists at this decision time.",
+        "EARNINGS": "Configure ALPHA_VANTAGE_API_KEY to ingest the earnings calendar.",
+        "OPTIONS": (
+            "Unavailable because the locked architecture has no approved lawful read-only "
+            "Options provider."
+        ),
+    }
     security_id = uuid4()
     connection.execute(security.insert().values(id=security_id, instrument_type="COMMON_STOCK"))
     connection.execute(

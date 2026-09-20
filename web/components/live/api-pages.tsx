@@ -235,7 +235,7 @@ export function ApiTodayPage({
       } : { kind: 'success' as const }}>
         {health ? <section className="terminal-section first-section" aria-labelledby="provider-health-title">
           <div className="section-heading"><div><p className="section-kicker">Runtime coverage</p><h2 id="provider-health-title">Provider health</h2></div><span className="muted-copy">{health.mode} · read only</span></div>
-          <ul className="plain-list" aria-label="Provider health facts">{Object.entries(health.providers).map(([name, provider]) => <li key={name}><strong>{name.toUpperCase()}</strong><p>{provider.coverage ? `${name.toUpperCase()} · ${provider.coverage} · ${provider.status ?? 'UNAVAILABLE'}` : `${provider.mode} · ${provider.status ?? 'UNAVAILABLE'}`}</p></li>)}</ul>
+          <ul className="plain-list" aria-label="Provider health facts">{Object.entries(health.providers).map(([name, provider]) => <li key={name}><strong>{name.toUpperCase()}</strong><p>{provider.coverage ? `${name.toUpperCase()} · ${provider.coverage} · ${provider.status ?? 'UNAVAILABLE'}` : `${provider.mode} · ${provider.status ?? 'UNAVAILABLE'}`}</p>{provider.operatorAction ? <small>{provider.operatorAction}</small> : null}</li>)}</ul>
         </section> : null}
         <section className="terminal-section first-section" aria-labelledby="live-market-title">
           <div className="section-heading">
@@ -288,6 +288,7 @@ export function ApiResearchPage({
   secFilings,
   symbol,
   unavailableDomains = [],
+  unavailableReasons = {},
 }: {
   asOf: string
   dataQuality: DataQuality[]
@@ -301,6 +302,7 @@ export function ApiResearchPage({
   secFilings: SecFiling[]
   symbol: string
   unavailableDomains?: string[]
+  unavailableReasons?: Record<string, string>
 }) {
   const latestRecord = records[0]
   const previousRecords = records.slice(1)
@@ -322,6 +324,11 @@ export function ApiResearchPage({
       <LiveDataRefresh />
       <PageHeading asOf={asOf} eyebrow="Research · API Mode" title={`${symbol} research`} summary="Persisted research only; current market reference remains separate from historical decision evidence." />
       <StateBoundary state={state}>
+        {Object.keys(unavailableReasons).length ? <section aria-label="Unavailable research domains" className="terminal-section">
+          <p className="section-kicker">Operator action</p>
+          <h2>Unavailable research domains</h2>
+          <ul className="plain-list">{Object.entries(unavailableReasons).map(([domain, reason]) => <li key={domain}><strong>{domain}</strong><p>{reason}</p></li>)}</ul>
+        </section> : null}
         {latestRecord ? <section className="decision-hero" aria-label="Latest research conclusion">
           <div>
             <p className="section-kicker">Latest research conclusion · {symbol}</p>
@@ -346,7 +353,7 @@ export function ApiResearchPage({
           </article>)}
         </details> : null}
         {secFilings.length ? <SecFilingsDisclosure filings={secFilings} /> : null}
-        {financialFacts.length ? <FinancialFactsDisclosure facts={financialFacts} filings={secFilings} /> : null}
+        {financialFacts.length ? <FinancialFactsDisclosure facts={financialFacts} /> : null}
         {earningsEvents.length ? <details className="terminal-section research-disclosure">
           <summary>Earnings events · {earningsEvents.length}</summary>
           <h2>Earnings events</h2>

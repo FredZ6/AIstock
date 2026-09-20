@@ -3871,3 +3871,41 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   and TypeScript, ESLint and the Next.js production build passed. The runtime was stopped gracefully
   before the gate, then restarted for the final mobile browser check and remains available locally;
   volumes and persisted data were not deleted.
+
+## 2026-09-20 — M8.2 provider closure and runtime queue isolation, FRE-42
+
+- Provider/read-contract RED tests established that unavailable research domains lacked actionable
+  reasons and persisted SEC filings/facts did not expose their complete raw-object provenance.
+  GREEN adds explicit operator actions to provider health, deterministic unavailability reasons for
+  Analyst Targets, News, Earnings and Options, and the SEC `event_time`, `available_at`,
+  `content_hash` and `raw_object_key` fields. Financial facts now join their own raw object under the
+  point-in-time predicate instead of borrowing filing-document lineage. The generated OpenAPI file
+  was refreshed from the validated application schema.
+- The managed paper runtime now bootstraps SEC and Alpha ingestion only when their local credentials
+  are explicitly configured. A real run exposed approximately 32,000 legacy Alpaca stream tasks in
+  the default Celery queue, which starved provider scheduling. Queue-topology RED tests failed before
+  implementation; GREEN isolates control, batch market ingestion, research ingestion and stream
+  persistence into `control`, `ingestion-low`, `research-ingestion` and `stream-events`. The stream
+  worker also consumes the legacy `celery` queue so existing durable messages are drained rather than
+  discarded. The recovery script and stuck-run runbook use the same complete queue inventory.
+- Real SEC ingestion persisted raw MinIO envelopes and PostgreSQL lineage for the configured
+  Watchlist. NVDA completed a large filings/facts backfill; other symbols progressed append-only but
+  are not represented as fully backfilled. A 10-second bounded SEC transport timeout replaced the
+  previous 5-second default after real SEC responses repeatedly exceeded the old bound. Alpha remains
+  explicitly unavailable because no local key is configured; Options remains unavailable because the
+  locked architecture has no approved lawful read-only provider; Analyst Targets remains unsupported;
+  Alpaca News reports that no point-in-time eligible record exists rather than substituting Fixture
+  content.
+- The live browser matrix command
+  `RUN_LIVE_PROVIDER_E2E=1 WEB_DATA_MODE=api API_BASE_URL=http://127.0.0.1:8000 PLAYWRIGHT_WEB_PORT=3000 pnpm exec playwright test e2e/live-provider-closure.spec.ts`
+  exited 0 with 2/2 desktop/mobile projects. It verified API mode without Fixture substitution,
+  precise operator actions, persisted SEC provider/time/hash/object-key provenance and no viewport
+  overflow. Manual desktop and 393px checks also reported no horizontal overflow.
+- The first post-OpenAPI `make verify` exited 2 with 1 failed / 752 passed / 5 skipped because the
+  still-running real SEC worker appended rows to the shared PostgreSQL database while the append-only
+  verifier compared whole-database counts. After gracefully stopping the managed runtime, the exact
+  unchanged append-only test exited 0 with 1/1 passed. The clean full `make verify` then exited 0:
+  Ruff format/check clean for 334 files, Mypy clean for 288 source files, Alembic drift plus
+  OpenAPI/MCP/dependency checks passed, backend 753 passed / 5 optional live-provider tests skipped,
+  frontend 34 files / 219 passed, and TypeScript, ESLint and the Next.js production build passed.
+  Docker volumes and persisted provider facts were retained; no live-broker path was added.

@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
-from sqlalchemy import create_engine, delete, insert
+from sqlalchemy import create_engine, delete, insert, update
 from sqlalchemy.engine import Engine
 from stock_platform.api.dependencies import (
     get_connection,
@@ -83,6 +83,11 @@ def api_engine() -> Iterator[Engine]:
 def client(api_engine: Engine) -> Iterator[TestClient]:
     with api_engine.connect() as connection:
         transaction = connection.begin()
+        connection.execute(
+            update(agent_run)
+            .where(agent_run.c.status.in_(("QUEUED", "RUNNING")))
+            .values(status="CANCELLED", lease_expires_at=None, updated_at=datetime.now(UTC))
+        )
         app.dependency_overrides[get_connection] = lambda: connection
         app.dependency_overrides[get_read_connection_factory] = lambda: (
             lambda: nullcontext(connection)
@@ -164,11 +169,27 @@ def test_provider_health_inventory_matches_implemented_adapters(client: TestClie
     assert response.json()["providers"]["alpha_vantage"] == {
         "configured": True,
         "mode": "read_only",
+        "operator_action": None,
         "status": None,
         "coverage": None,
         "latest_job_state": None,
         "latest_quality_status": None,
     }
+
+
+def test_provider_health_exposes_precise_operator_actions_for_unconfigured_research_sources(
+    client: TestClient,
+) -> None:
+    response = client.get("/api/v1/providers/health")
+
+    assert response.status_code == 200
+    providers = response.json()["providers"]
+    assert providers["sec"]["operator_action"] == (
+        "Configure SEC_USER_AGENT with a monitored contact identity."
+    )
+    assert providers["alpha_vantage"]["operator_action"] == (
+        "Configure ALPHA_VANTAGE_API_KEY to ingest the earnings calendar."
+    )
 
 
 @pytest.mark.parametrize(

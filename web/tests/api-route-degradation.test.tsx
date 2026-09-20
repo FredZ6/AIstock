@@ -18,7 +18,7 @@ describe('API route partial degradation', () => {
     vi.doMock('../lib/server/live-data-api', () => ({
       getDataQuality: vi.fn(async () => []),
       getMarketQuotes: vi.fn(async () => { throw new Error('quote unavailable') }),
-      getStockResearch: vi.fn(async () => ({ financialFacts: [], secFilings: [], records: [{
+      getStockResearch: vi.fn(async () => ({ financialFacts: [], secFilings: [], unavailableDomains: [], unavailableReasons: {}, records: [{
         asOf: '2026-08-20T20:00:00Z',
         confidence: '0.7',
         direction: 'BULLISH',
@@ -54,7 +54,7 @@ describe('API route partial degradation', () => {
         missingSymbols: [],
         status: 'DEGRADED',
       })),
-      getStockResearch: vi.fn(async () => ({ financialFacts: [], secFilings: [], records: [{
+      getStockResearch: vi.fn(async () => ({ financialFacts: [], secFilings: [], unavailableDomains: [], unavailableReasons: {}, records: [{
         asOf: '2026-08-20T20:00:00Z', confidence: '0.7', direction: 'BULLISH',
         horizon: 'MEDIUM', id: 'thesis-1', opinion: 'BULLISH',
         summary: 'Persisted thesis remains visible.', symbol: 'NVDA',

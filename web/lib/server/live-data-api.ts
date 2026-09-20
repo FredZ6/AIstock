@@ -83,6 +83,7 @@ export type ProviderHealth = {
     configured: boolean
     coverage?: string | null
     mode: 'fixture' | 'read_only' | 'unavailable'
+    operatorAction?: string | null
     status?: 'SUCCESS' | 'DEGRADED' | 'FAILURE' | 'UNAVAILABLE'
   }>
 }
@@ -193,10 +194,13 @@ export type SecFiling = {
   availableAt: string
   description: string
   documentRawObjectKey: string
+  contentHash: string
+  eventTime: string
   filingDate: string
   form: string
   id: string
   provider: string
+  rawObjectKey: string
   reportDate: string | null
 }
 
@@ -204,12 +208,15 @@ export type FinancialFact = {
   accessionNumber: string
   availableAt: string
   canonicalConcept: string | null
+  contentHash: string
   currency: string | null
   id: string
+  eventTime: string
   mappingStatus: 'EXACT' | 'DERIVED' | 'UNMAPPED' | 'AMBIGUOUS'
   periodEnd: string
   periodStart: string
   provider: string
+  rawObjectKey: string
   sourceConcept: string
   taxonomy: string
   unit: string
@@ -260,6 +267,7 @@ export type StockResearch = {
   records: ResearchRecord[]
   secFilings: SecFiling[]
   unavailableDomains: Array<'EARNINGS' | 'NEWS' | 'OPTIONS' | 'ANALYST_TARGETS'>
+  unavailableReasons: Partial<Record<'EARNINGS' | 'NEWS' | 'OPTIONS' | 'ANALYST_TARGETS', string>>
 }
 
 export type DataQuality = {
@@ -843,6 +851,9 @@ export async function getProviderHealth(options: LiveDataClientOptions): Promise
       providers[name] = {
         configured: booleanValue(row.configured, `${name}.configured`),
         mode: enumeration(row.mode, ['fixture', 'read_only', 'unavailable'] as const, `${name}.mode`),
+        operatorAction: row.operator_action === undefined || row.operator_action === null
+          ? null
+          : text(row.operator_action, `${name}.operator_action`),
         coverage: row.coverage === undefined || row.coverage === null ? null : text(row.coverage, `${name}.coverage`),
         status: row.status === undefined || row.status === null
           ? undefined
@@ -1016,9 +1027,11 @@ export async function getStockResearch(
       return {
         acceptedAt: instant(row.accepted_at, 'filing.accepted_at'), accessionNumber: text(row.accession_number, 'filing.accession_number'),
         availableAt: instant(row.available_at, 'filing.available_at'), description: text(row.description, 'filing.description'),
+        contentHash: text(row.content_hash, 'filing.content_hash'), eventTime: instant(row.event_time, 'filing.event_time'),
         documentRawObjectKey: text(row.document_raw_object_key, 'filing.document_raw_object_key'),
         filingDate: text(row.filing_date, 'filing.filing_date'), form: text(row.form, 'filing.form'),
         id: text(row.id, 'filing.id'), provider: text(row.provider, 'filing.provider'),
+        rawObjectKey: text(row.raw_object_key, 'filing.raw_object_key'),
         reportDate: row.report_date === null ? null : text(row.report_date, 'filing.report_date'),
       }
     })
@@ -1027,10 +1040,12 @@ export async function getStockResearch(
       return {
         accessionNumber: text(row.accession_number, 'fact.accession_number'), availableAt: instant(row.available_at, 'fact.available_at'),
         canonicalConcept: row.canonical_concept === null ? null : text(row.canonical_concept, 'fact.canonical_concept'),
+        contentHash: text(row.content_hash, 'fact.content_hash'), eventTime: instant(row.event_time, 'fact.event_time'),
         currency: row.currency === null ? null : text(row.currency, 'fact.currency'), id: text(row.id, 'fact.id'),
         mappingStatus: enumeration(row.mapping_status, ['EXACT', 'DERIVED', 'UNMAPPED', 'AMBIGUOUS'] as const, 'fact.mapping_status'),
         periodEnd: text(row.period_end, 'fact.period_end'), periodStart: text(row.period_start, 'fact.period_start'),
         provider: text(row.provider, 'fact.provider'), sourceConcept: text(row.source_concept, 'fact.source_concept'),
+        rawObjectKey: text(row.raw_object_key, 'fact.raw_object_key'),
         taxonomy: text(row.taxonomy, 'fact.taxonomy'), unit: text(row.unit, 'fact.unit'), value: decimal(row.value, 'fact.value'),
       }
     })
@@ -1070,7 +1085,24 @@ export async function getStockResearch(
     const unavailableDomains = page.unavailable_domains.map((item, index) => enumeration(
       item, ['EARNINGS', 'NEWS', 'OPTIONS', 'ANALYST_TARGETS'] as const, `research.unavailable_domains[${index}]`,
     ))
-    return { earningsEvents, financialFacts, newsArticles, optionSnapshots, records, secFilings, unavailableDomains }
+    const reasonRows = record(page.unavailable_reasons, 'research.unavailable_reasons')
+    const unavailableReasons: StockResearch['unavailableReasons'] = {}
+    for (const domain of unavailableDomains) {
+      unavailableReasons[domain] = text(
+        reasonRows[domain],
+        `research.unavailable_reasons.${domain}`,
+      )
+    }
+    return {
+      earningsEvents,
+      financialFacts,
+      newsArticles,
+      optionSnapshots,
+      records,
+      secFilings,
+      unavailableDomains,
+      unavailableReasons,
+    }
   })
 }
 

@@ -18,6 +18,8 @@ def _paper_environment() -> dict[str, str]:
         "ALPACA_DATA_SECRET": "configured-secret",
         "ALPACA_ENTITLEMENT_COVERAGE": "IEX",
         "ALPACA_ENTITLEMENT_VERSION": "operator-verified-test",
+        "SEC_USER_AGENT": "AIstock test contact@example.com",
+        "ALPHA_VANTAGE_API_KEY": "configured-alpha-key",
     }
 
 
@@ -30,6 +32,8 @@ def test_paper_runtime_plan_is_complete_and_separates_ingestion_queue() -> None:
         "api",
         "scheduler-worker",
         "ingestion-worker",
+        "research-ingestion-worker",
+        "stream-worker",
         "beat",
         "alpaca-stream",
         "web",
@@ -37,14 +41,31 @@ def test_paper_runtime_plan_is_complete_and_separates_ingestion_queue() -> None:
     assert plan.bootstrap_tasks == (
         "stock_platform.workers.schedules.schedule_alpaca_daily_ingestion",
         "stock_platform.workers.schedules.schedule_alpaca_watchlist_ingestion",
+        "stock_platform.workers.schedules.schedule_sec_daily_ingestion",
+        "stock_platform.workers.schedules.schedule_alpha_earnings_calendar",
     )
     commands = {process.name: process.command for process in plan.processes}
-    assert "--queues=celery" in commands["scheduler-worker"]
+    assert "--queues=control" in commands["scheduler-worker"]
     assert "--queues=ingestion-low" in commands["ingestion-worker"]
+    assert "--queues=research-ingestion" in commands["research-ingestion-worker"]
+    assert "--queues=stream-events,celery" in commands["stream-worker"]
     assert "scripts/run_alpaca_stream.py" in commands["alpaca-stream"]
     assert commands["web"][-2:] == ("--hostname", "127.0.0.1")
     assert "--" not in commands["web"]
     assert dict(plan.environment)["WEB_DATA_MODE"] == "api"
+
+
+def test_paper_runtime_only_bootstraps_optional_research_providers_when_configured() -> None:
+    environment = _paper_environment()
+    environment.pop("SEC_USER_AGENT")
+    environment.pop("ALPHA_VANTAGE_API_KEY")
+
+    plan = build_runtime_plan(ROOT, environment)
+
+    assert plan.bootstrap_tasks == (
+        "stock_platform.workers.schedules.schedule_alpaca_daily_ingestion",
+        "stock_platform.workers.schedules.schedule_alpaca_watchlist_ingestion",
+    )
 
 
 @pytest.mark.parametrize(

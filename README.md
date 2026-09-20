@@ -104,7 +104,8 @@ make paper-runtime
 
 The command fails closed unless the gitignored root `.env` selects paper mode with explicit IEX
 Market Data credentials and `web/.env.local` selects API mode. It starts PostgreSQL, MinIO and Redis,
-applies migrations, then supervises FastAPI, separate scheduler and `ingestion-low` Celery workers,
+applies migrations, then supervises FastAPI and isolated `control`, `ingestion-low`,
+`research-ingestion`, and `stream-events` Celery workers,
 Celery Beat, the read-only Alpaca stream supervisor and Next.js. Readiness is reported only after the
 API and web respond. A concurrent second runtime is rejected; `Ctrl-C` stops child processes without
 deleting Docker volumes. Process logs are written under `.runtime/logs`. The Alpaca process connects

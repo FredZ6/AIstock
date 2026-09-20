@@ -2027,7 +2027,7 @@ def dispatch_alpha_ingestion_jobs() -> int:
             publish=lambda job_id: celery_app.send_task(
                 "stock_platform.workers.ingestion_tasks.run_alpha_earnings_ingestion_job",
                 args=[str(job_id)],
-                queue="ingestion-low",
+                queue="research-ingestion",
             ),
             now=datetime.now(UTC),
         )
@@ -2073,7 +2073,7 @@ def dispatch_sec_ingestion_jobs() -> int:
             publish=lambda job_id: celery_app.send_task(
                 "stock_platform.workers.ingestion_tasks.run_sec_ingestion_job",
                 args=[str(job_id)],
-                queue="ingestion-low",
+                queue="research-ingestion",
             ),
             now=datetime.now(UTC),
         )

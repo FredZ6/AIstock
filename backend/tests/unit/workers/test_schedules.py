@@ -47,12 +47,19 @@ def test_celery_is_at_least_once_without_authoritative_result_backend() -> None:
     assert celery_app.conf.task_acks_late is True
     assert celery_app.conf.task_reject_on_worker_lost is True
     assert celery_app.conf.timezone == "UTC"
+    assert celery_app.conf.task_default_queue == "control"
+    assert celery_app.conf.task_routes[
+        "stock_platform.workers.ingestion_tasks.persist_alpaca_stream_event"
+    ] == {"queue": "stream-events"}
     assert celery_app.conf.task_routes[
         "stock_platform.workers.ingestion_tasks.run_alpaca_ingestion_job"
     ] == {"queue": "ingestion-low"}
     assert celery_app.conf.task_routes[
         "stock_platform.workers.ingestion_tasks.run_alpha_earnings_ingestion_job"
-    ] == {"queue": "ingestion-low"}
+    ] == {"queue": "research-ingestion"}
+    assert celery_app.conf.task_routes[
+        "stock_platform.workers.ingestion_tasks.run_sec_ingestion_job"
+    ] == {"queue": "research-ingestion"}
     assert set(beat_schedule) == {
         "daily-research-after-close",
         "intraday-market-monitor",
@@ -104,8 +111,9 @@ def test_documented_worker_consumes_the_low_priority_ingestion_queue() -> None:
     recovery = open("scripts/verify-recovery.sh", encoding="utf-8").read()
     runbook = open("docs/runbooks/stuck-run.md", encoding="utf-8").read()
 
-    assert "--queues=celery,ingestion-low" in recovery
-    assert "--queues=celery,ingestion-low" in runbook
+    queues = "--queues=control,ingestion-low,research-ingestion,stream-events,celery"
+    assert queues in recovery
+    assert queues in runbook
 
 
 def test_alpaca_stream_has_managed_operator_entrypoint() -> None:

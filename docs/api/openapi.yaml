@@ -689,6 +689,10 @@
             ],
             "title": "Canonical Concept"
           },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
           "currency": {
             "anyOf": [
               {
@@ -699,6 +703,11 @@
               }
             ],
             "title": "Currency"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
+            "type": "string"
           },
           "id": {
             "format": "uuid",
@@ -727,6 +736,10 @@
           },
           "provider": {
             "title": "Provider",
+            "type": "string"
+          },
+          "raw_object_key": {
+            "title": "Raw Object Key",
             "type": "string"
           },
           "source_concept": {
@@ -759,7 +772,10 @@
           "period_start",
           "period_end",
           "accession_number",
+          "event_time",
           "available_at",
+          "content_hash",
+          "raw_object_key",
           "mapping_status"
         ],
         "title": "FinancialFactItem",
@@ -1797,6 +1813,17 @@
             "title": "Mode",
             "type": "string"
           },
+          "operator_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Action"
+          },
           "status": {
             "anyOf": [
               {
@@ -2090,6 +2117,21 @@
             },
             "title": "Unavailable Domains",
             "type": "array"
+          },
+          "unavailable_reasons": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "enum": [
+                "EARNINGS",
+                "NEWS",
+                "OPTIONS",
+                "ANALYST_TARGETS"
+              ]
+            },
+            "title": "Unavailable Reasons",
+            "type": "object"
           }
         },
         "required": [
@@ -2101,6 +2143,7 @@
           "earnings_events",
           "option_snapshots",
           "unavailable_domains",
+          "unavailable_reasons",
           "next_cursor"
         ],
         "title": "ResearchPage",
@@ -2817,12 +2860,21 @@
             "title": "Available At",
             "type": "string"
           },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
           "description": {
             "title": "Description",
             "type": "string"
           },
           "document_raw_object_key": {
             "title": "Document Raw Object Key",
+            "type": "string"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
             "type": "string"
           },
           "filing_date": {
@@ -2841,6 +2893,10 @@
           },
           "provider": {
             "title": "Provider",
+            "type": "string"
+          },
+          "raw_object_key": {
+            "title": "Raw Object Key",
             "type": "string"
           },
           "report_date": {
@@ -2866,6 +2922,9 @@
           "accepted_at",
           "available_at",
           "description",
+          "event_time",
+          "content_hash",
+          "raw_object_key",
           "document_raw_object_key"
         ],
         "title": "SecFilingItem",
