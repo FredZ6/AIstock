@@ -89,6 +89,7 @@ def build_runtime_plan(repo_root: Path, environment: Mapping[str, str]) -> Runti
         bootstrap_tasks.append("stock_platform.workers.schedules.schedule_sec_daily_ingestion")
     if environment.get("ALPHA_VANTAGE_API_KEY", "").strip():
         bootstrap_tasks.append("stock_platform.workers.schedules.schedule_alpha_earnings_calendar")
+    bootstrap_tasks.append("stock_platform.workers.schedules.bootstrap_agent_runs")
 
     return RuntimePlan(
         infrastructure=("postgres", "minio", "redis"),
@@ -171,6 +172,66 @@ def build_runtime_plan(repo_root: Path, environment: Mapping[str, str]) -> Runti
                     "--loglevel=INFO",
                     "--queues=stream-events,celery",
                     "--hostname=stream@%h",
+                    "--pidfile=",
+                ),
+            ),
+            ManagedProcess(
+                "research-worker",
+                (
+                    celery,
+                    "-A",
+                    celery_app,
+                    "worker",
+                    "--pool=solo",
+                    "--concurrency=1",
+                    "--loglevel=INFO",
+                    "--queues=agent-research",
+                    "--hostname=research@%h",
+                    "--pidfile=",
+                ),
+            ),
+            ManagedProcess(
+                "portfolio-worker",
+                (
+                    celery,
+                    "-A",
+                    celery_app,
+                    "worker",
+                    "--pool=solo",
+                    "--concurrency=1",
+                    "--loglevel=INFO",
+                    "--queues=agent-portfolio",
+                    "--hostname=portfolio@%h",
+                    "--pidfile=",
+                ),
+            ),
+            ManagedProcess(
+                "alert-worker",
+                (
+                    celery,
+                    "-A",
+                    celery_app,
+                    "worker",
+                    "--pool=solo",
+                    "--concurrency=1",
+                    "--loglevel=INFO",
+                    "--queues=agent-alert",
+                    "--hostname=alert@%h",
+                    "--pidfile=",
+                ),
+            ),
+            ManagedProcess(
+                "review-worker",
+                (
+                    celery,
+                    "-A",
+                    celery_app,
+                    "worker",
+                    "--pool=solo",
+                    "--concurrency=1",
+                    "--loglevel=INFO",
+                    "--queues=agent-review",
+                    "--hostname=review@%h",
                     "--pidfile=",
                 ),
             ),

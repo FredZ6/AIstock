@@ -33,6 +33,18 @@ celery_app.conf.update(
         "stock_platform.workers.ingestion_tasks.run_sec_ingestion_job": {
             "queue": "research-ingestion"
         },
+        "stock_platform.workers.research_tasks.run_research": {
+            "queue": "agent-research"
+        },
+        "stock_platform.workers.portfolio_tasks.run_portfolio": {
+            "queue": "agent-portfolio"
+        },
+        "stock_platform.workers.research_tasks.monitor_market": {
+            "queue": "agent-alert"
+        },
+        "stock_platform.workers.review_tasks.run_weekly_review": {
+            "queue": "agent-review"
+        },
     },
 )
 

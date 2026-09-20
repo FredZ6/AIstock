@@ -26,7 +26,7 @@ start_worker() {
     REDIS_URL="redis://localhost:56379/0" \
     .venv/bin/celery -A stock_platform.workers.celery_app:celery_app worker \
       --pool=solo --concurrency=1 --loglevel=WARNING \
-      --queues=control,ingestion-low,research-ingestion,stream-events,celery \
+      --queues=control,ingestion-low,research-ingestion,stream-events,agent-research,agent-portfolio,agent-alert,agent-review,celery \
       --hostname="${worker_name}" --pidfile= >"${worker_log}" 2>&1 &
   worker_pid=$!
   for _attempt in {1..30}; do

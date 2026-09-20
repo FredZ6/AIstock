@@ -63,6 +63,14 @@ class ScheduledReconnectGapFill:
     scheduled: ScheduledAlpacaBackfill
 
 
+@dataclass(frozen=True, slots=True)
+class ScheduledAgentCatchUp:
+    research_cutoff: datetime
+    portfolio_cutoff: datetime
+    research_run_ids: tuple[str, ...]
+    portfolio_run_id: str | None
+
+
 NEW_YORK = ZoneInfo("America/New_York")
 TASKS = {
     "RESEARCH": "stock_platform.workers.research_tasks.run_research",
@@ -117,6 +125,22 @@ def schedule_key(kind: str, cutoff: datetime, *, symbol: str | None = None) -> s
     aware = require_aware(cutoff).astimezone(UTC)
     prefix = f"{kind}:{Symbol(symbol)}" if symbol is not None else kind
     return f"{prefix}:{aware.isoformat()}"
+
+
+def latest_completed_market_cutoff(now: datetime, *, cutoff: time) -> datetime:
+    """Return the latest canonical New York cutoff on a completed trading day."""
+    checked_now = require_aware(now).astimezone(UTC)
+    local_now = checked_now.astimezone(NEW_YORK)
+    calendar = MarketCalendar()
+    for days_back in range(8):
+        candidate_day = local_now.date() - timedelta(days=days_back)
+        market_probe = datetime.combine(candidate_day, time(10), tzinfo=NEW_YORK)
+        if calendar.session_at(market_probe) is None:
+            continue
+        candidate = datetime.combine(candidate_day, cutoff, tzinfo=NEW_YORK).astimezone(UTC)
+        if candidate <= checked_now:
+            return candidate
+    raise ValueError("unable to resolve a completed market cutoff")
 
 
 def schedule_alpaca_backfills(
@@ -542,6 +566,34 @@ def schedule_weekly_review(
     )
 
 
+def schedule_agent_catch_up(
+    connection: Connection,
+    settings: Settings,
+    *,
+    now: datetime,
+    dispatch: Dispatch = _dispatch,
+) -> ScheduledAgentCatchUp:
+    """Idempotently admit the latest completed Research and Portfolio session."""
+    research_cutoff = latest_completed_market_cutoff(now, cutoff=time(16, 15))
+    portfolio_cutoff = latest_completed_market_cutoff(now, cutoff=time(16, 30))
+    return ScheduledAgentCatchUp(
+        research_cutoff=research_cutoff,
+        portfolio_cutoff=portfolio_cutoff,
+        research_run_ids=schedule_daily_research(
+            connection,
+            settings,
+            research_cutoff,
+            dispatch=dispatch,
+        ),
+        portfolio_run_id=schedule_portfolio_decision(
+            connection,
+            settings,
+            portfolio_cutoff,
+            dispatch=dispatch,
+        ),
+    )
+
+
 def recover_queued_runs(
     connection: Connection,
     *,
@@ -636,6 +688,23 @@ def weekly_review() -> None:
 @celery_app.task(name="stock_platform.workers.schedules.recover_queued")  # type: ignore[untyped-decorator]
 def recover_queued() -> None:
     _run_schedule("recover")
+
+
+@celery_app.task(name="stock_platform.workers.schedules.bootstrap_agent_runs")  # type: ignore[untyped-decorator]
+def bootstrap_agent_runs() -> dict[str, object]:
+    settings = Settings()
+    with create_engine(settings.database_url).begin() as connection:
+        result = schedule_agent_catch_up(
+            connection,
+            settings,
+            now=datetime.now(UTC),
+        )
+    return {
+        "research_cutoff": result.research_cutoff.isoformat(),
+        "portfolio_cutoff": result.portfolio_cutoff.isoformat(),
+        "research_run_ids": result.research_run_ids,
+        "portfolio_run_id": result.portfolio_run_id,
+    }
 
 
 @celery_app.task(  # type: ignore[untyped-decorator]

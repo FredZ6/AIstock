@@ -3909,3 +3909,22 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   OpenAPI/MCP/dependency checks passed, backend 753 passed / 5 optional live-provider tests skipped,
   frontend 34 files / 219 passed, and TypeScript, ESLint and the Next.js production build passed.
   Docker volumes and persisted provider facts were retained; no live-broker path was added.
+
+## 2026-09-20 — M8.2 production loop, FRE-43 Task 1
+
+- The Task 1 RED command
+  `UV_CACHE_DIR=.uv-cache uv run pytest backend/tests/unit/workers/test_schedules.py
+  backend/tests/unit/operations/test_paper_runtime.py
+  backend/tests/integration/api/test_scheduling.py -q` exited 2 during collection because the
+  latest-completed-session resolver and idempotent Agent catch-up scheduler did not yet exist.
+- GREEN isolates the existing Research, Portfolio, Alert Monitor and Weekly Review tasks onto
+  `agent-research`, `agent-portfolio`, `agent-alert` and `agent-review`. The managed paper runtime
+  now supervises one bounded worker for each queue and bootstraps the latest completed New York
+  Research/Portfolio session through the existing durable run-admission keys. The UTC-aware cutoff
+  resolver skips weekends and NYSE holidays; retries reuse the same run rows.
+- The corrected focused command exited 0 with 18/18 tests passed. `./scripts/verify-recovery.sh`
+  exited 0 after a real PostgreSQL restore, Celery worker execution, Redis restart and replay; its
+  final recovery suite passed 9/9 and retained one append-only Fill/Ledger/event/tool-call effect.
+  The recovery script and runbook now enumerate all durable queues, including the legacy `celery`
+  drain queue. No Research, Portfolio, Alert or Weekly Review business behavior changed in this
+  task, and no Fixture fallback, live-broker path or automatic policy activation was introduced.

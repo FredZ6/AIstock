@@ -8,11 +8,54 @@ from stock_platform.infrastructure.db.models.tables import agent_run, security, 
 from stock_platform.settings import Settings
 from stock_platform.workers.schedules import (
     recover_queued_runs,
+    schedule_agent_catch_up,
     schedule_daily_research,
     schedule_intraday_monitor,
     schedule_portfolio_decision,
     schedule_weekly_review,
 )
+
+
+def test_agent_catch_up_reuses_latest_closed_session_runs(
+    isolated_database_url: str,
+) -> None:
+    config = Config("backend/alembic.ini")
+    config.set_main_option("sqlalchemy.url", isolated_database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(isolated_database_url)
+    settings = Settings(
+        environment="test", database_url=isolated_database_url, max_active_agent_runs=20
+    )
+    dispatched: list[tuple[str, str]] = []
+    startup = datetime(2026, 9, 19, 12, tzinfo=UTC)
+
+    with engine.begin() as connection:
+        security_id = uuid4()
+        connection.execute(insert(security).values(id=security_id, instrument_type="EQUITY"))
+        connection.execute(insert(watchlist_item).values(security_id=security_id, symbol="NVDA"))
+
+        first = schedule_agent_catch_up(
+            connection,
+            settings,
+            now=startup,
+            dispatch=lambda task, run_id: dispatched.append((task, run_id)),
+        )
+        replay = schedule_agent_catch_up(
+            connection,
+            settings,
+            now=startup,
+            dispatch=lambda task, run_id: dispatched.append((task, run_id)),
+        )
+
+        assert replay == first
+        assert first.research_cutoff == datetime(2026, 9, 18, 20, 15, tzinfo=UTC)
+        assert first.portfolio_cutoff == datetime(2026, 9, 18, 20, 30, tzinfo=UTC)
+        assert len(first.research_run_ids) == 1
+        assert first.portfolio_run_id is not None
+        assert connection.execute(select(func.count()).select_from(agent_run)).scalar_one() == 2
+        assert len(dispatched) == 2
+
+    engine.dispose()
 
 
 def test_scheduled_runs_are_durable_idempotent_and_recoverable(

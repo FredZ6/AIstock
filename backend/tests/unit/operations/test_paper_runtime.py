@@ -34,6 +34,10 @@ def test_paper_runtime_plan_is_complete_and_separates_ingestion_queue() -> None:
         "ingestion-worker",
         "research-ingestion-worker",
         "stream-worker",
+        "research-worker",
+        "portfolio-worker",
+        "alert-worker",
+        "review-worker",
         "beat",
         "alpaca-stream",
         "web",
@@ -43,12 +47,17 @@ def test_paper_runtime_plan_is_complete_and_separates_ingestion_queue() -> None:
         "stock_platform.workers.schedules.schedule_alpaca_watchlist_ingestion",
         "stock_platform.workers.schedules.schedule_sec_daily_ingestion",
         "stock_platform.workers.schedules.schedule_alpha_earnings_calendar",
+        "stock_platform.workers.schedules.bootstrap_agent_runs",
     )
     commands = {process.name: process.command for process in plan.processes}
     assert "--queues=control" in commands["scheduler-worker"]
     assert "--queues=ingestion-low" in commands["ingestion-worker"]
     assert "--queues=research-ingestion" in commands["research-ingestion-worker"]
     assert "--queues=stream-events,celery" in commands["stream-worker"]
+    assert "--queues=agent-research" in commands["research-worker"]
+    assert "--queues=agent-portfolio" in commands["portfolio-worker"]
+    assert "--queues=agent-alert" in commands["alert-worker"]
+    assert "--queues=agent-review" in commands["review-worker"]
     assert "scripts/run_alpaca_stream.py" in commands["alpaca-stream"]
     assert commands["web"][-2:] == ("--hostname", "127.0.0.1")
     assert "--" not in commands["web"]
@@ -65,6 +74,7 @@ def test_paper_runtime_only_bootstraps_optional_research_providers_when_configur
     assert plan.bootstrap_tasks == (
         "stock_platform.workers.schedules.schedule_alpaca_daily_ingestion",
         "stock_platform.workers.schedules.schedule_alpaca_watchlist_ingestion",
+        "stock_platform.workers.schedules.bootstrap_agent_runs",
     )
 
 
