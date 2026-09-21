@@ -54,6 +54,7 @@ class EvidenceItem:
     content_hash: str
     raw_object_key: str
     payload: Mapping[str, object]
+    normalized_record_id: UUID | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "payload", FrozenDict(self.payload))
@@ -69,6 +70,7 @@ class EvidenceItem:
         content_hash: str,
         raw_object_key: str,
         payload: Mapping[str, object],
+        normalized_record_id: UUID | None = None,
     ) -> EvidenceItem:
         if len(content_hash) != 64:
             raise ValueError("content_hash must be SHA-256")
@@ -86,6 +88,7 @@ class EvidenceItem:
             content_hash=content_hash,
             raw_object_key=raw_object_key,
             payload=FrozenDict(payload),
+            normalized_record_id=normalized_record_id,
         )
 
 

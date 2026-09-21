@@ -1,7 +1,7 @@
 """PostgreSQL-authoritative run admission shared by API and schedulers."""
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -33,6 +33,14 @@ DEFAULT_POLICY_PINS = {
     "RISK": "risk-v1",
     "EXECUTION": "execution-v1",
     "CONFIDENCE": "confidence-v1",
+}
+EXECUTION_PIN_COLUMNS = {
+    "research_scoring_policy_version",
+    "risk_policy_version",
+    "execution_policy_version",
+    "confidence_policy_version",
+    "prompt_version",
+    "model_version",
 }
 
 
@@ -84,6 +92,7 @@ def admit_run(
     decision_time: datetime,
     data_cutoff: datetime,
     correlation_id: UUID | None = None,
+    execution_pins: Mapping[str, str] | None = None,
 ) -> AdmittedRun:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     request_hash = sha256(encoded.encode()).hexdigest()
@@ -111,6 +120,18 @@ def admit_run(
         )
     ).all()
     policy_pins.update({str(kind): str(version) for kind, version in active_policies})
+    resolved_execution_pins = {
+        "research_scoring_policy_version": policy_pins["RESEARCH_SCORING"],
+        "risk_policy_version": policy_pins["RISK"],
+        "execution_policy_version": policy_pins["EXECUTION"],
+        "confidence_policy_version": policy_pins["CONFIDENCE"],
+        "prompt_version": RUN_PINS[run_type][0],
+        "model_version": RUN_PINS[run_type][1],
+    }
+    if execution_pins is not None:
+        if set(execution_pins) != EXECUTION_PIN_COLUMNS:
+            raise ValueError("execution_pins must provide every immutable run pin")
+        resolved_execution_pins = dict(execution_pins)
     row = (
         connection.execute(
             insert(agent_run)
@@ -124,12 +145,7 @@ def admit_run(
                 decision_time=decision_time,
                 data_cutoff=data_cutoff,
                 status="QUEUED",
-                research_scoring_policy_version=policy_pins["RESEARCH_SCORING"],
-                risk_policy_version=policy_pins["RISK"],
-                execution_policy_version=policy_pins["EXECUTION"],
-                confidence_policy_version=policy_pins["CONFIDENCE"],
-                prompt_version=RUN_PINS[run_type][0],
-                model_version=RUN_PINS[run_type][1],
+                **resolved_execution_pins,
             )
             .returning(agent_run)
         )

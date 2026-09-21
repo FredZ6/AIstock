@@ -3928,3 +3928,31 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   The recovery script and runbook now enumerate all durable queues, including the legacy `celery`
   drain queue. No Research, Portfolio, Alert or Weekly Review business behavior changed in this
   task, and no Fixture fallback, live-broker path or automatic policy activation was introduced.
+
+## 2026-09-21 — M8.2 production loop, FRE-43 Task 2
+
+- Population RED/GREEN added a two-symbol non-Fixture Watchlist contract covering idempotent
+  scheduling, pinned policy/prompt/model versions, evidence gaps and the complete Raw Data Object →
+  Normalized Record → Derived Metric → Evidence → Claim → Thesis → Decision lineage. A real paper
+  runtime run then exposed `MultipleResultsFound`: one immutable SEC raw object can legitimately
+  contain several normalized records, while Research persistence had assumed one. The provider and
+  Evidence contracts now carry the exact `normalized_record_id`; a bounded compatibility resolver
+  supports old checkpoints by accepting a single normalized envelope or matching record type,
+  symbol and payload when several candidates exist.
+- Explicit recovery keeps non-exhausted failures on the same append-only Run and records
+  `run.operator_retry_queued`. Exhausted failures are never rewritten or given extra attempts.
+  Instead, one idempotent replacement Run is inserted with the original decision/data cutoff,
+  correlation path and all six immutable execution pins, plus bidirectional
+  `run.replacement_queued` / `run.replaces_failed` audit events. The first GREEN attempt correctly
+  failed because the database rejects post-insert pin updates; admission was tightened to accept a
+  complete pin set at INSERT time without weakening the immutability trigger.
+- The real AVGO and BE failures (`fa2a3355-...`, `94bb24d4-...`) remain `FAILED` at 3/3. Their
+  replacements (`bfa01ac8-...`, `4cefeb17-...`) completed on attempt 1. The live lineage query found
+  2 Decisions, 2 Theses, 851 Evidence/Claim/Derived/Normalized links and 849 distinct raw objects;
+  every linked raw fact satisfied `available_at <= data_cutoff`. No historical failure, raw object
+  or test result was rewritten, and no Fixture data was substituted.
+- Focused replacement/retry tests exited 0 with 2/2 passed. The corrected related suite
+  (`test_scheduling.py`, `test_run_admission.py`, `test_research_population.py`, and unit scheduler
+  tests) exited 0 with 16/16 passed. Ruff exited 0 and Mypy reported no issues in 7 affected source
+  files. One earlier combined command exited 4 before collection because it named a removed test
+  path; the corrected command above is the recorded verification evidence.

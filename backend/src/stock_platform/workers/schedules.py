@@ -3,12 +3,12 @@ from __future__ import annotations
 from collections.abc import Callable, Collection
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from celery.schedules import crontab  # type: ignore[import-untyped]
-from sqlalchemy import Connection, Engine, create_engine, select, update
+from sqlalchemy import Connection, Engine, create_engine, func, select, update
 
 from stock_platform.application.ingestion.jobs import IngestionJobSpec
 from stock_platform.application.market_data.policy import (
@@ -646,6 +646,108 @@ def recover_queued_runs(
     return tuple(str(run_id) for run_id, _ in rows)
 
 
+def requeue_failed_run(
+    connection: Connection,
+    run_id: UUID,
+    *,
+    dispatch: Dispatch = _dispatch,
+) -> bool:
+    """Explicitly retry one non-exhausted failed run while preserving its failure audit."""
+    row = (
+        connection.execute(
+            select(agent_run)
+            .where(agent_run.c.id == run_id)
+            .with_for_update()
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if (
+        row is None
+        or row["status"] != "FAILED"
+        or row["attempt_count"] >= row["max_attempts"]
+    ):
+        return False
+    connection.execute(
+        update(agent_run)
+        .where(agent_run.c.id == run_id)
+        .values(status="QUEUED", lease_expires_at=None, updated_at=func.now())
+    )
+    append_run_event(
+        connection,
+        run_id,
+        "run.operator_retry_queued",
+        {"previous_attempt": row["attempt_count"]},
+    )
+    dispatch(TASKS[row["run_type"]], str(run_id))
+    return True
+
+
+def replace_exhausted_run(
+    connection: Connection,
+    settings: Settings,
+    run_id: UUID,
+    *,
+    dispatch: Dispatch = _dispatch,
+) -> UUID | None:
+    """Create one audited replacement while retaining the exhausted failed run."""
+    row = (
+        connection.execute(
+            select(agent_run)
+            .where(agent_run.c.id == run_id)
+            .with_for_update()
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if (
+        row is None
+        or row["status"] != "FAILED"
+        or row["attempt_count"] < row["max_attempts"]
+    ):
+        return None
+    payload = {
+        **dict(row["request_payload"]),
+        "replaces_failed_run_id": str(run_id),
+    }
+    pin_columns = (
+        "research_scoring_policy_version",
+        "risk_policy_version",
+        "execution_policy_version",
+        "confidence_policy_version",
+        "prompt_version",
+        "model_version",
+    )
+    admitted = admit_run(
+        connection,
+        max_active_runs=settings.max_active_agent_runs,
+        run_type=cast(RunType, row["run_type"]),
+        idempotency_key=f"replacement:{run_id}",
+        payload=payload,
+        symbol=row["symbol"],
+        decision_time=row["decision_time"],
+        data_cutoff=row["data_cutoff"],
+        correlation_id=row["correlation_id"],
+        execution_pins={column: row[column] for column in pin_columns},
+    )
+    if admitted.replayed:
+        return admitted.id
+    append_run_event(
+        connection,
+        run_id,
+        "run.replacement_queued",
+        {"replacement_run_id": str(admitted.id)},
+    )
+    append_run_event(
+        connection,
+        admitted.id,
+        "run.replaces_failed",
+        {"failed_run_id": str(run_id)},
+    )
+    dispatch(TASKS[admitted.run_type], str(admitted.id))
+    return admitted.id
+
+
 def _run_schedule(kind: Literal["research", "intraday", "portfolio", "review", "recover"]) -> None:
     settings = Settings()
     with create_engine(settings.database_url).begin() as connection:
@@ -688,6 +790,21 @@ def weekly_review() -> None:
 @celery_app.task(name="stock_platform.workers.schedules.recover_queued")  # type: ignore[untyped-decorator]
 def recover_queued() -> None:
     _run_schedule("recover")
+
+
+@celery_app.task(name="stock_platform.workers.schedules.retry_failed_agent_run")  # type: ignore[untyped-decorator]
+def retry_failed_agent_run(run_id: str) -> bool:
+    settings = Settings()
+    with create_engine(settings.database_url).begin() as connection:
+        return requeue_failed_run(connection, UUID(run_id))
+
+
+@celery_app.task(name="stock_platform.workers.schedules.replace_exhausted_agent_run")  # type: ignore[untyped-decorator]
+def replace_exhausted_agent_run(run_id: str) -> str | None:
+    settings = Settings()
+    with create_engine(settings.database_url).begin() as connection:
+        replacement_id = replace_exhausted_run(connection, settings, UUID(run_id))
+    return str(replacement_id) if replacement_id is not None else None
 
 
 @celery_app.task(name="stock_platform.workers.schedules.bootstrap_agent_runs")  # type: ignore[untyped-decorator]

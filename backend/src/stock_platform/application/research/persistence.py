@@ -124,7 +124,7 @@ class PostgresResearchStore:
             if existing_evidence is not None:
                 evidence_ids.add(evidence.id)
                 continue
-            normalized_id = self.connection.execute(
+            normalized_query = (
                 select(normalized_record.c.id)
                 .select_from(
                     normalized_record.join(
@@ -138,7 +138,26 @@ class PostgresResearchStore:
                         raw_data_object.c.content_hash == evidence.content_hash,
                     )
                 )
-            ).scalar_one()
+            )
+            if evidence.normalized_record_id is not None:
+                normalized_id = self.connection.execute(
+                    normalized_query.where(
+                        normalized_record.c.id == evidence.normalized_record_id
+                    )
+                ).scalar_one()
+            else:
+                candidate_ids = tuple(self.connection.execute(normalized_query).scalars())
+                if len(candidate_ids) == 1:
+                    normalized_id = candidate_ids[0]
+                else:
+                    normalized_id = self.connection.execute(
+                        normalized_query.where(
+                            normalized_record.c.record_type == evidence.feed_type,
+                            normalized_record.c.payload.contains(
+                                {"symbol": str(evidence.symbol), **dict(evidence.payload)}
+                            ),
+                        )
+                    ).scalar_one()
             metric_id = uuid4()
             self.connection.execute(
                 insert(derived_metric).values(

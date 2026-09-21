@@ -15,6 +15,7 @@ from enum import StrEnum
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from uuid import UUID
 
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
@@ -46,6 +47,7 @@ class ProviderRecord:
     content_hash: str
     raw_object_key: str
     payload: dict[str, Any]
+    normalized_record_id: UUID | None = None
     is_delayed: bool = False
     quality_flags: tuple[str, ...] = ()
 
