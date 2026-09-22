@@ -3956,3 +3956,31 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   tests) exited 0 with 16/16 passed. Ruff exited 0 and Mypy reported no issues in 7 affected source
   files. One earlier combined command exited 4 before collection because it named a removed test
   path; the corrected command above is the recorded verification evidence.
+
+## 2026-09-22 — M8.2 production loop, FRE-43 Task 3
+
+- The scheduled Portfolio boundary now admits an immutable `DENIED_NO_ACTION` run when the configured
+  Alpaca entitlement is IEX instead of silently omitting the audit. Capacity recovery schedules the
+  remaining same-session Research runs before the Portfolio run without duplicating durable run keys.
+- A real runtime exposed the missing-context behavior before GREEN: Portfolio run
+  `8b1b1df8-...` failed with `RunInputUnavailable` because no authoritative QQQ/SOXX/VIX
+  `MarketContextSnapshot` existed. The fix does not fabricate or substitute market data. Migration
+  `0040_entitlement_risk_context` permits a null context only for an immutable `REJECTED` risk fact
+  containing `MARKET_DATA_ENTITLEMENT`; a database regression proves every other null-context risk
+  decision is rejected. Domain, persistence, REST and web contracts enforce the same nullable boundary.
+- The paper worker now persists idempotent opening CashLedger entries and cash-only PortfolioNav for
+  the entitlement denial, plus one deterministic RiskDecision and `PortfolioAction.NO_ACTION` per
+  active frozen Research decision. Existing positions cannot enter this path because they could not be
+  valued honestly without authorized marks. The SIP-only next-bar order/fill path remains unchanged.
+- The original run had already exhausted 3/3 attempts under old code and remains append-only FAILED.
+  Its audited replacement `4b423e5f-...` retained the original cutoff and all execution pins, completed
+  on attempt 1, and recorded `run.replaces_failed`, `run.started`, and `run.completed`. The production
+  query found 8 entitlement REJECTED risks with null context, 8 NO_ACTION facts, NAV `100000`, 0 orders
+  and 0 fills. No historical fact was rewritten and no Fixture data was used.
+- Verification evidence: the focused scheduling/Portfolio/accounting/rebalance command exited 0 with
+  27/27 passed; the scheduling, Research population and new worker integration group exited 0 with
+  8/8 passed; migrations plus schema exited 0 with 22/22 passed, including downgrade to 0024 and
+  re-upgrade to head. The web portfolio parser test exited 0 with 18/18 passed. Ruff format/check,
+  Mypy (290 source files), and non-incremental TypeScript typecheck all exited 0. Early invocations that
+  used the read-only worktree cache or a root-relative Vitest path were command-environment failures and
+  were rerun with isolated `/tmp` caches and the correct workspace path.

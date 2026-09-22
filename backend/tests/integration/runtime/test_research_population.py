@@ -1,6 +1,7 @@
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -30,6 +31,7 @@ from stock_platform.infrastructure.db.models.tables import (
     tool_call,
     watchlist_item,
 )
+from stock_platform.infrastructure.providers.base import ProviderResponse
 from stock_platform.settings import Settings
 from stock_platform.workers.research_tasks import execute_research_run
 from stock_platform.workers.schedules import schedule_daily_research
@@ -58,7 +60,9 @@ def test_watchlist_research_population_is_pit_safe_complete_and_idempotent(
 
     original_as_of = PostgresMarketDataRepository.as_of
 
-    def legacy_checkpoint_as_of(self, **kwargs):
+    def legacy_checkpoint_as_of(
+        self: PostgresMarketDataRepository, **kwargs: Any
+    ) -> ProviderResponse:
         response = original_as_of(self, **kwargs)
         return replace(
             response,
@@ -193,65 +197,68 @@ def test_watchlist_research_population_is_pit_safe_complete_and_idempotent(
             fixture_mode=False,
         )
 
-    lineage = (
-        select(
-            decision_snapshot.c.id,
-            raw_data_object.c.id.label("raw_id"),
+    lineage = select(
+        decision_snapshot.c.id,
+        raw_data_object.c.id.label("raw_id"),
+    ).select_from(
+        decision_snapshot.join(
+            investment_thesis,
+            decision_snapshot.c.thesis_id == investment_thesis.c.id,
         )
-        .select_from(
-            decision_snapshot.join(
-                investment_thesis,
-                decision_snapshot.c.thesis_id == investment_thesis.c.id,
-            )
-            .join(
-                thesis_evidence_link,
-                thesis_evidence_link.c.thesis_id == investment_thesis.c.id,
-            )
-            .join(evidence_item, evidence_item.c.id == thesis_evidence_link.c.evidence_id)
-            .join(claim, claim.c.evidence_id == evidence_item.c.id)
-            .join(derived_metric, derived_metric.c.id == evidence_item.c.derived_metric_id)
-            .join(
-                normalized_record,
-                normalized_record.c.id == derived_metric.c.normalized_record_id,
-            )
-            .join(
-                raw_data_object,
-                raw_data_object.c.id == normalized_record.c.raw_data_object_id,
-            )
+        .join(
+            thesis_evidence_link,
+            thesis_evidence_link.c.thesis_id == investment_thesis.c.id,
+        )
+        .join(evidence_item, evidence_item.c.id == thesis_evidence_link.c.evidence_id)
+        .join(claim, claim.c.evidence_id == evidence_item.c.id)
+        .join(derived_metric, derived_metric.c.id == evidence_item.c.derived_metric_id)
+        .join(
+            normalized_record,
+            normalized_record.c.id == derived_metric.c.normalized_record_id,
+        )
+        .join(
+            raw_data_object,
+            raw_data_object.c.id == normalized_record.c.raw_data_object_id,
         )
     )
     with engine.connect() as connection:
-        decisions = connection.execute(
-            select(
-                decision_snapshot.c.id,
-                decision_snapshot.c.data_cutoff,
-                decision_snapshot.c.available_at,
-                decision_snapshot.c.prompt_version,
-                decision_snapshot.c.model_version,
-                research_scoring_policy_version.c.version.label("research_version"),
-                risk_policy_version.c.version.label("risk_version"),
-                execution_policy_version.c.version.label("execution_version"),
-                confidence_policy_version.c.version.label("confidence_version"),
+        decisions = (
+            connection.execute(
+                select(
+                    decision_snapshot.c.id,
+                    decision_snapshot.c.data_cutoff,
+                    decision_snapshot.c.available_at,
+                    decision_snapshot.c.prompt_version,
+                    decision_snapshot.c.model_version,
+                    research_scoring_policy_version.c.version.label("research_version"),
+                    risk_policy_version.c.version.label("risk_version"),
+                    execution_policy_version.c.version.label("execution_version"),
+                    confidence_policy_version.c.version.label("confidence_version"),
+                )
+                .join(
+                    research_scoring_policy_version,
+                    research_scoring_policy_version.c.id
+                    == decision_snapshot.c.research_scoring_policy_version_id,
+                )
+                .join(
+                    risk_policy_version,
+                    risk_policy_version.c.id == decision_snapshot.c.risk_policy_version_id,
+                )
+                .join(
+                    execution_policy_version,
+                    execution_policy_version.c.id
+                    == decision_snapshot.c.execution_policy_version_id,
+                )
+                .join(
+                    confidence_policy_version,
+                    confidence_policy_version.c.id
+                    == decision_snapshot.c.confidence_policy_version_id,
+                )
+                .order_by(decision_snapshot.c.id)
             )
-            .join(
-                research_scoring_policy_version,
-                research_scoring_policy_version.c.id
-                == decision_snapshot.c.research_scoring_policy_version_id,
-            )
-            .join(
-                risk_policy_version,
-                risk_policy_version.c.id == decision_snapshot.c.risk_policy_version_id,
-            )
-            .join(
-                execution_policy_version,
-                execution_policy_version.c.id == decision_snapshot.c.execution_policy_version_id,
-            )
-            .join(
-                confidence_policy_version,
-                confidence_policy_version.c.id == decision_snapshot.c.confidence_policy_version_id,
-            )
-            .order_by(decision_snapshot.c.id)
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
         assert len(decisions) == 2
         assert all(row["data_cutoff"] == cutoff for row in decisions)
         assert all(row["available_at"] == completed_at for row in decisions)
@@ -278,8 +285,7 @@ def test_watchlist_research_population_is_pit_safe_complete_and_idempotent(
             connection.execute(select(raw_data_object.c.id)).scalars()
         )
         assert (
-            connection.execute(select(func.count()).select_from(research_opinion)).scalar_one()
-            == 2
+            connection.execute(select(func.count()).select_from(research_opinion)).scalar_one() == 2
         )
         gaps = connection.execute(
             select(evidence_gap.c.run_id, evidence_gap.c.kind, evidence_gap.c.reason)

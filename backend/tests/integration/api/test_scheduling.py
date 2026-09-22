@@ -12,6 +12,7 @@ from stock_platform.infrastructure.db.models.tables import (
 )
 from stock_platform.settings import Settings
 from stock_platform.workers.schedules import (
+    recover_and_schedule_catch_up,
     recover_queued_runs,
     replace_exhausted_run,
     requeue_failed_run,
@@ -68,7 +69,9 @@ def test_failed_run_requires_explicit_audited_retry(isolated_database_url: str) 
 
     assert row["status"] == "QUEUED"
     assert row["last_error"] == {"type": "MultipleResultsFound", "message": "worker failed"}
-    assert events == [("run.operator_retry_queued", {"previous_attempt": 1})]
+    assert [tuple(event) for event in events] == [
+        ("run.operator_retry_queued", {"previous_attempt": 1})
+    ]
     assert dispatched == [("stock_platform.workers.research_tasks.run_research", str(run_id))]
     engine.dispose()
 
@@ -157,10 +160,10 @@ def test_exhausted_run_requires_one_pinned_audited_replacement(
         "prompt-frozen",
         "model-frozen",
     )
-    assert original_events == [
+    assert [tuple(event) for event in original_events] == [
         ("run.replacement_queued", {"replacement_run_id": str(replacement_id)})
     ]
-    assert replacement_events == [
+    assert [tuple(event) for event in replacement_events] == [
         ("run.replaces_failed", {"failed_run_id": str(original_id)})
     ]
     assert dispatched == [
@@ -207,6 +210,82 @@ def test_agent_catch_up_reuses_latest_closed_session_runs(
         assert first.portfolio_run_id is not None
         assert connection.execute(select(func.count()).select_from(agent_run)).scalar_one() == 2
         assert len(dispatched) == 2
+
+    engine.dispose()
+
+
+def test_recovery_eventually_admits_catch_up_work_when_capacity_frees(
+    isolated_database_url: str,
+) -> None:
+    config = Config("backend/alembic.ini")
+    config.set_main_option("sqlalchemy.url", isolated_database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(isolated_database_url)
+    settings = Settings(
+        environment="test", database_url=isolated_database_url, max_active_agent_runs=1
+    )
+    dispatched: list[tuple[str, str]] = []
+    startup = datetime(2026, 9, 19, 12, tzinfo=UTC)
+
+    with engine.begin() as connection:
+        for symbol in ("MSFT", "NVDA"):
+            security_id = uuid4()
+            connection.execute(insert(security).values(id=security_id, instrument_type="EQUITY"))
+            connection.execute(
+                insert(watchlist_item).values(security_id=security_id, symbol=symbol)
+            )
+
+        first = schedule_agent_catch_up(
+            connection,
+            settings,
+            now=startup,
+            dispatch=lambda task, run_id: dispatched.append((task, run_id)),
+        )
+        assert len(first.research_run_ids) == 1
+        assert first.portfolio_run_id is None
+        connection.execute(
+            update(agent_run)
+            .where(agent_run.c.id == first.research_run_ids[0])
+            .values(status="COMPLETED")
+        )
+
+        _, second = recover_and_schedule_catch_up(
+            connection,
+            settings,
+            now=startup,
+            dispatch=lambda task, run_id: dispatched.append((task, run_id)),
+        )
+        assert len(second.research_run_ids) == 2
+        assert second.portfolio_run_id is None
+        second_research_id = next(
+            run_id for run_id in second.research_run_ids if run_id != first.research_run_ids[0]
+        )
+        connection.execute(
+            update(agent_run).where(agent_run.c.id == second_research_id).values(status="COMPLETED")
+        )
+
+        _, third = recover_and_schedule_catch_up(
+            connection,
+            settings,
+            now=startup,
+            dispatch=lambda task, run_id: dispatched.append((task, run_id)),
+        )
+        assert third.portfolio_run_id is not None
+        connection.execute(
+            update(agent_run)
+            .where(agent_run.c.id == third.portfolio_run_id)
+            .values(status="COMPLETED")
+        )
+        replay = recover_and_schedule_catch_up(
+            connection,
+            settings,
+            now=startup,
+            dispatch=lambda task, run_id: dispatched.append((task, run_id)),
+        )[1]
+
+        assert replay == third
+        assert connection.execute(select(func.count()).select_from(agent_run)).scalar_one() == 3
+        assert len(dispatched) == 3
 
     engine.dispose()
 
@@ -376,5 +455,17 @@ def test_paper_run_admission_records_research_gap_and_denies_portfolio_without_s
         "entitlement_version": "operator-verified-v1",
         "declared_delay_seconds": None,
     }
-    assert portfolio_id is None
+    assert portfolio_id is not None
+    with engine.connect() as connection:
+        portfolio_payload = connection.execute(
+            select(agent_run.c.request_payload).where(agent_run.c.id == portfolio_id)
+        ).scalar_one()
+    assert portfolio_payload["market_data_admission"] == {
+        "outcome": "DENIED_NO_ACTION",
+        "selected_coverage": None,
+        "gap_kind": "UNAVAILABLE",
+        "reason": "SIP entitlement unavailable",
+        "entitlement_version": "operator-verified-v1",
+        "declared_delay_seconds": None,
+    }
     engine.dispose()

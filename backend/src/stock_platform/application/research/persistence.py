@@ -141,9 +141,7 @@ class PostgresResearchStore:
             )
             if evidence.normalized_record_id is not None:
                 normalized_id = self.connection.execute(
-                    normalized_query.where(
-                        normalized_record.c.id == evidence.normalized_record_id
-                    )
+                    normalized_query.where(normalized_record.c.id == evidence.normalized_record_id)
                 ).scalar_one()
             else:
                 candidate_ids = tuple(self.connection.execute(normalized_query).scalars())

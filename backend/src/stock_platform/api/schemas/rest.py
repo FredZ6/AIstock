@@ -184,7 +184,7 @@ class RiskDecisionItem(StrictModel):
     max_order_quantity: Decimal
     authorization_source: str
     authorized_side: Literal["BUY", "SELL"] | None
-    market_context_snapshot_id: UUID
+    market_context_snapshot_id: UUID | None
     reason_codes: list[str]
     risk_policy_version_id: UUID
     decided_at: datetime

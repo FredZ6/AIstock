@@ -143,7 +143,7 @@ export type PortfolioSummary = {
     currentWeight: string
     decidedAt: string
     id: string
-    marketContextSnapshotId: string
+    marketContextSnapshotId: string | null
     maxOrderQuantity: string
     portfolioId: string
     proposalId: string
@@ -917,7 +917,7 @@ export async function getPortfolioSummary(options: LiveDataClientOptions): Promi
         currentWeight: decimal(value.current_weight, `${path}.current_weight`),
         decidedAt: instant(value.decided_at, `${path}.decided_at`),
         id: text(value.id, `${path}.id`),
-        marketContextSnapshotId: text(value.market_context_snapshot_id, `${path}.market_context_snapshot_id`),
+        marketContextSnapshotId: nullableText(value.market_context_snapshot_id, `${path}.market_context_snapshot_id`),
         maxOrderQuantity: decimal(value.max_order_quantity, `${path}.max_order_quantity`),
         portfolioId: text(value.portfolio_id, `${path}.portfolio_id`),
         proposalId: text(value.proposal_id, `${path}.proposal_id`),

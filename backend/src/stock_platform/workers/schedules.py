@@ -536,8 +536,6 @@ def schedule_portfolio_decision(
         cutoff=cutoff,
         purpose=DataPurpose.PAPER_EXECUTION,
     )
-    if admission is not None and admission.outcome is PolicyOutcome.DENIED_NO_ACTION:
-        return None
     return _schedule(
         connection,
         settings,
@@ -646,6 +644,29 @@ def recover_queued_runs(
     return tuple(str(run_id) for run_id, _ in rows)
 
 
+def recover_and_schedule_catch_up(
+    connection: Connection,
+    settings: Settings,
+    *,
+    now: datetime | None = None,
+    dispatch: Dispatch = _dispatch,
+) -> tuple[tuple[str, ...], ScheduledAgentCatchUp]:
+    """Recover durable work, then admit missed session work as capacity becomes available."""
+    recovery_time = require_aware(now or datetime.now(UTC))
+    recovered = recover_queued_runs(
+        connection,
+        now=recovery_time,
+        dispatch=dispatch,
+    )
+    catch_up = schedule_agent_catch_up(
+        connection,
+        settings,
+        now=recovery_time,
+        dispatch=dispatch,
+    )
+    return recovered, catch_up
+
+
 def requeue_failed_run(
     connection: Connection,
     run_id: UUID,
@@ -654,19 +675,11 @@ def requeue_failed_run(
 ) -> bool:
     """Explicitly retry one non-exhausted failed run while preserving its failure audit."""
     row = (
-        connection.execute(
-            select(agent_run)
-            .where(agent_run.c.id == run_id)
-            .with_for_update()
-        )
+        connection.execute(select(agent_run).where(agent_run.c.id == run_id).with_for_update())
         .mappings()
         .one_or_none()
     )
-    if (
-        row is None
-        or row["status"] != "FAILED"
-        or row["attempt_count"] >= row["max_attempts"]
-    ):
+    if row is None or row["status"] != "FAILED" or row["attempt_count"] >= row["max_attempts"]:
         return False
     connection.execute(
         update(agent_run)
@@ -692,19 +705,11 @@ def replace_exhausted_run(
 ) -> UUID | None:
     """Create one audited replacement while retaining the exhausted failed run."""
     row = (
-        connection.execute(
-            select(agent_run)
-            .where(agent_run.c.id == run_id)
-            .with_for_update()
-        )
+        connection.execute(select(agent_run).where(agent_run.c.id == run_id).with_for_update())
         .mappings()
         .one_or_none()
     )
-    if (
-        row is None
-        or row["status"] != "FAILED"
-        or row["attempt_count"] < row["max_attempts"]
-    ):
+    if row is None or row["status"] != "FAILED" or row["attempt_count"] < row["max_attempts"]:
         return None
     payload = {
         **dict(row["request_payload"]),
@@ -761,7 +766,7 @@ def _run_schedule(kind: Literal["research", "intraday", "portfolio", "review", "
         elif kind == "review":
             schedule_weekly_review(connection, settings, now)
         else:
-            recover_queued_runs(connection)
+            recover_and_schedule_catch_up(connection, settings, now=now)
 
 
 from stock_platform.workers.celery_app import celery_app  # noqa: E402, I001

@@ -12,6 +12,7 @@ from stock_platform.application.portfolio.risk import RiskDecision
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.portfolio.fill import PaperFill
 from stock_platform.domain.portfolio.ledger import LedgerEntry, cash_balance, is_balanced
+from stock_platform.domain.portfolio.nav import PortfolioNav
 from stock_platform.domain.portfolio.order import OrderIntent, OrderSide
 from stock_platform.infrastructure.db.models.tables import (
     cash_ledger,
@@ -19,11 +20,13 @@ from stock_platform.infrastructure.db.models.tables import (
     order_intent,
     paper_fill,
     paper_order,
+    portfolio_nav,
 )
 from stock_platform.infrastructure.db.models.tables import risk_decision as risk_decision_table
 
 _LEDGER_NAMESPACE = UUID("1f77598e-274a-4966-8d99-b5fd3fb4af6c")
 _FILL_NAMESPACE = UUID("9d1ac474-0f57-45d9-a942-1f2b1b8743cb")
+_NAV_NAMESPACE = UUID("623b081e-7365-4238-8c18-8d87f57ac7b8")
 ZERO = Decimal("0")
 
 
@@ -227,38 +230,42 @@ class PostgresPaperAccountingStore:
     def persist_risk_decision(
         self,
         risk_decision: RiskDecision,
-        market_context: MarketContextSnapshot,
+        market_context: MarketContextSnapshot | None,
     ) -> None:
-        if risk_decision.market_context_snapshot_id != market_context.id:
-            raise ValueError("risk decision must point to its frozen market context")
-        context_values = {
-            "id": market_context.id,
-            "as_of": market_context.as_of,
-            "available_at": market_context.available_at,
-            "qqq_trend": market_context.qqq_trend,
-            "qqq_volatility": market_context.qqq_volatility,
-            "soxx_relative_strength": market_context.soxx_relative_strength,
-            "vix": market_context.vix,
-            "regime_label": market_context.regime.value,
-            "algorithm_version": market_context.algorithm_version,
-            "source_lineage": [str(item) for item in market_context.source_lineage],
-        }
-        self.connection.execute(
-            insert(market_context_snapshot)
-            .values(**context_values)
-            .on_conflict_do_nothing(index_elements=[market_context_snapshot.c.id])
-        )
-        persisted_context = (
+        if market_context is None:
+            if risk_decision.market_context_snapshot_id is not None:
+                raise ValueError("risk decision references a missing frozen market context")
+        else:
+            if risk_decision.market_context_snapshot_id != market_context.id:
+                raise ValueError("risk decision must point to its frozen market context")
+            context_values = {
+                "id": market_context.id,
+                "as_of": market_context.as_of,
+                "available_at": market_context.available_at,
+                "qqq_trend": market_context.qqq_trend,
+                "qqq_volatility": market_context.qqq_volatility,
+                "soxx_relative_strength": market_context.soxx_relative_strength,
+                "vix": market_context.vix,
+                "regime_label": market_context.regime.value,
+                "algorithm_version": market_context.algorithm_version,
+                "source_lineage": [str(item) for item in market_context.source_lineage],
+            }
             self.connection.execute(
-                select(market_context_snapshot).where(
-                    market_context_snapshot.c.id == market_context.id
-                )
+                insert(market_context_snapshot)
+                .values(**context_values)
+                .on_conflict_do_nothing(index_elements=[market_context_snapshot.c.id])
             )
-            .mappings()
-            .one()
-        )
-        if any(persisted_context[key] != value for key, value in context_values.items()):
-            raise ValueError("market context identity was reused with different facts")
+            persisted_context = (
+                self.connection.execute(
+                    select(market_context_snapshot).where(
+                        market_context_snapshot.c.id == market_context.id
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            if any(persisted_context[key] != value for key, value in context_values.items()):
+                raise ValueError("market context identity was reused with different facts")
         authorized_side = (
             "BUY"
             if risk_decision.approved_delta > ZERO
@@ -325,6 +332,45 @@ class PostgresPaperAccountingStore:
                 )
                 .on_conflict_do_nothing(index_elements=[cash_ledger.c.idempotency_key])
             )
+
+    def persist_nav(
+        self,
+        *,
+        run_id: UUID,
+        portfolio_id: UUID,
+        nav: PortfolioNav,
+        event_time: datetime,
+        available_at: datetime,
+    ) -> None:
+        event = require_aware(event_time)
+        available = require_aware(available_at)
+        if available < event:
+            raise ValueError("portfolio NAV cannot be available before its event time")
+        nav_id = uuid5(_NAV_NAMESPACE, str(run_id))
+        values = {
+            "id": nav_id,
+            "portfolio_id": portfolio_id,
+            "nav": nav.total,
+            "event_time": event,
+            "available_at": available,
+        }
+        self.connection.execute(
+            insert(portfolio_nav)
+            .values(**values)
+            .on_conflict_do_nothing(index_elements=[portfolio_nav.c.id, portfolio_nav.c.event_time])
+        )
+        persisted = (
+            self.connection.execute(
+                select(portfolio_nav).where(
+                    portfolio_nav.c.id == nav_id,
+                    portfolio_nav.c.event_time == event,
+                )
+            )
+            .mappings()
+            .one()
+        )
+        if any(persisted[key] != value for key, value in values.items()):
+            raise ValueError("portfolio NAV identity was reused with different facts")
 
     def persist(
         self,

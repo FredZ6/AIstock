@@ -363,7 +363,7 @@ describe('live data API client', () => {
         { available_at: '2026-08-29T09:21:00Z', event_time: '2026-08-29T09:20:00Z', id: 'nav-2', nav: '100500', portfolio_id: 'portfolio-1' },
       ],
       positions: [{ average_cost: '190', market_price: '200', market_value: '10000', price_available_at: '2026-08-29T09:19:00Z', quantity: '50', symbol: 'NVDA', unrealized_pnl: '500' }],
-      risk_decisions: [{ approved_delta: '0.1', approved_weight: '0.1', authorization_source: 'policy', authorized_side: 'BUY', created_at: '2026-08-29T09:18:00Z', current_weight: '0', decided_at: '2026-08-29T09:18:00Z', id: 'risk-1', market_context_snapshot_id: 'context-1', max_order_quantity: '50', portfolio_id: 'portfolio-1', proposal_id: 'proposal-1', reason_codes: [], reference_nav: '100000', reference_price: '190', research_decision_id: 'research-1', requested_weight: '0.1', risk_policy_version_id: 'risk-v1', status: 'APPROVED', symbol: 'NVDA' }],
+      risk_decisions: [{ approved_delta: '0', approved_weight: '0', authorization_source: 'DETERMINISTIC', authorized_side: null, created_at: '2026-08-29T09:18:00Z', current_weight: '0', decided_at: '2026-08-29T09:18:00Z', id: 'risk-1', market_context_snapshot_id: null, max_order_quantity: '0', portfolio_id: 'portfolio-1', proposal_id: 'proposal-1', reason_codes: ['MARKET_DATA_ENTITLEMENT'], reference_nav: null, reference_price: null, research_decision_id: 'research-1', requested_weight: '0.1', risk_policy_version_id: 'risk-v1', status: 'REJECTED', symbol: 'NVDA' }],
       status: 'SUCCESS', trading: 'paper_only',
     }))
 
@@ -372,7 +372,7 @@ describe('live data API client', () => {
       fills: [{ price: '190', quantity: '50', symbol: 'NVDA' }],
       performanceHistory: [{ nav: '101000' }, { availableAt: '2026-08-29T09:21:00Z', nav: '100500' }],
       positions: [{ marketValue: '10000', unrealizedPnl: '500' }],
-      riskDecisions: [{ approvedWeight: '0.1', status: 'APPROVED' }],
+      riskDecisions: [{ approvedWeight: '0', marketContextSnapshotId: null, status: 'REJECTED' }],
     })
 
     const invalidFetch = vi.fn(async () => jsonResponse({

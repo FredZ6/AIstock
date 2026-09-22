@@ -75,18 +75,18 @@ def test_celery_is_at_least_once_without_authoritative_result_backend() -> None:
     assert celery_app.conf.task_routes[
         "stock_platform.workers.ingestion_tasks.run_sec_ingestion_job"
     ] == {"queue": "research-ingestion"}
-    assert celery_app.conf.task_routes[
-        "stock_platform.workers.research_tasks.run_research"
-    ] == {"queue": "agent-research"}
-    assert celery_app.conf.task_routes[
-        "stock_platform.workers.portfolio_tasks.run_portfolio"
-    ] == {"queue": "agent-portfolio"}
-    assert celery_app.conf.task_routes[
-        "stock_platform.workers.research_tasks.monitor_market"
-    ] == {"queue": "agent-alert"}
-    assert celery_app.conf.task_routes[
-        "stock_platform.workers.review_tasks.run_weekly_review"
-    ] == {"queue": "agent-review"}
+    assert celery_app.conf.task_routes["stock_platform.workers.research_tasks.run_research"] == {
+        "queue": "agent-research"
+    }
+    assert celery_app.conf.task_routes["stock_platform.workers.portfolio_tasks.run_portfolio"] == {
+        "queue": "agent-portfolio"
+    }
+    assert celery_app.conf.task_routes["stock_platform.workers.research_tasks.monitor_market"] == {
+        "queue": "agent-alert"
+    }
+    assert celery_app.conf.task_routes["stock_platform.workers.review_tasks.run_weekly_review"] == {
+        "queue": "agent-review"
+    }
     assert set(beat_schedule) == {
         "daily-research-after-close",
         "intraday-market-monitor",
