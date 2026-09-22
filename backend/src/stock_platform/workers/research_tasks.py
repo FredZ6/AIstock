@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import Connection, func, select
@@ -8,6 +8,14 @@ from stock_platform.agents.checkpointing import postgres_checkpointer
 from stock_platform.agents.harness.budget import BudgetLimits
 from stock_platform.agents.harness.task_spec import PolicyVersions, TaskSpecification
 from stock_platform.agents.research.graph import DailyResearchGraph
+from stock_platform.application.alerting.dedup import AlertIdentity
+from stock_platform.application.alerting.features import FeatureCalculator
+from stock_platform.application.alerting.outbox import (
+    NotificationChannel,
+    PostgresAlertContextResolver,
+    PostgresAlertStore,
+)
+from stock_platform.application.alerting.rules import AlertRule
 from stock_platform.application.market_data.repositories import PostgresMarketDataRepository
 from stock_platform.application.research.persistence import PostgresResearchStore
 from stock_platform.application.runs import RunControl, execute_run
@@ -24,6 +32,7 @@ from stock_platform.infrastructure.providers.base import (
 from stock_platform.infrastructure.providers.fixture.loader import FixtureCatalog
 from stock_platform.mcp_servers.common import McpProviderGateway, durable_mcp_audit_sink
 from stock_platform.settings import Settings
+from stock_platform.workers.alert_worker import ExplanationStatus
 from stock_platform.workers.celery_app import celery_app
 
 
@@ -192,14 +201,102 @@ def execute_market_monitor_run(database_url: str, run_id: str) -> bool:
     run_uuid = UUID(run_id)
 
     def work(connection: Connection, row: RowMapping, control: RunControl) -> None:
+        event_cutoff = row["decision_time"]
+        availability_cutoff = row["data_cutoff"]
         visible_bars = connection.execute(
             select(func.count())
             .select_from(market_bar)
             .where(
-                market_bar.c.event_time <= row["decision_time"],
-                market_bar.c.available_at <= row["data_cutoff"],
+                market_bar.c.feed_type == "minute_bars_stream",
+                market_bar.c.event_time <= event_cutoff,
+                market_bar.c.available_at <= availability_cutoff,
             )
         ).scalar_one()
-        control.emit("monitor.completed", {"visible_bars": visible_bars})
+        symbols = tuple(
+            connection.execute(
+                select(market_bar.c.symbol)
+                .where(
+                    market_bar.c.feed_type == "minute_bars_stream",
+                    market_bar.c.event_time <= event_cutoff,
+                    market_bar.c.available_at <= availability_cutoff,
+                )
+                .distinct()
+                .order_by(market_bar.c.symbol)
+            ).scalars()
+        )
+        store = PostgresAlertStore(connection)
+        resolve_context = PostgresAlertContextResolver(connection)
+        calculator = FeatureCalculator(lookback=5)
+        rule = AlertRule.default()
+        alerts_created = 0
+        symbols_evaluated = 0
+        unavailable_context = 0
+        for symbol in symbols:
+            history = store.recent_bars(
+                symbol=symbol,
+                through=event_cutoff,
+                available_by=availability_cutoff,
+                limit=6,
+            )
+            if len(history) < 6:
+                continue
+            symbols_evaluated += 1
+            features = calculator.calculate(
+                history,
+                evaluated_at=availability_cutoff,
+                gap_context=store.gap_context(
+                    symbol=symbol,
+                    through=event_cutoff,
+                    available_by=availability_cutoff,
+                ),
+            )
+            evaluation = rule.evaluate(features)
+            if not evaluation.triggered:
+                continue
+            try:
+                context = resolve_context(symbol, availability_cutoff)
+            except LookupError:
+                unavailable_context += 1
+                continue
+            identity = AlertIdentity.for_trigger(
+                symbol=symbol,
+                rule_id=evaluation.rule_id,
+                event_time=features.event_time,
+                cooldown=timedelta(minutes=15),
+            )
+            inserted = store.persist_alert(
+                alert_id=identity.id,
+                alert_key=identity.key,
+                features=features,
+                evaluation=evaluation,
+                context=context,
+                review_action=(
+                    "REVIEW_INVALIDATION_CONDITION"
+                    if context.invalidation_condition
+                    else "REVIEW_ACTIVE_THESIS"
+                ),
+                channels=(
+                    NotificationChannel.TELEGRAM,
+                    NotificationChannel.FEISHU,
+                    NotificationChannel.EMAIL,
+                ),
+            )
+            store.record_explanation(
+                alert_id=identity.id,
+                status=ExplanationStatus.DISABLED,
+                content=None,
+                error_code=None,
+            )
+            alerts_created += int(inserted)
+        control.emit(
+            "monitor.completed",
+            {
+                "visible_bars": visible_bars,
+                "symbols_visible": len(symbols),
+                "symbols_evaluated": symbols_evaluated,
+                "alerts_created": alerts_created,
+                "unavailable_context": unavailable_context,
+            },
+        )
 
     return execute_run(database_url, run_uuid, "ALERT_MONITOR", work)

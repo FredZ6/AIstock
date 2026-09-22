@@ -3984,3 +3984,22 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   Mypy (290 source files), and non-incremental TypeScript typecheck all exited 0. Early invocations that
   used the read-only worktree cache or a root-relative Vitest path were command-environment failures and
   were rerun with isolated `/tmp` caches and the correct workspace path.
+
+## 2026-09-22 — M8.2 production loop, FRE-43 Task 4
+
+- RED: `test_alert_worker_runtime.py` exited 1 because `monitor_market` only counted visible rows and
+  persisted zero Alert facts. GREEN now loads canonical `minute_bars_stream` revisions under both
+  `event_time <= decision_time` and `available_at <= data_cutoff`, calculates the existing Decimal-only
+  anomaly features, applies `market-anomaly-v1`, resolves cutoff-safe Thesis/Evidence context, and
+  persists the deterministic Alert, metrics, Thesis link and notification outbox boundary. The Agent
+  never sends a notification and the optional LLM explanation is recorded as `DISABLED`.
+- A concurrent two-run regression then exposed a PostgreSQL deadlock between the alert unique index
+  and time-series metric insertion. `PostgresAlertStore.persist_alert` now serializes only identical
+  deterministic alert keys with a transaction advisory lock; independent symbols/keys remain
+  concurrent. Both runs complete, while exactly one Alert and one outbox fact survive. A separate
+  missing-context regression proves the run completes with `unavailable_context=1` and fabricates no
+  Alert when no cutoff-safe Thesis exists.
+- Verification: the focused runtime suite exited 0 with 2/2 passed; the combined runtime plus complete
+  market replay suite exited 0 with 12/12 passed, covering duplicate delivery, concurrent recovery,
+  corrected/out-of-order bars, Redis pending recovery, MinIO raw-object lineage and provider failure
+  behavior. Ruff format/check and Mypy (291 source files) exited 0.

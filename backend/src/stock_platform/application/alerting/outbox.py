@@ -559,6 +559,9 @@ class PostgresAlertStore:
         review_action: str,
         channels: tuple[NotificationChannel, ...],
     ) -> bool:
+        self.connection.execute(
+            select(func.pg_advisory_xact_lock(func.hashtextextended(alert_key, 0)))
+        )
         metrics = features.metrics()
         quality = {
             "freshness_seconds": str(features.data_quality.freshness.total_seconds()),
