@@ -4003,3 +4003,22 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   market replay suite exited 0 with 12/12 passed, covering duplicate delivery, concurrent recovery,
   corrected/out-of-order bars, Redis pending recovery, MinIO raw-object lineage and provider failure
   behavior. Ruff format/check and Mypy (291 source files) exited 0.
+
+## 2026-09-22 — M8.2 production loop, FRE-43 Task 5
+
+- The worker RED first confirmed its existing PIT discipline: reference bars available one second
+  after decision time were correctly rejected. With valid pre-decision reference bars, RED then failed
+  because no forward replay was produced. GREEN adds one bounded loader for persisted CandidateLesson
+  inputs. Eligibility requires lesson creation before the review cutoff, at least one prior replay, and
+  latest append-only human action `APPROVE` at or before the cutoff; future and unapproved lessons are
+  excluded without mutating their status.
+- The non-Fixture worker regression covers one mature decision, one pending decision, NVDA and QQQ
+  point-in-time price paths, and prior/future/unapproved lessons. It persists only the mature Outcome,
+  retains the pending decision ID, records 1-day/5-day returns and excess returns, MFE, MAE,
+  risk-adjusted return and calibration error, and creates a forward replay only for the prior validated
+  lesson. Newly derived lessons remain `CANDIDATE`; no PolicyCandidate or activation is created.
+- The full Weekly Review, append-only learning, human approval and policy-promotion security suite
+  initially exposed two legacy tests that counted the entire durable database instead of their own run.
+  Their queries now scope through the test's weekly-review lineage and preserve all existing history.
+  The corrected complete suite exited 0 with 22/22 passed. Ruff format/check and Mypy (292 source
+  files) exited 0.
