@@ -100,6 +100,44 @@ describe('StateBoundary', () => {
     expect(screen.getByRole('link', { name: 'Review provider coverage' })).toHaveAttribute('href', '/watchlist')
   })
 
+  it('renders exact availability states, reasons, and safe operator actions', () => {
+    render(
+      <StateBoundary
+        state={{
+          kind: 'degraded',
+          title: 'Evidence availability is degraded',
+          message: 'Available facts remain visible.',
+          groups: [{
+            label: 'Research',
+            items: [
+              {
+                key: 'sec',
+                label: 'SEC filings',
+                state: 'UNCONFIGURED',
+                reason: 'Configure SEC_USER_AGENT with a monitored contact identity.',
+                action: { href: '/eval', label: 'Review runtime configuration' },
+              },
+              {
+                key: 'options',
+                label: 'Options',
+                state: 'UNSUPPORTED',
+                reason: 'No approved read-only producer exists for options.',
+                action: null,
+              },
+            ],
+          }],
+        }}
+      />,
+    )
+
+    const status = screen.getByRole('status', { name: 'Evidence availability is degraded' })
+    expect(status).toHaveTextContent('UNCONFIGURED')
+    expect(status).toHaveTextContent('UNSUPPORTED')
+    expect(status).toHaveTextContent('Configure SEC_USER_AGENT')
+    expect(status).toHaveTextContent('No approved read-only producer exists')
+    expect(screen.getByRole('link', { name: 'Review runtime configuration' })).toHaveAttribute('href', '/eval')
+  })
+
   it('keeps available records visible when a response is partial', () => {
     render(
       <StateBoundary

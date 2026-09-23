@@ -6,6 +6,7 @@ import { FormEvent, useState } from 'react'
 import type { ApiWatchlistItem, WatchlistSnapshot } from '../../lib/product-types'
 import type { EarningsEvent, LiveDataStatus, MarketBar, MarketQuote } from '../../lib/server/live-data-api'
 import { formatMoney, formatPercent } from '../../lib/format'
+import { availabilityFromDomain, dedupeAvailability } from '../../lib/availability'
 import { parseAwareInstant } from '../../lib/time'
 import { formatDualTime } from '../../lib/time'
 import { AppShell } from '../layout/app-shell'
@@ -42,15 +43,17 @@ export function ApiWatchlistPage({
       : false
   })
   const missingEarnings = items.filter((item) => !(item.symbol in earningsBySymbol))
-  const missing = [
-    ...(quoteStatus === 'DEGRADED' ? ['Market quote quality'] : []),
-    ...(hasCompleteMarketQuotes || quoteStatus === 'DEGRADED' ? [] : missingSymbols.length ? missingSymbols.map((symbol) => `${symbol} market quote`) : ['Market data']),
-    ...missingTrends.map((item) => `${item.symbol} trend`),
-    ...staleTrends.map((item) => `${item.symbol} trend stale`),
-    'Research',
-    ...missingEarnings.map((item) => `${item.symbol} earnings`),
-    'Decision history',
-  ]
+  const missing = dedupeAvailability([
+    ...(quoteStatus === 'DEGRADED' ? [availabilityFromDomain({ key: 'market:quality', label: 'Market quote quality', reason: 'Persisted quote coverage or quality is degraded.', state: 'DEGRADED', action: { href: '/eval', label: 'Review provider health' } })] : []),
+    ...(hasCompleteMarketQuotes || quoteStatus === 'DEGRADED' ? [] : missingSymbols.length
+      ? missingSymbols.map((symbol) => availabilityFromDomain({ key: `market:quote:${symbol}`, label: `${symbol} market quote`, reason: 'No point-in-time eligible market quote is persisted.', state: 'EMPTY', action: { href: '/eval', label: 'Review market ingestion' } }))
+      : [availabilityFromDomain({ key: 'market:quotes', label: 'Market data', reason: 'No persisted market quotes are available for the watchlist.', state: 'EMPTY', action: { href: '/eval', label: 'Review market ingestion' } })]),
+    ...missingTrends.map((item) => availabilityFromDomain({ key: `market:trend:${item.symbol}`, label: `${item.symbol} trend`, reason: 'At least two persisted bars are required to derive a trend.', state: 'EMPTY', action: { href: '/eval', label: 'Review bar ingestion' } })),
+    ...staleTrends.map((item) => availabilityFromDomain({ key: `market:trend:${item.symbol}`, label: `${item.symbol} trend stale`, reason: 'The latest persisted trend input is stale at this cutoff.', state: 'STALE', action: { href: '/eval', label: 'Review bar freshness' } })),
+    availabilityFromDomain({ key: 'research:watchlist', label: 'Research', reason: 'No persisted research enrichment is included in this watchlist response.', state: 'EMPTY', action: { href: '/research', label: 'Review research' } }),
+    ...missingEarnings.map((item) => availabilityFromDomain({ key: `research:earnings:${item.symbol}`, label: `${item.symbol} earnings`, reason: 'No point-in-time eligible earnings event is persisted.', state: 'EMPTY', action: { href: `/research/${item.symbol}`, label: `Review ${item.symbol} research` } })),
+    availabilityFromDomain({ key: 'research:history', label: 'Decision history', reason: 'Decision history is available on each stock research page, not in this summary.', state: 'UNSUPPORTED', action: { href: '/research', label: 'Open research history' } }),
+  ])
   return (
     <AppShell currentPath="/watchlist">
       <LiveDataRefresh />
@@ -66,7 +69,7 @@ export function ApiWatchlistPage({
         message: hasCompleteMarketQuotes
           ? 'ALPACA market quotes remain visible. Missing research facts are never replaced with Fixture data.'
           : 'Persisted schedules and thresholds remain usable. Missing facts are never replaced with Fixture data.',
-        providers: missing,
+        groups: [{ label: 'Availability', items: missing }],
       }}>
         <WatchlistApiControls asOf={asOf} earningsBySymbol={earningsBySymbol} historiesBySymbol={historiesBySymbol} items={items} quotes={quotes} />
       </StateBoundary>

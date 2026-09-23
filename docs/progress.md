@@ -4060,3 +4060,37 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   backend 764 passed / 5 optional live-provider tests skipped, frontend 219 passed, and the production
   build succeeded. The managed runtime was stopped before the final database-wide gate; Docker volumes
   and all persisted Paper/Research facts remain intact.
+
+## 2026-09-24 — Runtime closure, FRE-44 truthful availability and Eval isolation
+
+- RED proved that Today omitted fulfilled Research evidence gaps, provider display could label a
+  configured provider without a health observation as unavailable, Watchlist and Research collapsed
+  distinct absence causes into generic strings, and the frontend loaded every append-only Eval row,
+  including incomplete diagnostic sentinels. GREEN introduces one typed availability model with the
+  exact `EMPTY`, `UNSUPPORTED`, `UNCONFIGURED`, `STALE`, `DEGRADED`, and `FAILURE` states. Today,
+  Watchlist and Stock Research now show the persisted reason plus a safe operator action, or explicitly
+  explain that no approved producer exists. Provider labels and unavailable counts are derived from
+  the same deduplicated facts, so the summary cannot disagree with its disclosure.
+- The append-only Eval audit remains unchanged. `GET /api/v1/evals/runs` retains `audience=all` as its
+  backwards-compatible audit view and adds `audience=operator`, which requires cutoff-safe metric and
+  regression-gate evidence. The web Eval page requests only the operator view; complete failed runs
+  remain visible while incomplete sentinel rows are isolated without deleting or rewriting history.
+  The generated OpenAPI contract records the new enum parameter.
+- Accessibility/browser acceptance opens the availability disclosure by keyboard on desktop and
+  mobile, verifies its displayed count equals the rendered canonical facts, confirms explicit
+  unconfigured providers and empty NAV, checks the honest empty operator Eval state, prevents viewport
+  overflow, and reports no serious or critical Axe violations. The first browser run exposed real
+  low-contrast state text; the shared signal and availability colors were corrected before GREEN.
+- TDD and verification evidence: focused availability/state tests exited 0 with 17/17 passed; Eval
+  frontend and backend contract checks exited 0 with 26/26 and 2/2 passed; the complete frontend suite
+  exited 0 with 35 files and 229/229 tests; REST contract exited 0 with 19/19 passed; TypeScript,
+  ESLint, Ruff and the production build exited 0. The managed API browser regression exited 0 with
+  1/1 pytest wrapper passed across its desktop/mobile Playwright projects. The final fresh
+  `make verify` exited 0: Ruff format/check clean for 339 files, Mypy clean for 292 source files,
+  Alembic drift and generated-contract checks passed, backend 765 passed / 5 optional live-provider
+  tests skipped, frontend 229 passed, and the Next.js production build succeeded.
+- Two infrastructure-only verification interruptions were recorded rather than hidden: the first full
+  run found Redis and MinIO stopped (`localhost:56379` and `localhost:59000` refused connections), and
+  the next run caught a Docker/PostgreSQL clock drift in migration 0035. Starting the declared services
+  and confirming host/container/database UTC alignment made the unchanged migration regression pass;
+  no product fact, migration, or append-only history was modified to mask either environment failure.

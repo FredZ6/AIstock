@@ -11,7 +11,7 @@
   --text-secondary: oklch(45% 0.04 258);
   --text-tertiary: oklch(50% 0.035 258);
   --signal: oklch(52% 0.15 252);
-  --signal-text: oklch(41% 0.15 252);
+  --signal-text: oklch(38% 0.15 252);
   --positive: oklch(51% 0.15 148);
   --negative: oklch(52% 0.19 27);
   --space-page: clamp(1rem, 3vw, 3rem);
@@ -115,10 +115,14 @@ a:active, button:active { transform: scale(0.98); transition: transform 100ms ea
 .state-timestamp { margin: 0.65rem 0 0; color: var(--text-tertiary); font-size: 0.7rem; }
 .state-tags { display: flex; flex-wrap: wrap; gap: 0.45rem; padding: 0; margin: 0.7rem 0 0; list-style: none; }
 .state-tags li { padding: 0.35rem 0.6rem; border: 1px solid color-mix(in oklch, var(--signal) 35%, var(--line)); border-radius: 999px; color: var(--signal); font-size: 0.68rem; font-weight: 650; }
+.state-tags li.state-fact { display: grid; gap: 0.25rem; min-width: min(18rem, 100%); padding: 0.65rem 0.75rem; border-radius: 1rem; color: var(--text); font-weight: 500; }
+.state-fact strong { color: var(--signal-text); font-size: 0.68rem; letter-spacing: 0.04em; }
+.state-fact span { color: var(--text-secondary); line-height: 1.45; }
+.state-fact a { width: fit-content; color: var(--signal-text); font-weight: 700; }
 .state-details { margin-left: auto; }
 .state-details summary { color: var(--signal-text); cursor: pointer; font-size: 0.7rem; font-weight: 700; }
 .state-detail-groups { display: grid; gap: 0.65rem; min-width: min(38rem, 80vw); padding-top: 0.7rem; }
-.state-detail-groups h3 { margin: 0; color: var(--muted); font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.state-detail-groups h3 { margin: 0; color: var(--text-secondary); font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; }
 .state-detail-groups .state-tags { margin-top: 0.35rem; }
 .state-retry { display: inline-block; margin-top: 0.7rem; color: var(--signal-text); font-size: 0.75rem; font-weight: 700; }
 .state-surface[data-state="failure"] .state-retry { color: var(--negative); }
@@ -142,8 +146,8 @@ a:active, button:active { transform: scale(0.98); transition: transform 100ms ea
 .signal-dot { width: 0.45rem; height: 0.45rem; border: 1px solid currentColor; border-radius: 50%; background: currentColor; }
 .signal[data-tone="positive"], .signal[data-tone="bullish"], .signal[data-tone="healthy"] { color: var(--positive); }
 .signal[data-tone="high"], .signal[data-tone="critical"], .signal[data-tone="bearish"], .signal[data-tone="unavailable"] { color: var(--negative); }
-.signal[data-tone="degraded"], .signal[data-tone="stale"] { color: var(--signal); }
-.signal[data-tone="abstain"], .signal[data-tone="no_action"], .signal[data-tone="unknown"], .signal[data-tone="missing"], .signal[data-tone="unavailable"], .signal[data-tone="conflicted"], .signal[data-tone="retrying"], .signal[data-tone="fallback"], .signal[data-tone="running"] { color: var(--signal); }
+.signal[data-tone="degraded"], .signal[data-tone="stale"] { color: var(--signal-text); }
+.signal[data-tone="abstain"], .signal[data-tone="no_action"], .signal[data-tone="unknown"], .signal[data-tone="missing"], .signal[data-tone="unavailable"], .signal[data-tone="conflicted"], .signal[data-tone="retrying"], .signal[data-tone="fallback"], .signal[data-tone="running"] { color: var(--signal-text); }
 .metric-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; margin: 1.5rem 0 0; background: var(--line-soft); }
 .metric-list div { display: grid; gap: 0.3rem; padding: 1rem; background: var(--surface-highlight); }
 .metric-list dt, .benchmark-strip dt { color: var(--text-tertiary); font-size: 0.7rem; }

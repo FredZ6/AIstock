@@ -1,6 +1,13 @@
 import Link from 'next/link'
 
 import { initializePortfolioAction } from '../../app/portfolio/actions'
+import {
+  availabilityFromDomain,
+  availabilityFromProvider,
+  dedupeAvailability,
+  providerDisplay,
+  type AvailabilityFact,
+} from '../../lib/availability'
 import { compareDecimals, decimalChange, normalizeDecimalSeries } from '../../lib/decimal'
 import { formatDecimal, formatMoney, formatPercent } from '../../lib/format'
 import type {
@@ -33,10 +40,6 @@ import { LiveDataRefresh } from './live-data-refresh'
 
 function alertEvidence(value: unknown) {
   return JSON.stringify(value, null, 2)
-}
-
-function unique(items: string[]) {
-  return [...new Set(items)]
 }
 
 export function ApiEvalPage({ detail, asOf }: { detail: EvalRunDetail; asOf: string }) {
@@ -196,7 +199,7 @@ export function ApiTodayPage({
   portfolio,
   quotes,
   research = [],
-  unavailableDomains = [],
+  availabilityFacts = [],
 }: {
   alerts?: AlertRecord[]
   asOf: string
@@ -204,22 +207,23 @@ export function ApiTodayPage({
   portfolio: PortfolioSummary | null
   quotes: MarketQuote[]
   research?: ResearchRecord[]
-  unavailableDomains?: string[]
+  availabilityFacts?: AvailabilityFact[]
 }) {
-  const unavailableProviders = health ? Object.entries(health.providers)
-    .filter(([, provider]) => !provider.configured || provider.status === 'FAILURE' || provider.status === 'UNAVAILABLE')
-    .map(([name]) => name.toUpperCase()) : ['Provider health']
-  const providerDomains = unavailableDomains.filter((domain) => /provider/i.test(domain))
-  const marketDomains = unavailableDomains.filter((domain) => /market|quote/i.test(domain))
-  const decisionDomains = unavailableDomains.filter(
-    (domain) => !providerDomains.includes(domain) && !marketDomains.includes(domain),
-  )
-  const decisionFacts = [...decisionDomains]
-  if (portfolio && !portfolio.latestNav) decisionFacts.push('Portfolio NAV')
+  const providerFacts = health
+    ? Object.entries(health.providers).flatMap(([name, provider]) => availabilityFromProvider(name, provider) ?? [])
+    : []
+  const facts = dedupeAvailability([
+    ...availabilityFacts,
+    ...providerFacts,
+    ...(portfolio && !portfolio.latestNav ? [availabilityFromDomain({
+      key: 'portfolio:nav', label: 'Portfolio NAV', reason: 'No persisted Paper Portfolio NAV exists yet.',
+      state: 'EMPTY', action: { href: '/portfolio', label: 'Review paper portfolio' },
+    })] : []),
+  ])
   const groups = [
-    { label: 'Provider', items: unique([...providerDomains, ...unavailableProviders]) },
-    { label: 'Market Data', items: unique(marketDomains) },
-    { label: 'Decision Domain', items: unique(decisionFacts) },
+    { label: 'Provider', items: facts.filter((item) => item.key.startsWith('provider:')) },
+    { label: 'Market Data', items: facts.filter((item) => item.key.startsWith('market:')) },
+    { label: 'Decision Domain', items: facts.filter((item) => !item.key.startsWith('provider:') && !item.key.startsWith('market:')) },
   ].filter((group) => group.items.length)
   return (
     <AppShell currentPath="/">
@@ -235,7 +239,7 @@ export function ApiTodayPage({
       } : { kind: 'success' as const }}>
         {health ? <section className="terminal-section first-section" aria-labelledby="provider-health-title">
           <div className="section-heading"><div><p className="section-kicker">Runtime coverage</p><h2 id="provider-health-title">Provider health</h2></div><span className="muted-copy">{health.mode} · read only</span></div>
-          <ul className="plain-list" aria-label="Provider health facts">{Object.entries(health.providers).map(([name, provider]) => <li key={name}><strong>{name.toUpperCase()}</strong><p>{provider.coverage ? `${name.toUpperCase()} · ${provider.coverage} · ${provider.status ?? 'UNAVAILABLE'}` : `${provider.mode} · ${provider.status ?? 'UNAVAILABLE'}`}</p>{provider.operatorAction ? <small>{provider.operatorAction}</small> : null}</li>)}</ul>
+          <ul className="plain-list" aria-label="Provider health facts">{Object.entries(health.providers).map(([name, provider]) => <li key={name}><strong>{name.replaceAll('_', ' ').toUpperCase()}</strong><p>{providerDisplay(name, provider)}</p></li>)}</ul>
         </section> : null}
         <section className="terminal-section first-section" aria-labelledby="live-market-title">
           <div className="section-heading">
@@ -306,18 +310,25 @@ export function ApiResearchPage({
 }) {
   const latestRecord = records[0]
   const previousRecords = records.slice(1)
-  const missing = unique([
-    ...unavailableDomains,
-    ...(!quote ? ['Current market reference'] : []),
-    ...(!records.length ? ['Research'] : []),
-    ...(!secFilings.length ? ['SEC filings'] : []),
-    ...(!financialFacts.length ? ['Fundamentals'] : []),
+  const missing = dedupeAvailability([
+    ...unavailableDomains.map((domain) => availabilityFromDomain({
+      key: `research:${domain.toLowerCase().replaceAll(' ', '-')}`,
+      label: domain,
+      reason: unavailableReasons[domain] ?? `No persisted ${domain.toLowerCase()} fact is available and no producer reported a reason.`,
+      action: /unsupported|no approved/i.test(unavailableReasons[domain] ?? '')
+        ? null
+        : { href: '/eval', label: `Review ${domain} ingestion` },
+    })),
+    ...(!quote ? [availabilityFromDomain({ key: 'market:current-reference', label: 'Current market reference', reason: 'No point-in-time eligible market quote is available.', state: 'EMPTY', action: { href: '/watchlist', label: 'Review market data' } })] : []),
+    ...(!records.length ? [availabilityFromDomain({ key: 'research:decision', label: 'Research', reason: 'No persisted research decision exists at this cutoff.', state: 'EMPTY', action: { href: `/research/${symbol}`, label: 'Start or review research' } })] : []),
+    ...(!secFilings.length ? [availabilityFromDomain({ key: 'research:sec', label: 'SEC filings', reason: 'No point-in-time eligible SEC filing is persisted at this cutoff.', state: 'EMPTY', action: { href: '/eval', label: 'Review SEC ingestion' } })] : []),
+    ...(!financialFacts.length ? [availabilityFromDomain({ key: 'research:fundamentals', label: 'Fundamentals', reason: 'No normalized SEC financial facts are persisted at this cutoff.', state: 'EMPTY', action: { href: '/eval', label: 'Review SEC normalization' } })] : []),
   ])
   const state = missing.length ? {
     kind: 'degraded' as const,
     title: records.length && !quote ? 'Current market reference unavailable' : 'Research evidence unavailable',
     message: 'Available persisted facts remain visible. No Fixture data was substituted.',
-    providers: missing,
+    groups: [{ label: 'Research Evidence', items: missing }],
   } : { kind: 'success' as const }
   return (
     <AppShell currentPath={`/research/${symbol}`}>

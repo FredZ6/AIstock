@@ -3882,6 +3882,20 @@
               ],
               "title": "Cursor"
             }
+          },
+          {
+            "in": "query",
+            "name": "audience",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "operator"
+              ],
+              "title": "Audience",
+              "type": "string"
+            }
           }
         ],
         "responses": {

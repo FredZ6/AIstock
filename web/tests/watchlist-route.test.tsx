@@ -124,6 +124,9 @@ describe('Watchlist route data boundaries', () => {
     expect(screen.getByRole('status', { name: 'Research enrichment unavailable' })).toHaveTextContent(
       'ALPACA market quotes remain visible',
     )
+    expect(screen.getByRole('status', { name: 'Research enrichment unavailable' })).toHaveTextContent(
+      'EMPTY · NVDA trend',
+    )
     expect(screen.getByLabelText('Live data refresh')).toBeInTheDocument()
     expect(screen.queryByRole('status', { name: 'Market and research data unavailable' })).not.toBeInTheDocument()
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
@@ -167,6 +170,9 @@ describe('Watchlist route data boundaries', () => {
 
     expect(screen.getByRole('status', { name: 'Market and research data unavailable' })).toHaveTextContent(
       'Market quote quality',
+    )
+    expect(screen.getByRole('status', { name: 'Market and research data unavailable' })).toHaveTextContent(
+      'DEGRADED · Market quote quality',
     )
   })
 
