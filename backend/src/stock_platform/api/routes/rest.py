@@ -1936,15 +1936,32 @@ def list_eval_runs(
     connection: ConnectionDependency,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     cursor: str | None = None,
+    audience: Literal["all", "operator"] = "all",
 ) -> dict[str, Any]:
     cutoff = _aware_query_time(decision_time, "decision_time")
+    query = (
+        select(eval_run)
+        .where(eval_run.c.created_at <= cutoff)
+        .where(_cursor_filter(eval_run.c.created_at, eval_run.c.id, cursor))
+    )
+    if audience == "operator":
+        query = query.where(
+            select(eval_metric.c.eval_run_id)
+            .where(
+                eval_metric.c.eval_run_id == eval_run.c.id,
+                eval_metric.c.created_at <= cutoff,
+            )
+            .exists(),
+            select(regression_gate_result.c.eval_run_id)
+            .where(
+                regression_gate_result.c.eval_run_id == eval_run.c.id,
+                regression_gate_result.c.created_at <= cutoff,
+            )
+            .exists(),
+        )
     rows = (
         connection.execute(
-            select(eval_run)
-            .where(eval_run.c.created_at <= cutoff)
-            .where(_cursor_filter(eval_run.c.created_at, eval_run.c.id, cursor))
-            .order_by(eval_run.c.created_at.desc(), eval_run.c.id.desc())
-            .limit(limit + 1)
+            query.order_by(eval_run.c.created_at.desc(), eval_run.c.id.desc()).limit(limit + 1)
         )
         .mappings()
         .all()

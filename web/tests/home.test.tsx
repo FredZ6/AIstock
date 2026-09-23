@@ -138,6 +138,46 @@ describe('home page', () => {
     expect(degraded.querySelectorAll('li')).toHaveLength(2)
   })
 
+  it('counts fulfilled research gaps with their exact reasons', async () => {
+    vi.stubEnv('WEB_DATA_MODE', 'api')
+    vi.stubEnv('API_BASE_URL', 'http://api.test')
+    vi.doMock('../lib/server/watchlist-api', () => ({
+      listWatchlist: vi.fn(async () => [{ symbol: 'NVDA' }]),
+    }))
+    vi.doMock('../lib/server/live-data-api', () => ({
+      getAlerts: vi.fn(async () => ({ items: [], nextCursor: null })),
+      getMarketQuotes: vi.fn(async () => ({ decisionTime: '2026-09-09T14:30:00Z', items: [{
+        availableAt: '2026-09-09T14:29:00Z', close: '217.55', coverage: 'IEX',
+        eventTime: '2026-09-09T14:28:00Z', provider: 'ALPACA', symbol: 'NVDA',
+      }], missingSymbols: [], status: 'SUCCESS' })),
+      getPortfolioSummary: vi.fn(async () => ({
+        cash: { balance: '100000', currency: 'USD' }, cashLedger: [], configuration: null, fills: [],
+        initializedAt: null, latestNav: { eventTime: '2026-09-09T14:25:00Z', nav: '100000', portfolioId: 'p1' },
+        orders: [], performanceHistory: [], positions: [], riskDecisions: [], status: 'SUCCESS', trading: 'paper_only',
+      })),
+      getProviderHealth: vi.fn(async () => ({
+        mode: 'paper', providers: { alpaca: { configured: true, coverage: 'IEX', mode: 'read_only', status: 'SUCCESS' } },
+      })),
+      getStockResearch: vi.fn(async () => ({
+        financialFacts: [], records: [], secFilings: [],
+        unavailableDomains: ['OPTIONS', 'ANALYST_TARGETS'],
+        unavailableReasons: {
+          OPTIONS: 'No approved read-only producer exists for options.',
+          ANALYST_TARGETS: 'No approved read-only producer exists for analyst targets.',
+        },
+      })),
+    }))
+    const { default: Home } = await import('../app/page')
+
+    render(await Home())
+
+    const degraded = screen.getByRole('status', { name: 'Some decision facts are unavailable' })
+    expect(degraded).toHaveTextContent('2 unavailable facts')
+    expect(degraded).toHaveTextContent('UNSUPPORTED · NVDA options')
+    expect(degraded).toHaveTextContent('No approved read-only producer exists for options.')
+    expect(degraded).toHaveTextContent('UNSUPPORTED · NVDA analyst targets')
+  })
+
   it('reaches a truthful Success state and renders all available authoritative facts', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-09-09T14:30:00Z'))
@@ -164,7 +204,10 @@ describe('home page', () => {
         orders: [], performanceHistory: [], positions: [], riskDecisions: [], status: 'SUCCESS', trading: 'paper_only',
       })),
       getProviderHealth: vi.fn(async () => ({
-        mode: 'paper', providers: { alpaca: { configured: true, coverage: 'IEX', mode: 'read_only', status: 'SUCCESS' } },
+        mode: 'paper', providers: {
+          alpaca: { configured: true, coverage: 'IEX', mode: 'read_only', status: 'SUCCESS' },
+          sec: { configured: true, mode: 'read_only' },
+        },
       })),
       getStockResearch: vi.fn(async () => ({ financialFacts: [], secFilings: [], records: [{
         asOf: '2026-09-09T14:00:00Z', confidence: '0.82', direction: 'UP', horizon: '12M', id: 'r1',
@@ -179,6 +222,7 @@ describe('home page', () => {
     expect(screen.getByText('Demand remains durable.')).toBeInTheDocument()
     expect(screen.getByText('gap · v1')).toBeInTheDocument()
     expect(screen.getByText('ALPACA · IEX · SUCCESS')).toBeInTheDocument()
+    expect(screen.getByText('SEC · READ ONLY · AVAILABLE')).toBeInTheDocument()
     expect(screen.getByText(/100,425\.18/)).toBeInTheDocument()
     expect(screen.getByText('Sep 9, 2026, 10:30 AM')).toBeInTheDocument()
   })

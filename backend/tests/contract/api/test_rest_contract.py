@@ -594,6 +594,87 @@ def test_evaluation_runs_are_point_in_time_bounded_detailed_and_paginated(
     assert hidden.status_code == 404
 
 
+def test_operator_evaluation_view_isolates_incomplete_sentinels_without_deleting_audit_history(
+    client: TestClient,
+    api_engine: Engine,
+) -> None:
+    cutoff = datetime.now(UTC)
+    sentinel_id = uuid4()
+    complete_failed_id = uuid4()
+    with api_engine.begin() as connection:
+        for run_id, dataset, created_at in (
+            (sentinel_id, "future", cutoff - timedelta(milliseconds=1)),
+            (complete_failed_id, "eval-v0.2.0", cutoff - timedelta(milliseconds=2)),
+        ):
+            connection.execute(
+                insert(eval_run).values(
+                    id=run_id,
+                    status="FAILED",
+                    passed=False,
+                    mode="fixture",
+                    dataset_version=dataset,
+                    case_count=1,
+                    data_cutoff=created_at,
+                    model_version="fixture-deterministic-v1",
+                    prompt_version="offline-eval-v0.2",
+                    research_scoring_policy_version="research-scoring-v0.2",
+                    risk_policy_version="risk-v0.2",
+                    execution_policy_version="execution-v0.2",
+                    confidence_policy_version="confidence-v0.2",
+                    gate_policy_version="evaluation-gates-v0.2",
+                    summary_hash=run_id.hex.ljust(64, "0"),
+                    created_at=created_at,
+                )
+            )
+        connection.execute(
+            insert(eval_metric).values(
+                eval_run_id=complete_failed_id,
+                metric_name="directional_accuracy",
+                metric_value="0.40",
+                case_ids=["case-1"],
+                case_hashes=["a" * 64],
+                created_at=cutoff - timedelta(milliseconds=2),
+            )
+        )
+        connection.execute(
+            insert(regression_gate_result).values(
+                eval_run_id=complete_failed_id,
+                metric_name="directional_accuracy",
+                comparison="AT_LEAST",
+                threshold="0.80",
+                observed="0.40",
+                passed=False,
+                reason="below threshold",
+                created_at=cutoff - timedelta(milliseconds=2),
+            )
+        )
+    audit = client.get(
+        "/api/v1/evals/runs",
+        params={
+            "decision_time": cutoff.isoformat(),
+            "limit": 100,
+            "audience": "all",
+        },
+    )
+    operator = client.get(
+        "/api/v1/evals/runs",
+        params={
+            "decision_time": cutoff.isoformat(),
+            "limit": 100,
+            "audience": "operator",
+        },
+    )
+
+    assert audit.status_code == 200
+    assert {str(sentinel_id), str(complete_failed_id)} <= {
+        item["id"] for item in audit.json()["items"]
+    }
+    assert operator.status_code == 200
+    operator_ids = {item["id"] for item in operator.json()["items"]}
+    assert str(complete_failed_id) in operator_ids
+    assert str(sentinel_id) not in operator_ids
+
+
 def test_missing_resources_and_actions_use_the_error_envelope(client: TestClient) -> None:
     missing = uuid4()
     action = {"rationale": "contract test", "expected_revision": 0}

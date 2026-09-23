@@ -10,6 +10,7 @@ import {
   getStockResearch,
 } from '../lib/server/live-data-api'
 import { listWatchlist } from '../lib/server/watchlist-api'
+import { availabilityFromDomain, type AvailabilityFact } from '../lib/availability'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,17 +59,27 @@ export default async function Home() {
     const availableFacts = [healthResult, portfolioResult, quotesResult, alertsResult]
       .some((result) => result.status === 'fulfilled')
     if (!availableFacts) return <ApiFailurePage currentPath="/" title="Today" />
-    const unavailableDomains = [
-      ...(watchlistResult.status === 'rejected' ? ['Watchlist API'] : []),
-      ...(healthResult.status === 'rejected' ? ['Provider health'] : []),
-      ...(portfolioResult.status === 'rejected' ? ['Portfolio API'] : []),
-      ...(alertsResult.status === 'rejected' ? ['Alerts API'] : []),
-      ...(quotesResult.status === 'rejected' ? ['Market quotes API'] : []),
-      ...(quotesResult.status === 'fulfilled' && quotesResult.value.status !== 'SUCCESS' ? ['Market quote quality'] : []),
-      ...(quotesResult.status === 'fulfilled' ? quotesResult.value.missingSymbols.map((symbol) => `${symbol} market quote`) : []),
-      ...researchResults.flatMap((result, index) =>
-        result.status === 'rejected' ? [`${watchlist[index].symbol} research`] : [],
-      ),
+    const fact = (input: Parameters<typeof availabilityFromDomain>[0]): AvailabilityFact => availabilityFromDomain(input)
+    const availabilityFacts = [
+      ...(watchlistResult.status === 'rejected' ? [fact({ key: 'api:watchlist', label: 'Watchlist API', reason: 'The Watchlist API request failed.', state: 'FAILURE', action: { href: '/watchlist', label: 'Review watchlist' } })] : []),
+      ...(healthResult.status === 'rejected' ? [fact({ key: 'provider:health', label: 'Provider health', reason: 'The provider health API request failed.', state: 'FAILURE', action: { href: '/eval', label: 'Review runtime' } })] : []),
+      ...(portfolioResult.status === 'rejected' ? [fact({ key: 'api:portfolio', label: 'Portfolio API', reason: 'The Paper Portfolio API request failed.', state: 'FAILURE', action: { href: '/portfolio', label: 'Review portfolio' } })] : []),
+      ...(alertsResult.status === 'rejected' ? [fact({ key: 'api:alerts', label: 'Alerts API', reason: 'The Alerts API request failed.', state: 'FAILURE', action: { href: '/alerts', label: 'Review alerts' } })] : []),
+      ...(quotesResult.status === 'rejected' ? [fact({ key: 'market:api', label: 'Market quotes API', reason: 'The market quote API request failed.', state: 'FAILURE', action: { href: '/watchlist', label: 'Review market data' } })] : []),
+      ...(quotesResult.status === 'fulfilled' && quotesResult.value.status !== 'SUCCESS' ? [fact({ key: 'market:quality', label: 'Market quote quality', reason: 'Persisted market quote coverage or quality is degraded.', state: 'DEGRADED', action: { href: '/watchlist', label: 'Review quote quality' } })] : []),
+      ...(quotesResult.status === 'fulfilled' ? quotesResult.value.missingSymbols.map((symbol) => fact({ key: `market:quote:${symbol}`, label: `${symbol} market quote`, reason: 'No point-in-time eligible market quote was persisted.', state: 'EMPTY', action: { href: '/watchlist', label: 'Review market ingestion' } })) : []),
+      ...researchResults.flatMap((result, index) => {
+        const symbol = watchlist[index].symbol
+        if (result.status === 'rejected') return [fact({ key: `research:${symbol}`, label: `${symbol} research`, reason: 'The persisted research API request failed.', state: 'FAILURE', action: { href: `/research/${symbol}`, label: `Review ${symbol} research` } })]
+        return (result.value.unavailableDomains ?? []).map((domain) => fact({
+          key: `research:${symbol}:${domain}`,
+          label: `${symbol} ${domain.replaceAll('_', ' ').toLowerCase()}`,
+          reason: result.value.unavailableReasons?.[domain] ?? `No persisted ${domain.toLowerCase()} fact is available and no producer reported a reason.`,
+          action: /unsupported|no approved/i.test(result.value.unavailableReasons?.[domain] ?? '')
+            ? null
+            : { href: `/research/${symbol}`, label: `Review ${symbol} research` },
+        }))
+      }),
     ]
     return <ApiTodayPage
       alerts={alertsResult.status === 'fulfilled' ? alertsResult.value.items : []}
@@ -77,7 +88,7 @@ export default async function Home() {
       portfolio={portfolioResult.status === 'fulfilled' ? portfolioResult.value : null}
       quotes={quotesResult.status === 'fulfilled' ? quotesResult.value.items : []}
       research={research}
-      unavailableDomains={unavailableDomains}
+      availabilityFacts={availabilityFacts}
     />
   } catch (error) {
     reportLiveDataFailure('/', 'route', error)

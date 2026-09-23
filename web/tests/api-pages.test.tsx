@@ -291,6 +291,7 @@ describe('API mode pages', () => {
     expect(screen.getByText('live/earnings.csv')).toBeInTheDocument()
     const degraded = screen.getByRole('status', { name: 'Research evidence unavailable' })
     expect(degraded).toHaveTextContent('Analyst targets')
+    expect(degraded).toHaveTextContent('UNSUPPORTED · Analyst targets')
     expect(degraded).not.toHaveTextContent('EarningsNewsOptions')
     expect(screen.getByRole('region', { name: 'Unavailable research domains' })).toHaveTextContent(
       'Unsupported until an authoritative provider, schema, and license are approved.',
@@ -348,6 +349,7 @@ describe('API mode pages', () => {
     expect(screen.getByText('USD 100,000.00')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Initialize USD/ })).not.toBeInTheDocument()
     expect(screen.getByRole('status', { name: 'Portfolio evidence is partial' })).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Portfolio evidence is partial' })).toHaveTextContent('EMPTY · NAV history')
   })
 
   it('labels the persisted API portfolio snapshot and evidence availability explicitly', () => {
@@ -456,6 +458,7 @@ describe('API mode pages', () => {
     const lessons = screen.getByRole('region', { name: 'Candidate lessons' })
     const degraded = screen.getByRole('status', { name: 'Weekly review has no matured outcomes' })
     expect(degraded).toHaveTextContent('Wait for eligible decision outcomes to mature')
+    expect(degraded).toHaveTextContent('EMPTY · Matured outcomes')
     expect(screen.getByRole('link', { name: 'Review research decisions' })).toHaveAttribute('href', '/research')
     expect(screen.queryByRole('link', { name: 'Review latest run' })).not.toBeInTheDocument()
     expect(outcomes).toHaveTextContent('Benchmark comparison awaits a matured outcome')
