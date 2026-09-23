@@ -4022,3 +4022,41 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   Their queries now scope through the test's weekly-review lineage and preserve all existing history.
   The corrected complete suite exited 0 with 22/22 passed. Ruff format/check and Mypy (292 source
   files) exited 0.
+
+## 2026-09-23 — M8.2 production loop, FRE-43 Task 6
+
+- The API-mode browser acceptance now covers the complete durable loop on both desktop and mobile:
+  persisted Watchlist Research without Fixture substitution, cash-only Portfolio NAV plus the explicit
+  IEX `MARKET_DATA_ENTITLEMENT` rejection and zero fills, persisted/deduplicated Alerts or the honest
+  empty state, and Weekly Review outcomes, calibration, benchmark comparison, MFE, MAE and
+  risk-adjusted return. It also checks viewport containment and Axe serious/critical violations. The
+  real managed-runtime command exited 0 with 2/2 Playwright projects passed in 10.5 seconds.
+- Weekly Review's REST parser and UI now retain the already-persisted `excess_returns`, maximum
+  favorable/adverse excursion and risk-adjusted-return fields instead of replacing benchmark evidence
+  with a hard-coded unavailable label. The daily Alpaca schedule also admits one QQQ price-bar slice in
+  addition to each configured Research symbol; QQQ does not receive a news job unless it is itself on
+  the Research Watchlist. The focused frontend suite passed 33/33 and the scheduler/Weekly Review
+  integration checks passed 2/2.
+- A real QQQ ingestion job (`c1ce35ca-4938-46f9-8211-9848a29b33f6`) completed on attempt 1 and
+  persisted one ALPACA/IEX bar plus MinIO raw-object lineage. Its `available_at` is later than the
+  historical Review decisions, so old excess-return cells correctly remain unavailable under
+  `available_at <= decision_time`; the new benchmark feed applies only to future eligible Reviews.
+- The first live matrix attempt exposed host/MinIO clock skew after a long-running Docker session.
+  MinIO rejected writes with `RequestTimeTooSkewed`, the Alpaca stream supervisor failed closed, and
+  the managed runtime then shut down every child as designed. After host/container UTC resynchronized,
+  the unchanged runtime restarted healthy (`/api/v1/health` 200, `paper_only`), the real browser matrix
+  passed, and no new skew error appeared. No failed raw write or historical fact was rewritten.
+- Full verification also exposed two stale compatibility assumptions. Alert worker tests now assert the
+  complete deterministic completion payload. Reused CandidateLessons are approved through the
+  normalized `lesson_attribution_link` for the selected Weekly Review rather than the lesson's original
+  attribution; a RED regression reproduced the failure before GREEN, and the fixture demo now resolves
+  the persisted canonical lesson ID. The approval/worker/demo/smoke group exited 0 with 4/4 passed.
+- Verification evidence: affected concurrency, recovery, lineage, Portfolio risk, alert and Weekly
+  Review suites exited 0 with 98/98 passed; the complete frontend suite exited 0 with 34 files and
+  219/219 tests passed; TypeScript, ESLint and the Next.js production build exited 0. The generated
+  OpenAPI contract was refreshed to represent the locked nullable market-context boundary for an
+  entitlement-denied risk decision. The final fresh `make verify` exited 0: Ruff format/check clean for
+  339 files, Mypy clean for 292 source files, Alembic drift and generated-contract checks passed,
+  backend 764 passed / 5 optional live-provider tests skipped, frontend 219 passed, and the production
+  build succeeded. The managed runtime was stopped before the final database-wide gate; Docker volumes
+  and all persisted Paper/Research facts remain intact.

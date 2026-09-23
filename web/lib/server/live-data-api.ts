@@ -297,7 +297,19 @@ export type WeeklyReviewDetail = {
   attributions: Array<{ category: string; controllable: boolean; id: string; outcomeId: string; rationale: string }>
   calibration: Array<{ calibrationError: string; confidence: string; decisionId: string; realizedReturn: string | null; status: 'PENDING' | 'MATURED' }>
   lessons: Array<{ confidence: string; id: string; replayDelta: string; statement: string; status: 'CANDIDATE' | 'APPROVED' | 'REJECTED' }>
-  outcomes: Array<{ confidence: string; decisionId: string; id: string; opinion: 'BULLISH' | 'NEUTRAL' | 'BEARISH' | 'ABSTAIN'; returns: Record<string, string>; status: 'PENDING' | 'MATURED'; symbol: string }>
+  outcomes: Array<{
+    confidence: string
+    decisionId: string
+    excessReturns: Record<string, string>
+    id: string
+    maximumAdverseExcursion: string
+    maximumFavorableExcursion: string
+    opinion: 'BULLISH' | 'NEUTRAL' | 'BEARISH' | 'ABSTAIN'
+    returns: Record<string, string>
+    riskAdjustedReturn: string
+    status: 'PENDING' | 'MATURED'
+    symbol: string
+  }>
   replays: Array<{ dataCutoff: string; delta: string; id: string; lessonId: string }>
   review: { dataCutoff: string; id: string; status: 'RUNNING' | 'COMPLETED' | 'FAILED' }
 }
@@ -523,6 +535,7 @@ export async function getWeeklyReviewDetail(
       },
       outcomes: rows('outcomes').map((item) => {
         const values = record(item.returns, 'weekly_review.outcome.returns')
+        const excessValues = record(item.excess_returns, 'weekly_review.outcome.excess_returns')
         return {
           id: text(item.id, 'weekly_review.outcome.id'),
           decisionId: text(item.decision_id, 'weekly_review.outcome.decision_id'),
@@ -531,6 +544,10 @@ export async function getWeeklyReviewDetail(
           confidence: decimal(item.confidence, 'weekly_review.outcome.confidence'),
           status: enumeration(item.status, ['PENDING', 'MATURED'] as const, 'weekly_review.outcome.status'),
           returns: Object.fromEntries(Object.entries(values).map(([key, value]) => [key, decimal(value, `weekly_review.outcome.returns.${key}`)])),
+          excessReturns: Object.fromEntries(Object.entries(excessValues).map(([key, value]) => [key, decimal(value, `weekly_review.outcome.excess_returns.${key}`)])),
+          maximumFavorableExcursion: decimal(item.maximum_favorable_excursion, 'weekly_review.outcome.maximum_favorable_excursion'),
+          maximumAdverseExcursion: decimal(item.maximum_adverse_excursion, 'weekly_review.outcome.maximum_adverse_excursion'),
+          riskAdjustedReturn: decimal(item.risk_adjusted_return, 'weekly_review.outcome.risk_adjusted_return'),
         }
       }),
       attributions: rows('attributions').map((item) => ({

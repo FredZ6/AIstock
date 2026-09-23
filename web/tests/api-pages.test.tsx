@@ -418,7 +418,11 @@ describe('API mode pages', () => {
       attributions: [{ category: 'TIMING_ERROR', controllable: true, id: 'a1', outcomeId: 'o1', rationale: 'Late entry.' }],
       calibration: [{ calibrationError: '0.2', confidence: '0.8', decisionId: 'd1', realizedReturn: '0.03', status: 'MATURED' }],
       lessons: [{ confidence: '0.7', id: 'l1', replayDelta: '0.1', statement: 'Wait for confirmation.', status: 'CANDIDATE' }],
-      outcomes: [{ confidence: '0.8', decisionId: 'd1', id: 'o1', opinion: 'BULLISH', returns: { '1': '0.03' }, status: 'MATURED', symbol: 'NVDA' }],
+      outcomes: [{
+        confidence: '0.8', decisionId: 'd1', excessReturns: { '1': '0.01' }, id: 'o1',
+        maximumAdverseExcursion: '-0.01', maximumFavorableExcursion: '0.04', opinion: 'BULLISH',
+        returns: { '1': '0.03' }, riskAdjustedReturn: '3', status: 'MATURED', symbol: 'NVDA',
+      }],
       replays: [],
       review: { dataCutoff: '2026-08-21T20:00:00Z', id: 'r1', status: 'COMPLETED' },
     }} />)
@@ -428,6 +432,12 @@ describe('API mode pages', () => {
     expect(screen.getByText('Late entry.')).toBeInTheDocument()
     expect(screen.getByText('Wait for confirmation.')).toBeInTheDocument()
     expect(screen.getAllByText('80.00%')).toHaveLength(2)
+    const outcomes = screen.getByRole('table', { name: 'Persisted weekly outcomes' })
+    expect(outcomes).toHaveTextContent('Benchmark comparison')
+    expect(outcomes).toHaveTextContent('+1.00%')
+    expect(outcomes).toHaveTextContent('+4.00%')
+    expect(outcomes).toHaveTextContent('-1.00%')
+    expect(outcomes).toHaveTextContent('3')
   })
 
   it('keeps API weekly benchmarks honest and replays ahead of candidate lessons', () => {
@@ -448,7 +458,7 @@ describe('API mode pages', () => {
     expect(degraded).toHaveTextContent('Wait for eligible decision outcomes to mature')
     expect(screen.getByRole('link', { name: 'Review research decisions' })).toHaveAttribute('href', '/research')
     expect(screen.queryByRole('link', { name: 'Review latest run' })).not.toBeInTheDocument()
-    expect(outcomes).toHaveTextContent('Benchmark comparison unavailable')
+    expect(outcomes).toHaveTextContent('Benchmark comparison awaits a matured outcome')
     expect(replay).toHaveTextContent('Aug 21, 2026')
     expect(replay.compareDocumentPosition(lessons) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })

@@ -11,6 +11,7 @@ from stock_platform.infrastructure.db.models.tables import (
     decision_outcome,
     error_attribution,
     lesson_approval,
+    lesson_attribution_link,
 )
 
 LessonDecision = Literal["APPROVE", "REJECT"]
@@ -32,7 +33,14 @@ def record_lesson_decision(
     require_authenticated_human(actor)
     exists = connection.execute(
         select(candidate_lesson.c.id)
-        .join(error_attribution, candidate_lesson.c.attribution_id == error_attribution.c.id)
+        .join(
+            lesson_attribution_link,
+            lesson_attribution_link.c.lesson_id == candidate_lesson.c.id,
+        )
+        .join(
+            error_attribution,
+            lesson_attribution_link.c.attribution_id == error_attribution.c.id,
+        )
         .join(decision_outcome, error_attribution.c.outcome_id == decision_outcome.c.id)
         .where(
             candidate_lesson.c.id == lesson_id,

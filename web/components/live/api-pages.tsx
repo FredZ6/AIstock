@@ -460,12 +460,14 @@ export function ApiWeeklyReviewPage({ asOf, detail }: { asOf: string; detail: We
         providers: ['Matured outcomes'],
       } : { kind: 'success' }}>
         <section className="terminal-section first-section" aria-label="Weekly outcome summary">
-          <div className="section-heading"><div><p className="section-kicker">Measure</p><h2 id="weekly-outcomes-title">Outcome attribution</h2></div><span className="unavailable-value">Benchmark comparison unavailable in the persisted review contract</span></div>
-          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted weekly outcomes"><thead><tr><th>Symbol</th><th>Opinion</th><th>Confidence</th><th>Return</th><th>Status</th></tr></thead><tbody>
+          <div className="section-heading"><div><p className="section-kicker">Measure</p><h2 id="weekly-outcomes-title">Outcome attribution</h2></div><span className="muted-copy">{detail.outcomes.length ? 'Point-in-time QQQ benchmark comparison' : 'Benchmark comparison awaits a matured outcome'}</span></div>
+          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted weekly outcomes"><thead><tr><th>Symbol</th><th>Opinion</th><th>Confidence</th><th>Return</th><th>Benchmark comparison (excess)</th><th>MFE</th><th>MAE</th><th>Risk adjusted</th><th>Status</th></tr></thead><tbody>
             {detail.outcomes.map((outcome) => {
               const horizons = Object.keys(outcome.returns).sort((left, right) => Number(left) - Number(right))
-              const realized = horizons.length ? outcome.returns[horizons[horizons.length - 1]] : null
-              return <tr key={outcome.id}><th>{outcome.symbol}</th><td>{outcome.opinion}</td><td>{formatPercent(outcome.confidence, { signed: false })}</td><td>{realized ? formatPercent(realized) : 'Pending'}</td><td><Signal tone={outcome.status}>{outcome.status}</Signal></td></tr>
+              const horizon = horizons.at(-1)
+              const realized = horizon ? outcome.returns[horizon] : null
+              const excess = horizon ? outcome.excessReturns[horizon] : null
+              return <tr key={outcome.id}><th>{outcome.symbol}</th><td>{outcome.opinion}</td><td>{formatPercent(outcome.confidence, { signed: false })}</td><td>{realized ? formatPercent(realized) : 'Pending'}</td><td>{excess ? formatPercent(excess) : 'Unavailable'}</td><td>{formatPercent(outcome.maximumFavorableExcursion)}</td><td>{formatPercent(outcome.maximumAdverseExcursion)}</td><td>{formatDecimal(outcome.riskAdjustedReturn)}</td><td><Signal tone={outcome.status}>{outcome.status}</Signal></td></tr>
             })}
           </tbody></table></div>
         </section>

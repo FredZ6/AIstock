@@ -460,7 +460,14 @@ describe('live data API client', () => {
     }))
 
     await expect(getWeeklyReviewDetail({ ...options, fetchImpl }, 'r1')).resolves.toMatchObject({
-      outcomes: [{ confidence: '0.8', symbol: 'NVDA' }],
+      outcomes: [{
+        confidence: '0.8',
+        excessReturns: {},
+        maximumAdverseExcursion: '-0.01',
+        maximumFavorableExcursion: '0.04',
+        riskAdjustedReturn: '3',
+        symbol: 'NVDA',
+      }],
       calibration: [{ realizedReturn: '0.03' }],
       lessons: [{ statement: 'Wait for confirmation.' }],
     })

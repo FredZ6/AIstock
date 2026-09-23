@@ -322,19 +322,24 @@ def test_daily_scheduler_admits_bars_and_news_from_daily_research_watchlist(
         version="operator-verified-v1",
     )
 
-    assert schedule_alpaca_daily_jobs(engine, entitlement=entitlement, now=NOW) == 2
+    assert schedule_alpaca_daily_jobs(engine, entitlement=entitlement, now=NOW) == 3
     assert (
         schedule_alpaca_daily_jobs(
             engine,
             entitlement=entitlement,
             now=NOW + timedelta(minutes=30),
         )
-        == 2
+        == 3
     )
     with engine.connect() as connection:
         jobs = connection.execute(select(ingestion_job)).mappings().all()
     assert {job["dataset"] for job in jobs} == {"price_bars", "company_news"}
-    assert len(jobs) == 2
+    assert len(jobs) == 3
+    assert {(job["request_payload"]["request"]["symbol"], job["dataset"]) for job in jobs} == {
+        ("NVDA", "price_bars"),
+        ("NVDA", "company_news"),
+        ("QQQ", "price_bars"),
+    }
     assert {job["request_payload"]["request"]["timeframe"] for job in jobs} == {
         "1Day",
         None,

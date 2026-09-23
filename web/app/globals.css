@@ -11,6 +11,7 @@
   --text-secondary: oklch(45% 0.04 258);
   --text-tertiary: oklch(50% 0.035 258);
   --signal: oklch(52% 0.15 252);
+  --signal-text: oklch(41% 0.15 252);
   --positive: oklch(51% 0.15 148);
   --negative: oklch(52% 0.19 27);
   --space-page: clamp(1rem, 3vw, 3rem);
@@ -40,6 +41,7 @@
   --text-secondary: oklch(75% 0.025 258);
   --text-tertiary: oklch(62% 0.025 258);
   --signal: oklch(72% 0.13 252);
+  --signal-text: var(--signal);
   --positive: oklch(74% 0.13 148);
   --negative: oklch(72% 0.16 27);
   --surface-highlight: oklch(24% 0.032 252);
@@ -105,20 +107,20 @@ a:active, button:active { transform: scale(0.98); transition: transform 100ms ea
 .state-surface[data-state] { border-inline-start: 0.25rem solid var(--signal); }
 .state-surface[data-state="degraded"], .state-surface[data-state="partial"] { border-color: color-mix(in oklch, var(--signal) 28%, var(--line)); border-inline-start-color: var(--signal); background: var(--surface-highlight); }
 .state-surface[data-state="failure"] { border-color: color-mix(in oklch, var(--negative) 35%, var(--line)); border-inline-start-color: var(--negative); background: color-mix(in oklch, var(--negative) 4%, var(--ink-raised)); }
-.state-label { margin: 0; color: var(--signal); font-size: 0.64rem; font-weight: 750; letter-spacing: 0.15em; text-transform: uppercase; }
+.state-label { margin: 0; color: var(--signal-text); font-size: 0.64rem; font-weight: 750; letter-spacing: 0.15em; text-transform: uppercase; }
 .state-label::before { content: "Status · "; }
 .state-surface[data-state="failure"] .state-label { color: var(--negative); }
 .state-surface h2 { margin: 0.4rem 0 0; font-size: 1rem; letter-spacing: -0.015em; }
-.state-message { max-width: 44rem; margin: 0.4rem 0 0; color: var(--text-secondary); font-size: 0.78rem; line-height: 1.5; }
+.state-message { max-width: 44rem; margin: 0.4rem 0 0; color: var(--text); font-size: 0.78rem; line-height: 1.5; }
 .state-timestamp { margin: 0.65rem 0 0; color: var(--text-tertiary); font-size: 0.7rem; }
 .state-tags { display: flex; flex-wrap: wrap; gap: 0.45rem; padding: 0; margin: 0.7rem 0 0; list-style: none; }
 .state-tags li { padding: 0.35rem 0.6rem; border: 1px solid color-mix(in oklch, var(--signal) 35%, var(--line)); border-radius: 999px; color: var(--signal); font-size: 0.68rem; font-weight: 650; }
 .state-details { margin-left: auto; }
-.state-details summary { color: var(--signal); cursor: pointer; font-size: 0.7rem; font-weight: 700; }
+.state-details summary { color: var(--signal-text); cursor: pointer; font-size: 0.7rem; font-weight: 700; }
 .state-detail-groups { display: grid; gap: 0.65rem; min-width: min(38rem, 80vw); padding-top: 0.7rem; }
 .state-detail-groups h3 { margin: 0; color: var(--muted); font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; }
 .state-detail-groups .state-tags { margin-top: 0.35rem; }
-.state-retry { display: inline-block; margin-top: 0.7rem; color: var(--signal); font-size: 0.75rem; font-weight: 700; }
+.state-retry { display: inline-block; margin-top: 0.7rem; color: var(--signal-text); font-size: 0.75rem; font-weight: 700; }
 .state-surface[data-state="failure"] .state-retry { color: var(--negative); }
 .state-surface[data-state="degraded"] > p,
 .state-surface[data-state="degraded"] > h2,

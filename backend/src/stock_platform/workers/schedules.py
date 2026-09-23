@@ -315,7 +315,7 @@ def schedule_alpaca_daily_jobs(
     entitlement: EntitlementSnapshot,
     now: datetime,
 ) -> int:
-    """Admit one bounded daily-bar and news slice for each research symbol."""
+    """Admit bounded research slices plus the locked QQQ review benchmark."""
     from stock_platform.workers.ingestion_tasks import BarTimeframe
 
     checked_now = require_aware(now).astimezone(UTC).replace(second=0, microsecond=0)
@@ -330,7 +330,7 @@ def schedule_alpaca_daily_jobs(
     else:
         return 0
     with engine.connect() as connection:
-        symbols = tuple(
+        research_symbols = tuple(
             connection.execute(
                 select(watchlist_item.c.symbol)
                 .where(watchlist_item.c.daily_research.is_(True))
@@ -339,11 +339,13 @@ def schedule_alpaca_daily_jobs(
         )
     store = IngestionJobStore(engine)
     scheduled = 0
-    for symbol in symbols:
-        for dataset, timeframe in (
-            (FeedType.PRICE_BARS, BarTimeframe.DAY),
-            (FeedType.COMPANY_NEWS, None),
-        ):
+    for symbol in sorted({str(symbol) for symbol in research_symbols} | {"QQQ"}):
+        datasets: list[tuple[FeedType, BarTimeframe | None]] = [
+            (FeedType.PRICE_BARS, BarTimeframe.DAY)
+        ]
+        if symbol in research_symbols:
+            datasets.append((FeedType.COMPANY_NEWS, None))
+        for dataset, timeframe in datasets:
             result = schedule_alpaca_backfills(
                 store,
                 symbol=str(symbol),

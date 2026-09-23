@@ -2672,9 +2672,16 @@
             "type": "string"
           },
           "market_context_snapshot_id": {
-            "format": "uuid",
-            "title": "Market Context Snapshot Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Context Snapshot Id"
           },
           "max_order_quantity": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",

@@ -1468,5 +1468,11 @@ def test_market_monitor_records_durable_scan_and_rejects_redelivery(
             "monitor.completed",
             "run.completed",
         ]
-        assert events[1].payload == {"visible_bars": 0}
+        assert events[1].payload == {
+            "alerts_created": 0,
+            "symbols_evaluated": 0,
+            "symbols_visible": 0,
+            "unavailable_context": 0,
+            "visible_bars": 0,
+        }
     engine.dispose()
