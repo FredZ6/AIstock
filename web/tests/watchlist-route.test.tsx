@@ -124,6 +124,7 @@ describe('Watchlist route data boundaries', () => {
     expect(screen.getByRole('status', { name: 'Research enrichment unavailable' })).toHaveTextContent(
       'ALPACA market quotes remain visible',
     )
+    expect(screen.getByLabelText('Live data refresh')).toBeInTheDocument()
     expect(screen.queryByRole('status', { name: 'Market and research data unavailable' })).not.toBeInTheDocument()
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
     expect(screen.queryByText('STALE')).not.toBeInTheDocument()
@@ -190,6 +191,7 @@ describe('Watchlist route data boundaries', () => {
     render(await WatchlistRoute())
 
     expect(screen.getByText('Fixture Mode')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Live data refresh')).not.toBeInTheDocument()
     expect(within(screen.getByRole('list', { name: 'Ranked research watchlist' }))
       .getByRole('link', { name: 'NVDA' })).toBeInTheDocument()
     expect(screen.queryByRole('alert', { name: 'Watchlist unavailable' })).not.toBeInTheDocument()

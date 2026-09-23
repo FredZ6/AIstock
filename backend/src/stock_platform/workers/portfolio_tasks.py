@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from sqlalchemy import Connection, func, insert, select
 from sqlalchemy.engine import RowMapping
@@ -16,12 +16,18 @@ from stock_platform.application.portfolio.accounting import (
 )
 from stock_platform.application.portfolio.allocation import MarketContextSnapshot, MarketRegime
 from stock_platform.application.portfolio.execution import ExecutionPolicy
-from stock_platform.application.portfolio.risk import RiskPolicy
+from stock_platform.application.portfolio.risk import (
+    RiskDecision,
+    RiskDecisionStatus,
+    RiskPolicy,
+    RiskReason,
+)
 from stock_platform.application.research.supersession import decision_is_active_at
 from stock_platform.application.runs import RunControl, RunInputUnavailable, execute_run
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.portfolio.fill import ExecutionBar
+from stock_platform.domain.portfolio.nav import rebuild_nav
 from stock_platform.domain.research.claims import ResearchOpinionValue
 from stock_platform.infrastructure.db.models.tables import (
     confidence_policy_version,
@@ -42,6 +48,8 @@ from stock_platform.infrastructure.providers.base import FeedType
 from stock_platform.infrastructure.providers.fixture.loader import FixtureCatalog
 from stock_platform.settings import Settings
 from stock_platform.workers.celery_app import celery_app
+
+_ENTITLEMENT_NAMESPACE = UUID("31479b9e-b456-4a61-aea7-40d070737b47")
 
 
 def load_paper_execution_bars(
@@ -127,6 +135,8 @@ def execute_portfolio_run(
 
     def work(connection: Connection, row: RowMapping, control: RunControl) -> None:
         config = connection.execute(select(paper_portfolio_config)).mappings().one()
+        admission = row["request_payload"].get("market_data_admission", {})
+        entitlement_denied = admission.get("outcome") == "DENIED_NO_ACTION"
         context_row = (
             connection.execute(
                 select(market_context_snapshot)
@@ -143,19 +153,23 @@ def execute_portfolio_run(
             .mappings()
             .one_or_none()
         )
-        if context_row is None:
+        if context_row is None and not entitlement_denied:
             raise RunInputUnavailable("portfolio run requires a visible market context snapshot")
-        context = MarketContextSnapshot(
-            id=context_row["id"],
-            as_of=context_row["as_of"],
-            available_at=context_row["available_at"],
-            qqq_trend=context_row["qqq_trend"],
-            qqq_volatility=context_row["qqq_volatility"],
-            soxx_relative_strength=context_row["soxx_relative_strength"],
-            vix=context_row["vix"],
-            regime=MarketRegime(context_row["regime_label"]),
-            algorithm_version=context_row["algorithm_version"],
-            source_lineage=tuple(UUID(item) for item in context_row["source_lineage"]),
+        context = (
+            None
+            if context_row is None
+            else MarketContextSnapshot(
+                id=context_row["id"],
+                as_of=context_row["as_of"],
+                available_at=context_row["available_at"],
+                qqq_trend=context_row["qqq_trend"],
+                qqq_volatility=context_row["qqq_volatility"],
+                soxx_relative_strength=context_row["soxx_relative_strength"],
+                vix=context_row["vix"],
+                regime=MarketRegime(context_row["regime_label"]),
+                algorithm_version=context_row["algorithm_version"],
+                source_lineage=tuple(UUID(item) for item in context_row["source_lineage"]),
+            )
         )
         frozen_rows = connection.execute(
             select(
@@ -336,6 +350,61 @@ def execute_portfolio_run(
                 config["currency"],
                 specification.decision_time,
             )
+        if entitlement_denied:
+            if prior_fills:
+                raise RunInputUnavailable(
+                    "entitlement-denied portfolio run cannot value existing positions"
+                )
+            denial_nav = rebuild_nav(
+                ledger,
+                prior_fills,
+                prices={},
+                as_of=specification.decision_time,
+            )
+            store.persist_ledger(ledger)
+            store.persist_nav(
+                run_id=run_uuid,
+                portfolio_id=config["id"],
+                nav=denial_nav,
+                event_time=specification.decision_time,
+                available_at=max(execution_observed_at, specification.decision_time),
+            )
+            for item in research:
+                proposal_id = uuid5(
+                    _ENTITLEMENT_NAMESPACE,
+                    f"{run_id}|{item.decision_id}|proposal",
+                )
+                decision = RiskDecision(
+                    id=uuid5(
+                        _ENTITLEMENT_NAMESPACE,
+                        f"{run_id}|{item.decision_id}|risk",
+                    ),
+                    proposal_id=proposal_id,
+                    research_decision_id=item.decision_id,
+                    symbol=item.symbol,
+                    status=RiskDecisionStatus.REJECTED,
+                    requested_weight=item.proposed_weight,
+                    approved_weight=Decimal("0"),
+                    reason_codes=(RiskReason.MARKET_DATA_ENTITLEMENT,),
+                    risk_policy_version_id=first["risk_policy_id"],
+                    decided_at=specification.decision_time,
+                    current_weight=Decimal("0"),
+                    approved_delta=Decimal("0"),
+                    reference_nav=None,
+                    reference_price=None,
+                    max_order_quantity=Decimal("0"),
+                    market_context_snapshot_id=None,
+                    portfolio_id=config["id"],
+                )
+                store.persist_risk_decision(decision, None)
+                connection.execute(
+                    insert(portfolio_action).values(
+                        decision_id=item.decision_id,
+                        value="NO_ACTION",
+                    )
+                )
+            return
+        assert context is not None
         graph = PortfolioDecisionGraph(
             risk_policy=RiskPolicy(
                 id=first["risk_policy_id"],
@@ -373,6 +442,17 @@ def execute_portfolio_run(
             prior_fills=prior_fills,
         )
         store.persist_ledger(result.ledger)
+        nav_event_time = max(
+            (fill.filled_at for fill in result.fills),
+            default=specification.decision_time,
+        )
+        store.persist_nav(
+            run_id=run_uuid,
+            portfolio_id=config["id"],
+            nav=result.nav,
+            event_time=nav_event_time,
+            available_at=max(execution_observed_at, nav_event_time),
+        )
         for decision in result.risk_decisions:
             store.persist_risk_decision(decision, result.market_context)
         for order in result.order_intents:

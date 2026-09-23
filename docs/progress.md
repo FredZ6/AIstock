@@ -3802,3 +3802,261 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   site already listening on port 3000 and was stopped after producing invalid cross-project results;
   the CI-equivalent isolated rerun used `CI=true` on port 31038 and passed the complete affected
   desktop/mobile browser and accessibility matrix, 18/18.
+
+## 2026-09-16 — M8.2 live runtime closure, FRE-40
+
+- Linear milestone `M8.2 Live Runtime & Data Availability` and sequential issues FRE-40 through
+  FRE-44 were created from the runtime/data-availability audit. FRE-40 and the project were moved to
+  `In Progress`; implementation started from `main@be3c6b8` on `codex/m8-2-live-runtime` while the
+  existing untracked `.gstack/` directory remained untouched.
+- Runtime-plan RED exited 2 during collection because `stock_platform.operations.paper_runtime` did
+  not exist. GREEN adds `make paper-runtime`, which fails closed unless paper/API mode, explicit IEX
+  credentials and an operator-verified entitlement are configured. It starts healthy PostgreSQL,
+  MinIO and Redis, applies Alembic, then supervises FastAPI, separate scheduler and `ingestion-low`
+  workers, Beat, the read-only Alpaca WebSocket supervisor and Next.js. The focused suite exited 0
+  with 6/6 passed.
+- The first real startup reached healthy infrastructure and migrations but exited 2 because pnpm
+  forwarded a literal `--` to Next.js. A regression RED exited 1; removing the extra separator made
+  the focused runtime and provider contract suite pass 11/11. The second startup reported ready at
+  `http://127.0.0.1:3000`. A concurrent invocation was rejected with exit 2. `Ctrl-C` removed the API,
+  Web and worker listeners without deleting volumes, and the same command then restarted cleanly.
+- Append-only diagnosis traced the latest Alpaca failure to 12 historical `price_bars` jobs with
+  `SCHEMA_DRIFT / ValueError`. Their immutable MinIO envelopes contained the valid no-data response
+  `{"bars": null, ...}`. The null-bars RED exited 1; GREEN treats an explicit `null` as an empty
+  window while still rejecting a missing or non-list `bars` field. Future dead letters now persist
+  the bounded deterministic exception message in addition to its type.
+- The corrected durable scheduler created 11 new Alpaca price-bar jobs. All 11 reached `SUCCEEDED`;
+  `/api/v1/providers/health` returned paper/read-only `SUCCESS`, explicit `IEX`, latest job
+  `SUCCEEDED` and quality `PASS`. Historical dead letters were preserved. Raw objects,
+  normalization dispatches and quality facts continued through the existing MinIO/PostgreSQL
+  lineage; no Fixture fallback or brokerage path was introduced.
+- `RUN_ALPACA_LIVE_SMOKE=1 ./scripts/verify-ingestion.sh` exited 0: the recovery, concurrency,
+  pagination, MinIO/PostgreSQL lineage and security matrix passed 76/76, and the real read-only
+  Alpaca contract passed 1/1; SEC and Alpha live smokes were explicitly skipped because their flags
+  were not requested for this issue.
+- Final `make verify` exited 0: Ruff format/check clean for 334 files, Mypy clean for 288 source
+  files, Alembic drift plus OpenAPI/MCP/dependency checks passed, backend 751 passed / 5 optional
+  live-provider tests skipped, frontend 33 files / 215 passed, and TypeScript, ESLint and the Next.js
+  production build passed. The managed paper runtime remains available locally for the next issue.
+
+## 2026-09-16 — M8.2 live runtime closure, FRE-41
+
+- Runtime bootstrap RED proved the managed paper runtime did not dispatch an initial Alpaca refresh.
+  GREEN adds idempotent daily and Watchlist ingestion task dispatch after the worker/Beat processes
+  are started. The focused runtime suite exited 0 with 6/6 passed. A real managed restart scheduled
+  the durable workflow, and all 11 configured Watchlist symbols advanced from the Sep 3 history to
+  Sep 15 market bars with ALPACA/IEX provenance persisted through MinIO and PostgreSQL.
+- Frontend refresh was implemented through repeated RED/GREEN cycles. API Today, Watchlist and Stock
+  Research now mount one shared 60-second Next Router refresh boundary. It refreshes only while the
+  document is visible and the browser is online, clears its interval on unmount, remains invisible
+  in the visual layout and is absent from Fixture Watchlist. No API failure can trigger a Fixture
+  substitution. The focused frontend command exited 0 with 3 files / 33 tests passed; TypeScript and
+  ESLint also exited 0.
+- The first related-suite rerun exposed that the hidden refresh description incorrectly reused
+  `role=status`, making the existing Degraded state non-unique. The element was corrected to static
+  screen-reader text while retaining its accessible label. The first complete frontend gate then
+  exposed four Home tests without the standard Next navigation mock; the test fixture was aligned
+  with the existing route-test pattern and passed 5/5.
+- Browser verification against the real local API exited 0 for Today, Watchlist and NVDA Research
+  on desktop, plus Watchlist and Research at 390px. All pages exposed the bounded refresh contract;
+  Watchlist and Research displayed Sep 16 persisted ALPACA/IEX data; Research displayed persisted
+  SEC filings and financial facts. Both 390px pages reported `scrollWidth === innerWidth === 390`,
+  and the browser console reported 0 errors / 0 warnings. Failure/Degraded messaging continued to
+  state that no Fixture data was substituted.
+- The first `make verify` attempt exited 2 because the sandbox rejected localhost PostgreSQL access;
+  the identical authorized rerun reached the frontend and exposed the missing Home router fixture
+  above. After that regression fix, the fresh complete `make verify` exited 0: Ruff format/check clean
+  for 334 files, Mypy clean for 288 source files, Alembic drift plus OpenAPI/MCP/dependency checks
+  passed, backend 751 passed / 5 optional live-provider tests skipped, frontend 34 files / 219 passed,
+  and TypeScript, ESLint and the Next.js production build passed. The runtime was stopped gracefully
+  before the gate, then restarted for the final mobile browser check and remains available locally;
+  volumes and persisted data were not deleted.
+
+## 2026-09-20 — M8.2 provider closure and runtime queue isolation, FRE-42
+
+- Provider/read-contract RED tests established that unavailable research domains lacked actionable
+  reasons and persisted SEC filings/facts did not expose their complete raw-object provenance.
+  GREEN adds explicit operator actions to provider health, deterministic unavailability reasons for
+  Analyst Targets, News, Earnings and Options, and the SEC `event_time`, `available_at`,
+  `content_hash` and `raw_object_key` fields. Financial facts now join their own raw object under the
+  point-in-time predicate instead of borrowing filing-document lineage. The generated OpenAPI file
+  was refreshed from the validated application schema.
+- The managed paper runtime now bootstraps SEC and Alpha ingestion only when their local credentials
+  are explicitly configured. A real run exposed approximately 32,000 legacy Alpaca stream tasks in
+  the default Celery queue, which starved provider scheduling. Queue-topology RED tests failed before
+  implementation; GREEN isolates control, batch market ingestion, research ingestion and stream
+  persistence into `control`, `ingestion-low`, `research-ingestion` and `stream-events`. The stream
+  worker also consumes the legacy `celery` queue so existing durable messages are drained rather than
+  discarded. The recovery script and stuck-run runbook use the same complete queue inventory.
+- Real SEC ingestion persisted raw MinIO envelopes and PostgreSQL lineage for the configured
+  Watchlist. NVDA completed a large filings/facts backfill; other symbols progressed append-only but
+  are not represented as fully backfilled. A 10-second bounded SEC transport timeout replaced the
+  previous 5-second default after real SEC responses repeatedly exceeded the old bound. Alpha remains
+  explicitly unavailable because no local key is configured; Options remains unavailable because the
+  locked architecture has no approved lawful read-only provider; Analyst Targets remains unsupported;
+  Alpaca News reports that no point-in-time eligible record exists rather than substituting Fixture
+  content.
+- The live browser matrix command
+  `RUN_LIVE_PROVIDER_E2E=1 WEB_DATA_MODE=api API_BASE_URL=http://127.0.0.1:8000 PLAYWRIGHT_WEB_PORT=3000 pnpm exec playwright test e2e/live-provider-closure.spec.ts`
+  exited 0 with 2/2 desktop/mobile projects. It verified API mode without Fixture substitution,
+  precise operator actions, persisted SEC provider/time/hash/object-key provenance and no viewport
+  overflow. Manual desktop and 393px checks also reported no horizontal overflow.
+- The first post-OpenAPI `make verify` exited 2 with 1 failed / 752 passed / 5 skipped because the
+  still-running real SEC worker appended rows to the shared PostgreSQL database while the append-only
+  verifier compared whole-database counts. After gracefully stopping the managed runtime, the exact
+  unchanged append-only test exited 0 with 1/1 passed. The clean full `make verify` then exited 0:
+  Ruff format/check clean for 334 files, Mypy clean for 288 source files, Alembic drift plus
+  OpenAPI/MCP/dependency checks passed, backend 753 passed / 5 optional live-provider tests skipped,
+  frontend 34 files / 219 passed, and TypeScript, ESLint and the Next.js production build passed.
+  Docker volumes and persisted provider facts were retained; no live-broker path was added.
+
+## 2026-09-20 — M8.2 production loop, FRE-43 Task 1
+
+- The Task 1 RED command
+  `UV_CACHE_DIR=.uv-cache uv run pytest backend/tests/unit/workers/test_schedules.py
+  backend/tests/unit/operations/test_paper_runtime.py
+  backend/tests/integration/api/test_scheduling.py -q` exited 2 during collection because the
+  latest-completed-session resolver and idempotent Agent catch-up scheduler did not yet exist.
+- GREEN isolates the existing Research, Portfolio, Alert Monitor and Weekly Review tasks onto
+  `agent-research`, `agent-portfolio`, `agent-alert` and `agent-review`. The managed paper runtime
+  now supervises one bounded worker for each queue and bootstraps the latest completed New York
+  Research/Portfolio session through the existing durable run-admission keys. The UTC-aware cutoff
+  resolver skips weekends and NYSE holidays; retries reuse the same run rows.
+- The corrected focused command exited 0 with 18/18 tests passed. `./scripts/verify-recovery.sh`
+  exited 0 after a real PostgreSQL restore, Celery worker execution, Redis restart and replay; its
+  final recovery suite passed 9/9 and retained one append-only Fill/Ledger/event/tool-call effect.
+  The recovery script and runbook now enumerate all durable queues, including the legacy `celery`
+  drain queue. No Research, Portfolio, Alert or Weekly Review business behavior changed in this
+  task, and no Fixture fallback, live-broker path or automatic policy activation was introduced.
+
+## 2026-09-21 — M8.2 production loop, FRE-43 Task 2
+
+- Population RED/GREEN added a two-symbol non-Fixture Watchlist contract covering idempotent
+  scheduling, pinned policy/prompt/model versions, evidence gaps and the complete Raw Data Object →
+  Normalized Record → Derived Metric → Evidence → Claim → Thesis → Decision lineage. A real paper
+  runtime run then exposed `MultipleResultsFound`: one immutable SEC raw object can legitimately
+  contain several normalized records, while Research persistence had assumed one. The provider and
+  Evidence contracts now carry the exact `normalized_record_id`; a bounded compatibility resolver
+  supports old checkpoints by accepting a single normalized envelope or matching record type,
+  symbol and payload when several candidates exist.
+- Explicit recovery keeps non-exhausted failures on the same append-only Run and records
+  `run.operator_retry_queued`. Exhausted failures are never rewritten or given extra attempts.
+  Instead, one idempotent replacement Run is inserted with the original decision/data cutoff,
+  correlation path and all six immutable execution pins, plus bidirectional
+  `run.replacement_queued` / `run.replaces_failed` audit events. The first GREEN attempt correctly
+  failed because the database rejects post-insert pin updates; admission was tightened to accept a
+  complete pin set at INSERT time without weakening the immutability trigger.
+- The real AVGO and BE failures (`fa2a3355-...`, `94bb24d4-...`) remain `FAILED` at 3/3. Their
+  replacements (`bfa01ac8-...`, `4cefeb17-...`) completed on attempt 1. The live lineage query found
+  2 Decisions, 2 Theses, 851 Evidence/Claim/Derived/Normalized links and 849 distinct raw objects;
+  every linked raw fact satisfied `available_at <= data_cutoff`. No historical failure, raw object
+  or test result was rewritten, and no Fixture data was substituted.
+- Focused replacement/retry tests exited 0 with 2/2 passed. The corrected related suite
+  (`test_scheduling.py`, `test_run_admission.py`, `test_research_population.py`, and unit scheduler
+  tests) exited 0 with 16/16 passed. Ruff exited 0 and Mypy reported no issues in 7 affected source
+  files. One earlier combined command exited 4 before collection because it named a removed test
+  path; the corrected command above is the recorded verification evidence.
+
+## 2026-09-22 — M8.2 production loop, FRE-43 Task 3
+
+- The scheduled Portfolio boundary now admits an immutable `DENIED_NO_ACTION` run when the configured
+  Alpaca entitlement is IEX instead of silently omitting the audit. Capacity recovery schedules the
+  remaining same-session Research runs before the Portfolio run without duplicating durable run keys.
+- A real runtime exposed the missing-context behavior before GREEN: Portfolio run
+  `8b1b1df8-...` failed with `RunInputUnavailable` because no authoritative QQQ/SOXX/VIX
+  `MarketContextSnapshot` existed. The fix does not fabricate or substitute market data. Migration
+  `0040_entitlement_risk_context` permits a null context only for an immutable `REJECTED` risk fact
+  containing `MARKET_DATA_ENTITLEMENT`; a database regression proves every other null-context risk
+  decision is rejected. Domain, persistence, REST and web contracts enforce the same nullable boundary.
+- The paper worker now persists idempotent opening CashLedger entries and cash-only PortfolioNav for
+  the entitlement denial, plus one deterministic RiskDecision and `PortfolioAction.NO_ACTION` per
+  active frozen Research decision. Existing positions cannot enter this path because they could not be
+  valued honestly without authorized marks. The SIP-only next-bar order/fill path remains unchanged.
+- The original run had already exhausted 3/3 attempts under old code and remains append-only FAILED.
+  Its audited replacement `4b423e5f-...` retained the original cutoff and all execution pins, completed
+  on attempt 1, and recorded `run.replaces_failed`, `run.started`, and `run.completed`. The production
+  query found 8 entitlement REJECTED risks with null context, 8 NO_ACTION facts, NAV `100000`, 0 orders
+  and 0 fills. No historical fact was rewritten and no Fixture data was used.
+- Verification evidence: the focused scheduling/Portfolio/accounting/rebalance command exited 0 with
+  27/27 passed; the scheduling, Research population and new worker integration group exited 0 with
+  8/8 passed; migrations plus schema exited 0 with 22/22 passed, including downgrade to 0024 and
+  re-upgrade to head. The web portfolio parser test exited 0 with 18/18 passed. Ruff format/check,
+  Mypy (290 source files), and non-incremental TypeScript typecheck all exited 0. Early invocations that
+  used the read-only worktree cache or a root-relative Vitest path were command-environment failures and
+  were rerun with isolated `/tmp` caches and the correct workspace path.
+
+## 2026-09-22 — M8.2 production loop, FRE-43 Task 4
+
+- RED: `test_alert_worker_runtime.py` exited 1 because `monitor_market` only counted visible rows and
+  persisted zero Alert facts. GREEN now loads canonical `minute_bars_stream` revisions under both
+  `event_time <= decision_time` and `available_at <= data_cutoff`, calculates the existing Decimal-only
+  anomaly features, applies `market-anomaly-v1`, resolves cutoff-safe Thesis/Evidence context, and
+  persists the deterministic Alert, metrics, Thesis link and notification outbox boundary. The Agent
+  never sends a notification and the optional LLM explanation is recorded as `DISABLED`.
+- A concurrent two-run regression then exposed a PostgreSQL deadlock between the alert unique index
+  and time-series metric insertion. `PostgresAlertStore.persist_alert` now serializes only identical
+  deterministic alert keys with a transaction advisory lock; independent symbols/keys remain
+  concurrent. Both runs complete, while exactly one Alert and one outbox fact survive. A separate
+  missing-context regression proves the run completes with `unavailable_context=1` and fabricates no
+  Alert when no cutoff-safe Thesis exists.
+- Verification: the focused runtime suite exited 0 with 2/2 passed; the combined runtime plus complete
+  market replay suite exited 0 with 12/12 passed, covering duplicate delivery, concurrent recovery,
+  corrected/out-of-order bars, Redis pending recovery, MinIO raw-object lineage and provider failure
+  behavior. Ruff format/check and Mypy (291 source files) exited 0.
+
+## 2026-09-22 — M8.2 production loop, FRE-43 Task 5
+
+- The worker RED first confirmed its existing PIT discipline: reference bars available one second
+  after decision time were correctly rejected. With valid pre-decision reference bars, RED then failed
+  because no forward replay was produced. GREEN adds one bounded loader for persisted CandidateLesson
+  inputs. Eligibility requires lesson creation before the review cutoff, at least one prior replay, and
+  latest append-only human action `APPROVE` at or before the cutoff; future and unapproved lessons are
+  excluded without mutating their status.
+- The non-Fixture worker regression covers one mature decision, one pending decision, NVDA and QQQ
+  point-in-time price paths, and prior/future/unapproved lessons. It persists only the mature Outcome,
+  retains the pending decision ID, records 1-day/5-day returns and excess returns, MFE, MAE,
+  risk-adjusted return and calibration error, and creates a forward replay only for the prior validated
+  lesson. Newly derived lessons remain `CANDIDATE`; no PolicyCandidate or activation is created.
+- The full Weekly Review, append-only learning, human approval and policy-promotion security suite
+  initially exposed two legacy tests that counted the entire durable database instead of their own run.
+  Their queries now scope through the test's weekly-review lineage and preserve all existing history.
+  The corrected complete suite exited 0 with 22/22 passed. Ruff format/check and Mypy (292 source
+  files) exited 0.
+
+## 2026-09-23 — M8.2 production loop, FRE-43 Task 6
+
+- The API-mode browser acceptance now covers the complete durable loop on both desktop and mobile:
+  persisted Watchlist Research without Fixture substitution, cash-only Portfolio NAV plus the explicit
+  IEX `MARKET_DATA_ENTITLEMENT` rejection and zero fills, persisted/deduplicated Alerts or the honest
+  empty state, and Weekly Review outcomes, calibration, benchmark comparison, MFE, MAE and
+  risk-adjusted return. It also checks viewport containment and Axe serious/critical violations. The
+  real managed-runtime command exited 0 with 2/2 Playwright projects passed in 10.5 seconds.
+- Weekly Review's REST parser and UI now retain the already-persisted `excess_returns`, maximum
+  favorable/adverse excursion and risk-adjusted-return fields instead of replacing benchmark evidence
+  with a hard-coded unavailable label. The daily Alpaca schedule also admits one QQQ price-bar slice in
+  addition to each configured Research symbol; QQQ does not receive a news job unless it is itself on
+  the Research Watchlist. The focused frontend suite passed 33/33 and the scheduler/Weekly Review
+  integration checks passed 2/2.
+- A real QQQ ingestion job (`c1ce35ca-4938-46f9-8211-9848a29b33f6`) completed on attempt 1 and
+  persisted one ALPACA/IEX bar plus MinIO raw-object lineage. Its `available_at` is later than the
+  historical Review decisions, so old excess-return cells correctly remain unavailable under
+  `available_at <= decision_time`; the new benchmark feed applies only to future eligible Reviews.
+- The first live matrix attempt exposed host/MinIO clock skew after a long-running Docker session.
+  MinIO rejected writes with `RequestTimeTooSkewed`, the Alpaca stream supervisor failed closed, and
+  the managed runtime then shut down every child as designed. After host/container UTC resynchronized,
+  the unchanged runtime restarted healthy (`/api/v1/health` 200, `paper_only`), the real browser matrix
+  passed, and no new skew error appeared. No failed raw write or historical fact was rewritten.
+- Full verification also exposed two stale compatibility assumptions. Alert worker tests now assert the
+  complete deterministic completion payload. Reused CandidateLessons are approved through the
+  normalized `lesson_attribution_link` for the selected Weekly Review rather than the lesson's original
+  attribution; a RED regression reproduced the failure before GREEN, and the fixture demo now resolves
+  the persisted canonical lesson ID. The approval/worker/demo/smoke group exited 0 with 4/4 passed.
+- Verification evidence: affected concurrency, recovery, lineage, Portfolio risk, alert and Weekly
+  Review suites exited 0 with 98/98 passed; the complete frontend suite exited 0 with 34 files and
+  219/219 tests passed; TypeScript, ESLint and the Next.js production build exited 0. The generated
+  OpenAPI contract was refreshed to represent the locked nullable market-context boundary for an
+  entitlement-denied risk decision. The final fresh `make verify` exited 0: Ruff format/check clean for
+  339 files, Mypy clean for 292 source files, Alembic drift and generated-contract checks passed,
+  backend 764 passed / 5 optional live-provider tests skipped, frontend 219 passed, and the production
+  build succeeded. The managed runtime was stopped before the final database-wide gate; Docker volumes
+  and all persisted Paper/Research facts remain intact.

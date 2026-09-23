@@ -290,8 +290,8 @@ describe('live data API client', () => {
         mode: 'paper',
         providers: {
           alpaca: { configured: true, mode: 'read_only', status: 'FAILURE', coverage: 'IEX' },
-          alpha_vantage: { configured: false, mode: 'unavailable', status: null, coverage: null },
-          sec: { configured: false, mode: 'unavailable', status: null, coverage: null },
+          alpha_vantage: { configured: false, mode: 'unavailable', operator_action: 'Configure ALPHA_VANTAGE_API_KEY to ingest the earnings calendar.', status: null, coverage: null },
+          sec: { configured: false, mode: 'unavailable', operator_action: 'Configure SEC_USER_AGENT with a monitored contact identity.', status: null, coverage: null },
         },
       })
       if (url.includes('/portfolio?')) return jsonResponse({
@@ -303,6 +303,7 @@ describe('live data API client', () => {
         decision_time: options.decisionTime, earnings_events: [], financial_facts: [], items: [],
         news_articles: [], next_cursor: null, option_snapshots: [], sec_filings: [],
         unavailable_domains: ['ANALYST_TARGETS'],
+        unavailable_reasons: { ANALYST_TARGETS: 'Provider approval required.' },
       })
     })
 
@@ -310,8 +311,8 @@ describe('live data API client', () => {
       mode: 'paper',
       providers: {
         alpaca: { status: 'FAILURE' },
-        alpha_vantage: { status: undefined },
-        sec: { status: undefined },
+        alpha_vantage: { operatorAction: 'Configure ALPHA_VANTAGE_API_KEY to ingest the earnings calendar.', status: undefined },
+        sec: { operatorAction: 'Configure SEC_USER_AGENT with a monitored contact identity.', status: undefined },
       },
     })
     await expect(getPortfolioSummary({ ...options, fetchImpl })).resolves.toMatchObject({
@@ -320,6 +321,7 @@ describe('live data API client', () => {
     await expect(getStockResearch({ ...options, fetchImpl }, 'NVDA')).resolves.toEqual({
       earningsEvents: [], financialFacts: [], newsArticles: [], optionSnapshots: [], records: [],
       secFilings: [], unavailableDomains: ['ANALYST_TARGETS'],
+      unavailableReasons: { ANALYST_TARGETS: 'Provider approval required.' },
     })
   })
 
@@ -327,18 +329,22 @@ describe('live data API client', () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       decision_time: options.decisionTime,
       earnings_events: [{ available_at: '2026-08-29T09:20:00Z', content_hash: 'b'.repeat(64), currency: 'USD', estimate: '0.95', event_date: '2026-09-20', event_time: '2026-08-29T09:00:00Z', fiscal_date_end: '2026-06-30', id: 'earnings-1', provider: 'ALPHA_VANTAGE', raw_object_key: 'live/earnings.csv' }],
-      financial_facts: [], items: [],
+      financial_facts: [{ accession_number: '0001045810-26-000001', available_at: '2026-08-29T09:20:00Z', canonical_concept: 'REVENUE', content_hash: 'd'.repeat(64), currency: 'USD', event_time: '2026-08-29T09:00:00Z', id: 'fact-1', mapping_status: 'EXACT', period_end: '2026-06-30', period_start: '2026-04-01', provider: 'SEC', raw_object_key: 'live/sec/companyfacts.json', source_concept: 'Revenues', taxonomy: 'us-gaap', unit: 'USD', value: '1000' }], items: [],
       news_articles: [{ available_at: '2026-08-29T09:20:00Z', content_hash: 'a'.repeat(64), event_time: '2026-08-29T09:00:00Z', headline: 'Persisted headline', id: 'news-1', provider: 'ALPACA', raw_object_key: 'live/news.json', source: 'wire', summary: 'Persisted summary' }],
       next_cursor: null,
       option_snapshots: [{ available_at: '2026-08-29T09:20:00Z', content_hash: 'c'.repeat(64), event_time: '2026-08-29T09:00:00Z', feed_type: 'option_snapshot', id: 'options-1', payload: { put_call_ratio: '0.72' }, provider: 'ALPACA', raw_object_key: 'live/options.json' }],
-      sec_filings: [], unavailable_domains: ['ANALYST_TARGETS'],
+      sec_filings: [{ accepted_at: '2026-08-29T09:00:00Z', accession_number: '0001045810-26-000001', available_at: '2026-08-29T09:20:00Z', content_hash: 'e'.repeat(64), description: 'Quarterly report', document_raw_object_key: 'live/sec/filing.htm', event_time: '2026-08-29T09:00:00Z', filing_date: '2026-08-29', form: '10-Q', id: 'filing-1', provider: 'SEC', raw_object_key: 'live/sec/filing.htm', report_date: '2026-06-30' }], unavailable_domains: ['ANALYST_TARGETS'],
+      unavailable_reasons: { ANALYST_TARGETS: 'Provider approval required.' },
     }))
 
     await expect(getStockResearch({ ...options, fetchImpl }, 'NVDA')).resolves.toMatchObject({
       earningsEvents: [{ estimate: '0.95', rawObjectKey: 'live/earnings.csv' }],
+      financialFacts: [{ contentHash: 'd'.repeat(64), eventTime: '2026-08-29T09:00:00Z', rawObjectKey: 'live/sec/companyfacts.json' }],
       newsArticles: [{ headline: 'Persisted headline', provider: 'ALPACA' }],
       optionSnapshots: [{ contentHash: 'c'.repeat(64), payload: { put_call_ratio: '0.72' } }],
       unavailableDomains: ['ANALYST_TARGETS'],
+      unavailableReasons: { ANALYST_TARGETS: 'Provider approval required.' },
+      secFilings: [{ contentHash: 'e'.repeat(64), eventTime: '2026-08-29T09:00:00Z', rawObjectKey: 'live/sec/filing.htm' }],
     })
   })
 
@@ -357,7 +363,7 @@ describe('live data API client', () => {
         { available_at: '2026-08-29T09:21:00Z', event_time: '2026-08-29T09:20:00Z', id: 'nav-2', nav: '100500', portfolio_id: 'portfolio-1' },
       ],
       positions: [{ average_cost: '190', market_price: '200', market_value: '10000', price_available_at: '2026-08-29T09:19:00Z', quantity: '50', symbol: 'NVDA', unrealized_pnl: '500' }],
-      risk_decisions: [{ approved_delta: '0.1', approved_weight: '0.1', authorization_source: 'policy', authorized_side: 'BUY', created_at: '2026-08-29T09:18:00Z', current_weight: '0', decided_at: '2026-08-29T09:18:00Z', id: 'risk-1', market_context_snapshot_id: 'context-1', max_order_quantity: '50', portfolio_id: 'portfolio-1', proposal_id: 'proposal-1', reason_codes: [], reference_nav: '100000', reference_price: '190', research_decision_id: 'research-1', requested_weight: '0.1', risk_policy_version_id: 'risk-v1', status: 'APPROVED', symbol: 'NVDA' }],
+      risk_decisions: [{ approved_delta: '0', approved_weight: '0', authorization_source: 'DETERMINISTIC', authorized_side: null, created_at: '2026-08-29T09:18:00Z', current_weight: '0', decided_at: '2026-08-29T09:18:00Z', id: 'risk-1', market_context_snapshot_id: null, max_order_quantity: '0', portfolio_id: 'portfolio-1', proposal_id: 'proposal-1', reason_codes: ['MARKET_DATA_ENTITLEMENT'], reference_nav: null, reference_price: null, research_decision_id: 'research-1', requested_weight: '0.1', risk_policy_version_id: 'risk-v1', status: 'REJECTED', symbol: 'NVDA' }],
       status: 'SUCCESS', trading: 'paper_only',
     }))
 
@@ -366,7 +372,7 @@ describe('live data API client', () => {
       fills: [{ price: '190', quantity: '50', symbol: 'NVDA' }],
       performanceHistory: [{ nav: '101000' }, { availableAt: '2026-08-29T09:21:00Z', nav: '100500' }],
       positions: [{ marketValue: '10000', unrealizedPnl: '500' }],
-      riskDecisions: [{ approvedWeight: '0.1', status: 'APPROVED' }],
+      riskDecisions: [{ approvedWeight: '0', marketContextSnapshotId: null, status: 'REJECTED' }],
     })
 
     const invalidFetch = vi.fn(async () => jsonResponse({
@@ -454,7 +460,14 @@ describe('live data API client', () => {
     }))
 
     await expect(getWeeklyReviewDetail({ ...options, fetchImpl }, 'r1')).resolves.toMatchObject({
-      outcomes: [{ confidence: '0.8', symbol: 'NVDA' }],
+      outcomes: [{
+        confidence: '0.8',
+        excessReturns: {},
+        maximumAdverseExcursion: '-0.01',
+        maximumFavorableExcursion: '0.04',
+        riskAdjustedReturn: '3',
+        symbol: 'NVDA',
+      }],
       calibration: [{ realizedReturn: '0.03' }],
       lessons: [{ statement: 'Wait for confirmation.' }],
     })

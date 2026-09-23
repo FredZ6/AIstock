@@ -21,6 +21,7 @@ ReadStatus = Literal["SUCCESS", "DEGRADED", "FAILURE"]
 class ProviderState(StrictModel):
     configured: bool
     mode: Literal["read_only", "unavailable"]
+    operator_action: str | None = None
     status: Literal["SUCCESS", "DEGRADED", "FAILURE", "UNAVAILABLE"] | None = None
     coverage: str | None = None
     latest_job_state: str | None = None
@@ -183,7 +184,7 @@ class RiskDecisionItem(StrictModel):
     max_order_quantity: Decimal
     authorization_source: str
     authorized_side: Literal["BUY", "SELL"] | None
-    market_context_snapshot_id: UUID
+    market_context_snapshot_id: UUID | None
     reason_codes: list[str]
     risk_policy_version_id: UUID
     decided_at: datetime
@@ -372,6 +373,9 @@ class SecFilingItem(StrictModel):
     accepted_at: datetime
     available_at: datetime
     description: str
+    event_time: datetime
+    content_hash: str
+    raw_object_key: str
     document_raw_object_key: str
 
 
@@ -387,7 +391,10 @@ class FinancialFactItem(StrictModel):
     period_start: date
     period_end: date
     accession_number: str
+    event_time: datetime
     available_at: datetime
+    content_hash: str
+    raw_object_key: str
     mapping_status: Literal["EXACT", "DERIVED", "UNMAPPED", "AMBIGUOUS"]
 
 
@@ -436,6 +443,7 @@ class ResearchPage(StrictModel):
     earnings_events: list[EarningsEventItem]
     option_snapshots: list[OptionSnapshotItem]
     unavailable_domains: list[Literal["EARNINGS", "NEWS", "OPTIONS", "ANALYST_TARGETS"]]
+    unavailable_reasons: dict[Literal["EARNINGS", "NEWS", "OPTIONS", "ANALYST_TARGETS"], str]
     next_cursor: str | None
 
 

@@ -414,6 +414,11 @@ def provider_health(
             "sec": {
                 "configured": bool(settings.sec_user_agent),
                 "mode": "read_only" if settings.sec_user_agent else "unavailable",
+                "operator_action": (
+                    None
+                    if settings.sec_user_agent
+                    else "Configure SEC_USER_AGENT with a monitored contact identity."
+                ),
             },
             "alpaca": {
                 "configured": alpaca_configured,
@@ -422,10 +427,23 @@ def provider_health(
                 "coverage": settings.alpaca_entitlement_coverage,
                 "latest_job_state": latest_job,
                 "latest_quality_status": latest_quality_status,
+                "operator_action": (
+                    None
+                    if alpaca_configured
+                    else (
+                        "Configure ALPACA_DATA_KEY and ALPACA_DATA_SECRET "
+                        "for read-only market data."
+                    )
+                ),
             },
             "alpha_vantage": {
                 "configured": bool(settings.alpha_vantage_api_key),
                 "mode": "read_only" if settings.alpha_vantage_api_key else "unavailable",
+                "operator_action": (
+                    None
+                    if settings.alpha_vantage_api_key
+                    else "Configure ALPHA_VANTAGE_API_KEY to ingest the earnings calendar."
+                ),
             },
         },
     }
@@ -937,6 +955,7 @@ def get_research_report(
 def get_stock_research(
     symbol: str,
     connection: ConnectionDependency,
+    settings: SettingsDependency,
     decision_time: datetime,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     cursor: str | None = None,
@@ -1009,6 +1028,9 @@ def get_stock_research(
                 sec_filing.c.accepted_at,
                 sec_filing.c.available_at,
                 sec_filing.c.description,
+                document_raw.c.event_time,
+                document_raw.c.content_hash,
+                document_raw.c.raw_object_key,
                 document_raw.c.raw_object_key.label("document_raw_object_key"),
             )
             .join(document_raw, document_raw.c.id == sec_filing.c.document_raw_data_object_id)
@@ -1024,6 +1046,7 @@ def get_stock_research(
         .mappings()
         .all()
     )
+    fact_raw = raw_data_object.alias("financial_fact_raw")
     fact_rows = (
         connection.execute(
             select(
@@ -1038,14 +1061,19 @@ def get_stock_research(
                 financial_fact.c.period_start,
                 financial_fact.c.period_end,
                 financial_fact.c.accession_number,
+                fact_raw.c.event_time,
                 financial_fact.c.available_at,
+                fact_raw.c.content_hash,
+                fact_raw.c.raw_object_key,
                 financial_fact.c.mapping_status,
             )
             .join(sec_filing, sec_filing.c.id == financial_fact.c.sec_filing_id)
+            .join(fact_raw, fact_raw.c.id == financial_fact.c.raw_data_object_id)
             .where(
                 financial_fact.c.security_id == visible_security,
                 financial_fact.c.available_at <= cutoff,
                 sec_filing.c.available_at <= cutoff,
+                fact_raw.c.available_at <= cutoff,
             )
             .order_by(financial_fact.c.period_end.desc(), financial_fact.c.id.desc())
             .limit(100)
@@ -1147,12 +1175,31 @@ def get_stock_research(
         .all()
     )
     unavailable_domains = ["ANALYST_TARGETS"]
+    unavailable_reasons = {
+        "ANALYST_TARGETS": (
+            "Unsupported until an authoritative provider, schema, and license are approved."
+        )
+    }
     if not news_rows:
         unavailable_domains.append("NEWS")
+        unavailable_reasons["NEWS"] = (
+            "No point-in-time eligible Alpaca News record exists at this decision time."
+            if settings.alpaca_data_key and settings.alpaca_data_secret
+            else "Configure ALPACA_DATA_KEY and ALPACA_DATA_SECRET to ingest Alpaca News."
+        )
     if not earnings_rows:
         unavailable_domains.append("EARNINGS")
+        unavailable_reasons["EARNINGS"] = (
+            "No point-in-time eligible Alpha Vantage earnings record exists at this decision time."
+            if settings.alpha_vantage_api_key
+            else "Configure ALPHA_VANTAGE_API_KEY to ingest the earnings calendar."
+        )
     if not option_rows:
         unavailable_domains.append("OPTIONS")
+        unavailable_reasons["OPTIONS"] = (
+            "Unavailable because the locked architecture has no approved lawful read-only "
+            "Options provider."
+        )
     return {
         "decision_time": cutoff,
         "items": items,
@@ -1162,6 +1209,7 @@ def get_stock_research(
         "earnings_events": [_row(row) for row in earnings_rows],
         "option_snapshots": [_row(row) for row in option_rows],
         "unavailable_domains": unavailable_domains,
+        "unavailable_reasons": unavailable_reasons,
         "next_cursor": next_cursor,
     }
 

@@ -3,12 +3,12 @@ from __future__ import annotations
 from collections.abc import Callable, Collection
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from celery.schedules import crontab  # type: ignore[import-untyped]
-from sqlalchemy import Connection, Engine, create_engine, select, update
+from sqlalchemy import Connection, Engine, create_engine, func, select, update
 
 from stock_platform.application.ingestion.jobs import IngestionJobSpec
 from stock_platform.application.market_data.policy import (
@@ -61,6 +61,14 @@ class ScheduledAlpacaBackfill:
 class ScheduledReconnectGapFill:
     recovery: ReconnectGapFill
     scheduled: ScheduledAlpacaBackfill
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduledAgentCatchUp:
+    research_cutoff: datetime
+    portfolio_cutoff: datetime
+    research_run_ids: tuple[str, ...]
+    portfolio_run_id: str | None
 
 
 NEW_YORK = ZoneInfo("America/New_York")
@@ -117,6 +125,22 @@ def schedule_key(kind: str, cutoff: datetime, *, symbol: str | None = None) -> s
     aware = require_aware(cutoff).astimezone(UTC)
     prefix = f"{kind}:{Symbol(symbol)}" if symbol is not None else kind
     return f"{prefix}:{aware.isoformat()}"
+
+
+def latest_completed_market_cutoff(now: datetime, *, cutoff: time) -> datetime:
+    """Return the latest canonical New York cutoff on a completed trading day."""
+    checked_now = require_aware(now).astimezone(UTC)
+    local_now = checked_now.astimezone(NEW_YORK)
+    calendar = MarketCalendar()
+    for days_back in range(8):
+        candidate_day = local_now.date() - timedelta(days=days_back)
+        market_probe = datetime.combine(candidate_day, time(10), tzinfo=NEW_YORK)
+        if calendar.session_at(market_probe) is None:
+            continue
+        candidate = datetime.combine(candidate_day, cutoff, tzinfo=NEW_YORK).astimezone(UTC)
+        if candidate <= checked_now:
+            return candidate
+    raise ValueError("unable to resolve a completed market cutoff")
 
 
 def schedule_alpaca_backfills(
@@ -291,7 +315,7 @@ def schedule_alpaca_daily_jobs(
     entitlement: EntitlementSnapshot,
     now: datetime,
 ) -> int:
-    """Admit one bounded daily-bar and news slice for each research symbol."""
+    """Admit bounded research slices plus the locked QQQ review benchmark."""
     from stock_platform.workers.ingestion_tasks import BarTimeframe
 
     checked_now = require_aware(now).astimezone(UTC).replace(second=0, microsecond=0)
@@ -306,7 +330,7 @@ def schedule_alpaca_daily_jobs(
     else:
         return 0
     with engine.connect() as connection:
-        symbols = tuple(
+        research_symbols = tuple(
             connection.execute(
                 select(watchlist_item.c.symbol)
                 .where(watchlist_item.c.daily_research.is_(True))
@@ -315,11 +339,13 @@ def schedule_alpaca_daily_jobs(
         )
     store = IngestionJobStore(engine)
     scheduled = 0
-    for symbol in symbols:
-        for dataset, timeframe in (
-            (FeedType.PRICE_BARS, BarTimeframe.DAY),
-            (FeedType.COMPANY_NEWS, None),
-        ):
+    for symbol in sorted({str(symbol) for symbol in research_symbols} | {"QQQ"}):
+        datasets: list[tuple[FeedType, BarTimeframe | None]] = [
+            (FeedType.PRICE_BARS, BarTimeframe.DAY)
+        ]
+        if symbol in research_symbols:
+            datasets.append((FeedType.COMPANY_NEWS, None))
+        for dataset, timeframe in datasets:
             result = schedule_alpaca_backfills(
                 store,
                 symbol=str(symbol),
@@ -512,8 +538,6 @@ def schedule_portfolio_decision(
         cutoff=cutoff,
         purpose=DataPurpose.PAPER_EXECUTION,
     )
-    if admission is not None and admission.outcome is PolicyOutcome.DENIED_NO_ACTION:
-        return None
     return _schedule(
         connection,
         settings,
@@ -539,6 +563,34 @@ def schedule_weekly_review(
         kind="weekly-review",
         run_type="WEEKLY_REVIEW",
         dispatch=dispatch,
+    )
+
+
+def schedule_agent_catch_up(
+    connection: Connection,
+    settings: Settings,
+    *,
+    now: datetime,
+    dispatch: Dispatch = _dispatch,
+) -> ScheduledAgentCatchUp:
+    """Idempotently admit the latest completed Research and Portfolio session."""
+    research_cutoff = latest_completed_market_cutoff(now, cutoff=time(16, 15))
+    portfolio_cutoff = latest_completed_market_cutoff(now, cutoff=time(16, 30))
+    return ScheduledAgentCatchUp(
+        research_cutoff=research_cutoff,
+        portfolio_cutoff=portfolio_cutoff,
+        research_run_ids=schedule_daily_research(
+            connection,
+            settings,
+            research_cutoff,
+            dispatch=dispatch,
+        ),
+        portfolio_run_id=schedule_portfolio_decision(
+            connection,
+            settings,
+            portfolio_cutoff,
+            dispatch=dispatch,
+        ),
     )
 
 
@@ -594,6 +646,115 @@ def recover_queued_runs(
     return tuple(str(run_id) for run_id, _ in rows)
 
 
+def recover_and_schedule_catch_up(
+    connection: Connection,
+    settings: Settings,
+    *,
+    now: datetime | None = None,
+    dispatch: Dispatch = _dispatch,
+) -> tuple[tuple[str, ...], ScheduledAgentCatchUp]:
+    """Recover durable work, then admit missed session work as capacity becomes available."""
+    recovery_time = require_aware(now or datetime.now(UTC))
+    recovered = recover_queued_runs(
+        connection,
+        now=recovery_time,
+        dispatch=dispatch,
+    )
+    catch_up = schedule_agent_catch_up(
+        connection,
+        settings,
+        now=recovery_time,
+        dispatch=dispatch,
+    )
+    return recovered, catch_up
+
+
+def requeue_failed_run(
+    connection: Connection,
+    run_id: UUID,
+    *,
+    dispatch: Dispatch = _dispatch,
+) -> bool:
+    """Explicitly retry one non-exhausted failed run while preserving its failure audit."""
+    row = (
+        connection.execute(select(agent_run).where(agent_run.c.id == run_id).with_for_update())
+        .mappings()
+        .one_or_none()
+    )
+    if row is None or row["status"] != "FAILED" or row["attempt_count"] >= row["max_attempts"]:
+        return False
+    connection.execute(
+        update(agent_run)
+        .where(agent_run.c.id == run_id)
+        .values(status="QUEUED", lease_expires_at=None, updated_at=func.now())
+    )
+    append_run_event(
+        connection,
+        run_id,
+        "run.operator_retry_queued",
+        {"previous_attempt": row["attempt_count"]},
+    )
+    dispatch(TASKS[row["run_type"]], str(run_id))
+    return True
+
+
+def replace_exhausted_run(
+    connection: Connection,
+    settings: Settings,
+    run_id: UUID,
+    *,
+    dispatch: Dispatch = _dispatch,
+) -> UUID | None:
+    """Create one audited replacement while retaining the exhausted failed run."""
+    row = (
+        connection.execute(select(agent_run).where(agent_run.c.id == run_id).with_for_update())
+        .mappings()
+        .one_or_none()
+    )
+    if row is None or row["status"] != "FAILED" or row["attempt_count"] < row["max_attempts"]:
+        return None
+    payload = {
+        **dict(row["request_payload"]),
+        "replaces_failed_run_id": str(run_id),
+    }
+    pin_columns = (
+        "research_scoring_policy_version",
+        "risk_policy_version",
+        "execution_policy_version",
+        "confidence_policy_version",
+        "prompt_version",
+        "model_version",
+    )
+    admitted = admit_run(
+        connection,
+        max_active_runs=settings.max_active_agent_runs,
+        run_type=cast(RunType, row["run_type"]),
+        idempotency_key=f"replacement:{run_id}",
+        payload=payload,
+        symbol=row["symbol"],
+        decision_time=row["decision_time"],
+        data_cutoff=row["data_cutoff"],
+        correlation_id=row["correlation_id"],
+        execution_pins={column: row[column] for column in pin_columns},
+    )
+    if admitted.replayed:
+        return admitted.id
+    append_run_event(
+        connection,
+        run_id,
+        "run.replacement_queued",
+        {"replacement_run_id": str(admitted.id)},
+    )
+    append_run_event(
+        connection,
+        admitted.id,
+        "run.replaces_failed",
+        {"failed_run_id": str(run_id)},
+    )
+    dispatch(TASKS[admitted.run_type], str(admitted.id))
+    return admitted.id
+
+
 def _run_schedule(kind: Literal["research", "intraday", "portfolio", "review", "recover"]) -> None:
     settings = Settings()
     with create_engine(settings.database_url).begin() as connection:
@@ -607,7 +768,7 @@ def _run_schedule(kind: Literal["research", "intraday", "portfolio", "review", "
         elif kind == "review":
             schedule_weekly_review(connection, settings, now)
         else:
-            recover_queued_runs(connection)
+            recover_and_schedule_catch_up(connection, settings, now=now)
 
 
 from stock_platform.workers.celery_app import celery_app  # noqa: E402, I001
@@ -636,6 +797,38 @@ def weekly_review() -> None:
 @celery_app.task(name="stock_platform.workers.schedules.recover_queued")  # type: ignore[untyped-decorator]
 def recover_queued() -> None:
     _run_schedule("recover")
+
+
+@celery_app.task(name="stock_platform.workers.schedules.retry_failed_agent_run")  # type: ignore[untyped-decorator]
+def retry_failed_agent_run(run_id: str) -> bool:
+    settings = Settings()
+    with create_engine(settings.database_url).begin() as connection:
+        return requeue_failed_run(connection, UUID(run_id))
+
+
+@celery_app.task(name="stock_platform.workers.schedules.replace_exhausted_agent_run")  # type: ignore[untyped-decorator]
+def replace_exhausted_agent_run(run_id: str) -> str | None:
+    settings = Settings()
+    with create_engine(settings.database_url).begin() as connection:
+        replacement_id = replace_exhausted_run(connection, settings, UUID(run_id))
+    return str(replacement_id) if replacement_id is not None else None
+
+
+@celery_app.task(name="stock_platform.workers.schedules.bootstrap_agent_runs")  # type: ignore[untyped-decorator]
+def bootstrap_agent_runs() -> dict[str, object]:
+    settings = Settings()
+    with create_engine(settings.database_url).begin() as connection:
+        result = schedule_agent_catch_up(
+            connection,
+            settings,
+            now=datetime.now(UTC),
+        )
+    return {
+        "research_cutoff": result.research_cutoff.isoformat(),
+        "portfolio_cutoff": result.portfolio_cutoff.isoformat(),
+        "research_run_ids": result.research_run_ids,
+        "portfolio_run_id": result.portfolio_run_id,
+    }
 
 
 @celery_app.task(  # type: ignore[untyped-decorator]

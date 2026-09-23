@@ -217,6 +217,7 @@ class SecProvider(GovernedHttpProvider):
         limiter: SecRequestLimiter | None = None,
         **kwargs: object,
     ) -> None:
+        kwargs.setdefault("timeout_seconds", 10.0)
         super().__init__(**kwargs)  # type: ignore[arg-type]
         self._user_agent = user_agent
         self._identity_resolver = identity_resolver or _seeded_identity_resolver()

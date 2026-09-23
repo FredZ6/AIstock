@@ -36,6 +36,14 @@ export default async function ResearchRoute({ params }: { params: Promise<{ symb
     }
     const filingQuality = filingQualityResult.status === 'fulfilled' ? filingQualityResult.value : []
     const factsQuality = factsQualityResult.status === 'fulfilled' ? factsQualityResult.value : []
+    const domainLabels = {
+      ANALYST_TARGETS: 'Analyst targets', EARNINGS: 'Earnings', NEWS: 'News', OPTIONS: 'Options',
+    } as const
+    const unavailableReasons = recordsResult.status === 'fulfilled'
+      ? Object.fromEntries(Object.entries(recordsResult.value.unavailableReasons).map(([domain, reason]) => [
+          domainLabels[domain as keyof typeof domainLabels], reason,
+        ]))
+      : {}
     return <ApiResearchPage
       asOf={asOf}
       dataQuality={[
@@ -52,9 +60,7 @@ export default async function ResearchRoute({ params }: { params: Promise<{ symb
       secFilings={recordsResult.status === 'fulfilled' ? recordsResult.value.secFilings : []}
       symbol={normalized}
       unavailableDomains={[
-        ...(recordsResult.status === 'fulfilled' ? (recordsResult.value.unavailableDomains ?? []).map((domain) => ({
-          ANALYST_TARGETS: 'Analyst targets', EARNINGS: 'Earnings', NEWS: 'News', OPTIONS: 'Options',
-        })[domain]) : []),
+        ...(recordsResult.status === 'fulfilled' ? (recordsResult.value.unavailableDomains ?? []).map((domain) => domainLabels[domain]) : []),
         ...(quotesResult.status === 'rejected' ? ['Market quotes API'] : []),
         ...(quotesResult.status === 'fulfilled' && quotesResult.value.status !== 'SUCCESS' ? ['Market quote quality'] : []),
         ...(recordsResult.status === 'rejected' ? ['Research API'] : []),
@@ -63,6 +69,7 @@ export default async function ResearchRoute({ params }: { params: Promise<{ symb
         ...(filingQualityResult.status === 'fulfilled' && (filingQuality.length === 0 || filingQuality.some((item) => item.status !== 'PASS')) ? ['SEC filing quality'] : []),
         ...(factsQualityResult.status === 'fulfilled' && (factsQuality.length === 0 || factsQuality.some((item) => item.status !== 'PASS')) ? ['SEC facts quality'] : []),
       ]}
+      unavailableReasons={unavailableReasons}
     />
   } catch (error) {
     reportLiveDataFailure(`/research/${normalized}`, 'route', error)

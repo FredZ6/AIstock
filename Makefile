@@ -1,4 +1,4 @@
-.PHONY: bootstrap up down seed clean-fixtures verify verify-agent-runtime evaluate smoke alpaca-stream
+.PHONY: bootstrap up down seed clean-fixtures verify verify-agent-runtime evaluate smoke alpaca-stream paper-runtime
 
 bootstrap:
 	./scripts/bootstrap.sh
@@ -31,3 +31,6 @@ smoke:
 
 alpaca-stream:
 	PYTHONPATH="$(CURDIR)/backend/src" UV_CACHE_DIR="$(CURDIR)/.uv-cache" uv run python scripts/run_alpaca_stream.py
+
+paper-runtime:
+	PYTHONPATH="$(CURDIR)/backend/src" UV_CACHE_DIR="$(CURDIR)/.uv-cache" uv run python scripts/run_paper_runtime.py

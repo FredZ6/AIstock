@@ -37,6 +37,7 @@ from stock_platform.domain.learning.policy import PolicyCandidate, PolicyStatus
 from stock_platform.domain.portfolio.fill import ExecutionBar
 from stock_platform.domain.research.claims import ResearchOpinionValue
 from stock_platform.infrastructure.db.models.tables import (
+    candidate_lesson,
     confidence_policy_version,
     decision_snapshot,
     execution_policy_version,
@@ -366,10 +367,16 @@ def _weekly_review_and_policy() -> tuple[dict[str, object], dict[str, object], d
                         weekly_review_run.c.run_key == review.run_id
                     )
                 ).scalar_one()
+                persisted_lesson_id = connection.execute(
+                    select(candidate_lesson.c.id).where(
+                        candidate_lesson.c.duplicate_key
+                        == "|".join(review.lessons[0].duplicate_key)
+                    )
+                ).scalar_one()
                 approval = record_lesson_decision(
                     connection,
                     review_id=review_id,
-                    lesson_id=review.lessons[0].id,
+                    lesson_id=persisted_lesson_id,
                     actor=actor,
                     action="APPROVE",
                     rationale="human-reviewed fixture lesson",
@@ -391,7 +398,7 @@ def _weekly_review_and_policy() -> tuple[dict[str, object], dict[str, object], d
         policy_kind="RISK",
         version="risk-v2-candidate",
         base_version="risk-v1",
-        lesson_ids=(review.lessons[0].id,),
+        lesson_ids=(persisted_lesson_id,),
         created_at=DECISION_TIME,
     )
     repository.transact(

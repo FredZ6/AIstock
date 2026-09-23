@@ -16,6 +16,7 @@ from stock_platform.agents.harness.checkpoint import InMemoryCheckpointStore
 from stock_platform.agents.harness.task_spec import PolicyVersions, TaskSpecification
 from stock_platform.agents.weekly_review.graph import WeeklyReviewGraph
 from stock_platform.agents.weekly_review.state import WeeklyReviewResult
+from stock_platform.application.learning.approval import record_lesson_decision
 from stock_platform.application.learning.persistence import PostgresWeeklyReviewStore
 from stock_platform.application.learning.promotion import (
     HumanActor,
@@ -515,6 +516,7 @@ def test_weekly_review_persists_complete_result_idempotently(engine: Engine) -> 
             benchmark_prices=(),
         )
         store = PostgresWeeklyReviewStore(connection)
+        replay_ids_before = set(connection.execute(text("SELECT id FROM replay_run")).scalars())
 
         store.persist(result, specification=specification())
         retry_result = WeeklyReviewGraph().run(
@@ -545,9 +547,32 @@ def test_weekly_review_persists_complete_result_idempotently(engine: Engine) -> 
             ).scalar_one()
             == 1
         )
-        assert connection.execute(text("SELECT count(*) FROM error_attribution")).scalar_one() == 1
-        assert connection.execute(text("SELECT count(*) FROM candidate_lesson")).scalar_one() == 1
-        assert connection.execute(text("SELECT count(*) FROM replay_run")).scalar_one() == 0
+        assert (
+            connection.execute(
+                text(
+                    "SELECT count(*) FROM error_attribution ea "
+                    "JOIN decision_outcome outcome ON outcome.id = ea.outcome_id "
+                    "WHERE outcome.weekly_review_run_id = :run_id"
+                ),
+                {"run_id": run_id},
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            connection.execute(
+                text(
+                    "SELECT count(*) FROM lesson_attribution_link link "
+                    "JOIN error_attribution ea ON ea.id = link.attribution_id "
+                    "JOIN decision_outcome outcome ON outcome.id = ea.outcome_id "
+                    "WHERE outcome.weekly_review_run_id = :run_id"
+                ),
+                {"run_id": run_id},
+            ).scalar_one()
+            == 1
+        )
+        assert set(connection.execute(text("SELECT id FROM replay_run")).scalars()) == (
+            replay_ids_before
+        )
         transaction.rollback()
 
 
@@ -598,15 +623,78 @@ def test_duplicate_lesson_retains_each_run_attribution_link(engine: Engine) -> N
                     JOIN decision_outcome outcome ON outcome.id = ea.outcome_id
                     JOIN weekly_review_run wr ON wr.id = outcome.weekly_review_run_id
                     WHERE lal.lesson_id = :lesson_id
+                      AND wr.run_key IN (:first_run, :second_run)
                     """
                 ),
-                {"lesson_id": lesson_id},
+                {
+                    "lesson_id": lesson_id,
+                    "first_run": f"weekly-dedupe-{first_id}",
+                    "second_run": f"weekly-dedupe-{second_id}",
+                },
             ).scalars()
         )
         assert linked_runs == {
             f"weekly-dedupe-{first_id}",
             f"weekly-dedupe-{second_id}",
         }
+        transaction.rollback()
+
+
+def test_duplicate_lesson_can_be_approved_from_its_linked_review(engine: Engine) -> None:
+    first_id = uuid4()
+    second_id = uuid4()
+    second_run_key = f"weekly-approval-{second_id}"
+    with engine.connect() as connection:
+        transaction = connection.begin()
+        insert_decision_snapshot(connection, first_id)
+        insert_decision_snapshot(connection, second_id)
+        store = PostgresWeeklyReviewStore(connection)
+
+        for decision_id in (first_id, second_id):
+            decision = DecisionForReview(
+                decision_id,
+                "NVDA",
+                NOW - timedelta(days=6),
+                Decimal("100"),
+                ResearchOpinionValue.BULLISH,
+            )
+            result = WeeklyReviewGraph().run(
+                run_id=(
+                    f"weekly-approval-{first_id}" if decision_id == first_id else second_run_key
+                ),
+                specification=specification(),
+                decisions=(decision,),
+                prices={
+                    decision.id: (
+                        PriceObservation(
+                            NOW - timedelta(days=5), NOW - timedelta(days=5), Decimal("90")
+                        ),
+                    )
+                },
+                benchmark_prices=(),
+            )
+            store.persist(result, specification=specification())
+
+        duplicate_key = "|".join(result.lessons[0].duplicate_key)
+        lesson_id = connection.execute(
+            text("SELECT id FROM candidate_lesson WHERE duplicate_key = :duplicate_key"),
+            {"duplicate_key": duplicate_key},
+        ).scalar_one()
+        review_id = connection.execute(
+            text("SELECT id FROM weekly_review_run WHERE run_key = :run_key"),
+            {"run_key": second_run_key},
+        ).scalar_one()
+
+        approval = record_lesson_decision(
+            connection,
+            review_id=review_id,
+            lesson_id=lesson_id,
+            actor=HumanActor("human-42", authenticated=True),
+            action="APPROVE",
+            rationale="review-linked canonical lesson",
+        )
+
+        assert approval["lesson_id"] == lesson_id
         transaction.rollback()
 
 

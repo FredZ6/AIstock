@@ -139,6 +139,7 @@ class ResearchNodes:
                         content_hash=record.content_hash,
                         raw_object_key=record.raw_object_key,
                         payload=record.payload,
+                        normalized_record_id=record.normalized_record_id,
                     )
                 )
             admission_gap = next(

@@ -33,6 +33,7 @@ class RiskReason(StrEnum):
     DRAWDOWN_LIMIT = "DRAWDOWN_LIMIT"
     DUPLICATE_INTENT = "DUPLICATE_INTENT"
     INCOMPLETE_EVIDENCE = "INCOMPLETE_EVIDENCE"
+    MARKET_DATA_ENTITLEMENT = "MARKET_DATA_ENTITLEMENT"
 
 
 def _decimal(name: str, value: Decimal) -> Decimal:
@@ -165,7 +166,7 @@ class RiskDecision:
     reference_nav: Decimal | None
     reference_price: Decimal | None
     max_order_quantity: Decimal
-    market_context_snapshot_id: UUID
+    market_context_snapshot_id: UUID | None
     portfolio_id: UUID
 
     def __post_init__(self) -> None:
@@ -196,6 +197,13 @@ class RiskDecision:
             raise ValueError("approved delta must match current and approved weights")
         reasons = tuple(RiskReason(reason) for reason in self.reason_codes)
         object.__setattr__(self, "reason_codes", reasons)
+        if self.market_context_snapshot_id is None and not (
+            self.status is RiskDecisionStatus.REJECTED
+            and RiskReason.MARKET_DATA_ENTITLEMENT in reasons
+        ):
+            raise ValueError(
+                "market context is required unless market-data entitlement rejects the decision"
+            )
         object.__setattr__(
             self,
             "decided_at",

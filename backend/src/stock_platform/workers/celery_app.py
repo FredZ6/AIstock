@@ -6,6 +6,7 @@ from stock_platform.settings import Settings
 settings = Settings()
 celery_app: Celery = Celery("stock_platform", broker=settings.redis_url)
 celery_app.conf.update(
+    task_default_queue="control",
     task_ignore_result=True,
     task_acks_late=True,
     task_reject_on_worker_lost=True,
@@ -20,13 +21,22 @@ celery_app.conf.update(
         "stock_platform.workers.ingestion_tasks",
     ),
     task_routes={
+        "stock_platform.workers.ingestion_tasks.persist_alpaca_stream_event": {
+            "queue": "stream-events"
+        },
         "stock_platform.workers.ingestion_tasks.run_alpaca_ingestion_job": {
             "queue": "ingestion-low"
         },
         "stock_platform.workers.ingestion_tasks.run_alpha_earnings_ingestion_job": {
-            "queue": "ingestion-low"
+            "queue": "research-ingestion"
         },
-        "stock_platform.workers.ingestion_tasks.run_sec_ingestion_job": {"queue": "ingestion-low"},
+        "stock_platform.workers.ingestion_tasks.run_sec_ingestion_job": {
+            "queue": "research-ingestion"
+        },
+        "stock_platform.workers.research_tasks.run_research": {"queue": "agent-research"},
+        "stock_platform.workers.portfolio_tasks.run_portfolio": {"queue": "agent-portfolio"},
+        "stock_platform.workers.research_tasks.monitor_market": {"queue": "agent-alert"},
+        "stock_platform.workers.review_tasks.run_weekly_review": {"queue": "agent-review"},
     },
 )
 

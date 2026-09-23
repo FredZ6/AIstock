@@ -639,7 +639,10 @@ def execute_alpaca_ingestion_job(
             store.dead_letter(
                 lease,
                 error_class=IngestionErrorClass.SCHEMA_DRIFT,
-                error_detail={"error_type": type(error).__name__},
+                error_detail={
+                    "error_type": type(error).__name__,
+                    "message": str(error)[:256],
+                },
                 now=failed_at,
             )
             return False
@@ -2024,7 +2027,7 @@ def dispatch_alpha_ingestion_jobs() -> int:
             publish=lambda job_id: celery_app.send_task(
                 "stock_platform.workers.ingestion_tasks.run_alpha_earnings_ingestion_job",
                 args=[str(job_id)],
-                queue="ingestion-low",
+                queue="research-ingestion",
             ),
             now=datetime.now(UTC),
         )
@@ -2070,7 +2073,7 @@ def dispatch_sec_ingestion_jobs() -> int:
             publish=lambda job_id: celery_app.send_task(
                 "stock_platform.workers.ingestion_tasks.run_sec_ingestion_job",
                 args=[str(job_id)],
-                queue="ingestion-low",
+                queue="research-ingestion",
             ),
             now=datetime.now(UTC),
         )

@@ -208,6 +208,7 @@ def test_sec_transport_uses_resolved_cik_required_identity_and_raw_batches() -> 
     assert all(
         request.headers["User-Agent"] == "AIStock/0.1 research@example.com" for request in requests
     )
+    assert all(request.timeout_seconds == 10.0 for request in requests)
 
 
 @pytest.mark.parametrize(

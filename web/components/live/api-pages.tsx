@@ -29,6 +29,7 @@ import { ResearchRunControl } from '../research/research-run-control'
 import { StateBoundary } from '../states/state-boundary'
 import { LiveRunTrace } from '../trace/live-run-trace'
 import { PageHeading, Signal } from '../ui/product-ui'
+import { LiveDataRefresh } from './live-data-refresh'
 
 function alertEvidence(value: unknown) {
   return JSON.stringify(value, null, 2)
@@ -222,6 +223,7 @@ export function ApiTodayPage({
   ].filter((group) => group.items.length)
   return (
     <AppShell currentPath="/">
+      <LiveDataRefresh />
       <PageHeading asOf={asOf} eyebrow="Decision workspace · API Mode" title="Today" summary="Current persisted facts, with unavailable domains left explicit." />
       <StateBoundary compact state={groups.length ? {
         kind: 'degraded' as const,
@@ -233,7 +235,7 @@ export function ApiTodayPage({
       } : { kind: 'success' as const }}>
         {health ? <section className="terminal-section first-section" aria-labelledby="provider-health-title">
           <div className="section-heading"><div><p className="section-kicker">Runtime coverage</p><h2 id="provider-health-title">Provider health</h2></div><span className="muted-copy">{health.mode} · read only</span></div>
-          <ul className="plain-list" aria-label="Provider health facts">{Object.entries(health.providers).map(([name, provider]) => <li key={name}><strong>{name.toUpperCase()}</strong><p>{provider.coverage ? `${name.toUpperCase()} · ${provider.coverage} · ${provider.status ?? 'UNAVAILABLE'}` : `${provider.mode} · ${provider.status ?? 'UNAVAILABLE'}`}</p></li>)}</ul>
+          <ul className="plain-list" aria-label="Provider health facts">{Object.entries(health.providers).map(([name, provider]) => <li key={name}><strong>{name.toUpperCase()}</strong><p>{provider.coverage ? `${name.toUpperCase()} · ${provider.coverage} · ${provider.status ?? 'UNAVAILABLE'}` : `${provider.mode} · ${provider.status ?? 'UNAVAILABLE'}`}</p>{provider.operatorAction ? <small>{provider.operatorAction}</small> : null}</li>)}</ul>
         </section> : null}
         <section className="terminal-section first-section" aria-labelledby="live-market-title">
           <div className="section-heading">
@@ -286,6 +288,7 @@ export function ApiResearchPage({
   secFilings,
   symbol,
   unavailableDomains = [],
+  unavailableReasons = {},
 }: {
   asOf: string
   dataQuality: DataQuality[]
@@ -299,6 +302,7 @@ export function ApiResearchPage({
   secFilings: SecFiling[]
   symbol: string
   unavailableDomains?: string[]
+  unavailableReasons?: Record<string, string>
 }) {
   const latestRecord = records[0]
   const previousRecords = records.slice(1)
@@ -317,8 +321,14 @@ export function ApiResearchPage({
   } : { kind: 'success' as const }
   return (
     <AppShell currentPath={`/research/${symbol}`}>
+      <LiveDataRefresh />
       <PageHeading asOf={asOf} eyebrow="Research · API Mode" title={`${symbol} research`} summary="Persisted research only; current market reference remains separate from historical decision evidence." />
       <StateBoundary state={state}>
+        {Object.keys(unavailableReasons).length ? <section aria-label="Unavailable research domains" className="terminal-section">
+          <p className="section-kicker">Operator action</p>
+          <h2>Unavailable research domains</h2>
+          <ul className="plain-list">{Object.entries(unavailableReasons).map(([domain, reason]) => <li key={domain}><strong>{domain}</strong><p>{reason}</p></li>)}</ul>
+        </section> : null}
         {latestRecord ? <section className="decision-hero" aria-label="Latest research conclusion">
           <div>
             <p className="section-kicker">Latest research conclusion · {symbol}</p>
@@ -343,7 +353,7 @@ export function ApiResearchPage({
           </article>)}
         </details> : null}
         {secFilings.length ? <SecFilingsDisclosure filings={secFilings} /> : null}
-        {financialFacts.length ? <FinancialFactsDisclosure facts={financialFacts} filings={secFilings} /> : null}
+        {financialFacts.length ? <FinancialFactsDisclosure facts={financialFacts} /> : null}
         {earningsEvents.length ? <details className="terminal-section research-disclosure">
           <summary>Earnings events · {earningsEvents.length}</summary>
           <h2>Earnings events</h2>
@@ -450,12 +460,14 @@ export function ApiWeeklyReviewPage({ asOf, detail }: { asOf: string; detail: We
         providers: ['Matured outcomes'],
       } : { kind: 'success' }}>
         <section className="terminal-section first-section" aria-label="Weekly outcome summary">
-          <div className="section-heading"><div><p className="section-kicker">Measure</p><h2 id="weekly-outcomes-title">Outcome attribution</h2></div><span className="unavailable-value">Benchmark comparison unavailable in the persisted review contract</span></div>
-          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted weekly outcomes"><thead><tr><th>Symbol</th><th>Opinion</th><th>Confidence</th><th>Return</th><th>Status</th></tr></thead><tbody>
+          <div className="section-heading"><div><p className="section-kicker">Measure</p><h2 id="weekly-outcomes-title">Outcome attribution</h2></div><span className="muted-copy">{detail.outcomes.length ? 'Point-in-time QQQ benchmark comparison' : 'Benchmark comparison awaits a matured outcome'}</span></div>
+          <div className="table-scroll" tabIndex={0}><table aria-label="Persisted weekly outcomes"><thead><tr><th>Symbol</th><th>Opinion</th><th>Confidence</th><th>Return</th><th>Benchmark comparison (excess)</th><th>MFE</th><th>MAE</th><th>Risk adjusted</th><th>Status</th></tr></thead><tbody>
             {detail.outcomes.map((outcome) => {
               const horizons = Object.keys(outcome.returns).sort((left, right) => Number(left) - Number(right))
-              const realized = horizons.length ? outcome.returns[horizons[horizons.length - 1]] : null
-              return <tr key={outcome.id}><th>{outcome.symbol}</th><td>{outcome.opinion}</td><td>{formatPercent(outcome.confidence, { signed: false })}</td><td>{realized ? formatPercent(realized) : 'Pending'}</td><td><Signal tone={outcome.status}>{outcome.status}</Signal></td></tr>
+              const horizon = horizons.at(-1)
+              const realized = horizon ? outcome.returns[horizon] : null
+              const excess = horizon ? outcome.excessReturns[horizon] : null
+              return <tr key={outcome.id}><th>{outcome.symbol}</th><td>{outcome.opinion}</td><td>{formatPercent(outcome.confidence, { signed: false })}</td><td>{realized ? formatPercent(realized) : 'Pending'}</td><td>{excess ? formatPercent(excess) : 'Unavailable'}</td><td>{formatPercent(outcome.maximumFavorableExcursion)}</td><td>{formatPercent(outcome.maximumAdverseExcursion)}</td><td>{formatDecimal(outcome.riskAdjustedReturn)}</td><td><Signal tone={outcome.status}>{outcome.status}</Signal></td></tr>
             })}
           </tbody></table></div>
         </section>

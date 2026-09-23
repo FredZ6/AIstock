@@ -126,6 +126,7 @@ class PostgresMarketDataRepository:
                 "session": str(row["session"]),
                 "conflict": bool(row["conflict"]),
             },
+            normalized_record_id=row["normalized_record_id"],
         )
 
     @staticmethod
@@ -287,6 +288,7 @@ class PostgresMarketDataRepository:
                         "coverage": str(row["coverage"]),
                         "session": str(row["session"]),
                     },
+                    normalized_record_id=row["normalized_record_id"],
                 )
                 for row in rows
             )
@@ -335,6 +337,7 @@ class PostgresMarketDataRepository:
                     content_hash=str(row["content_hash"]),
                     raw_object_key=str(row["raw_object_key"]),
                     payload=dict(row["payload"]),
+                    normalized_record_id=row["normalized_record_id"],
                 )
                 for row in rows
             )
@@ -351,6 +354,7 @@ class PostgresMarketDataRepository:
         statement = (
             select(
                 normalized_record.c.payload,
+                normalized_record.c.id.label("normalized_record_id"),
                 raw_data_object.c.provider,
                 raw_data_object.c.event_time,
                 raw_data_object.c.available_at,
@@ -395,6 +399,7 @@ class PostgresMarketDataRepository:
                 content_hash=row.content_hash,
                 raw_object_key=row.raw_object_key,
                 payload={key: value for key, value in row.payload.items() if key != "symbol"},
+                normalized_record_id=row.normalized_record_id,
             )
             for row in self._connection.execute(statement)
         )

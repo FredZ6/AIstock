@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection, exists, select
 from sqlalchemy.engine import RowMapping
 
 from stock_platform.agents.harness.budget import BudgetLimits
@@ -11,11 +11,17 @@ from stock_platform.agents.weekly_review.graph import WeeklyReviewGraph
 from stock_platform.application.learning.persistence import PostgresWeeklyReviewStore
 from stock_platform.application.research.supersession import decision_is_active_at
 from stock_platform.application.runs import RunControl, execute_run
+from stock_platform.domain.learning.attribution import ErrorCategory
+from stock_platform.domain.learning.lesson import CandidateLesson
 from stock_platform.domain.learning.outcome import DecisionForReview, PriceObservation
 from stock_platform.infrastructure.db.models.tables import (
+    candidate_lesson,
     decision_snapshot,
+    error_attribution,
     investment_thesis,
+    lesson_approval,
     market_bar,
+    replay_run,
     research_opinion,
 )
 from stock_platform.infrastructure.providers.base import FeedType
@@ -79,6 +85,58 @@ def _paper_prices(
         symbol: tuple(sorted(items, key=lambda value: (value.event_time, value.available_at)))
         for symbol, items in grouped.items()
     }
+
+
+def _validated_replay_candidates(
+    connection: Connection, *, cutoff: datetime
+) -> tuple[CandidateLesson, ...]:
+    latest_approval = (
+        select(lesson_approval.c.action)
+        .where(
+            lesson_approval.c.lesson_id == candidate_lesson.c.id,
+            lesson_approval.c.created_at <= cutoff,
+        )
+        .order_by(lesson_approval.c.created_at.desc(), lesson_approval.c.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    has_prior_replay = exists(
+        select(replay_run.c.id).where(
+            replay_run.c.lesson_id == candidate_lesson.c.id,
+            replay_run.c.data_cutoff < cutoff,
+            replay_run.c.created_at <= cutoff,
+        )
+    )
+    rows = connection.execute(
+        select(candidate_lesson, error_attribution.c.category)
+        .join(
+            error_attribution,
+            candidate_lesson.c.attribution_id == error_attribution.c.id,
+        )
+        .where(
+            candidate_lesson.c.created_at < cutoff,
+            latest_approval == "APPROVE",
+            has_prior_replay,
+        )
+        .order_by(candidate_lesson.c.created_at, candidate_lesson.c.id)
+    ).mappings()
+    return tuple(
+        CandidateLesson(
+            id=row["id"],
+            attribution_id=row["attribution_id"],
+            scope=row["scope"],
+            statement=row["statement"],
+            evidence=tuple(str(item) for item in row["evidence"]),
+            counter_evidence=tuple(str(item) for item in row["counter_evidence"]),
+            confidence=Decimal(row["confidence"]),
+            replay_delta=Decimal(row["replay_delta"]),
+            creator=row["creator"],
+            created_at=row["created_at"],
+            category=ErrorCategory(row["category"]),
+            status=row["status"],
+        )
+        for row in rows
+    )
 
 
 def execute_weekly_review_run(
@@ -217,6 +275,10 @@ def execute_weekly_review_run(
             decisions=decisions,
             prices=prices,
             benchmark_prices=benchmark_prices,
+            replay_candidates=_validated_replay_candidates(
+                connection,
+                cutoff=specification.data_cutoff,
+            ),
             on_node_completed=control.node_completed,
         )
         PostgresWeeklyReviewStore(connection).persist(result, specification=specification)

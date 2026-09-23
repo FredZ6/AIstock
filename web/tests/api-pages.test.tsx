@@ -15,11 +15,21 @@ const quote = {
   provider: 'ALPACA',
   symbol: 'NVDA',
 }
+const secLineage = {
+  contentHash: 'f'.repeat(64),
+  eventTime: '2026-08-28T20:00:00Z',
+  rawObjectKey: 'live/SEC/source.json',
+}
 const health = {
   mode: 'paper' as const,
   providers: {
     alpaca: { configured: true, coverage: 'IEX', mode: 'read_only' as const, status: 'SUCCESS' as const },
-    sec: { configured: false, coverage: null, mode: 'unavailable' as const },
+    sec: {
+      configured: false,
+      coverage: null,
+      mode: 'unavailable' as const,
+      operatorAction: 'Configure SEC_USER_AGENT with a monitored contact identity.',
+    },
   },
 }
 const emptyPortfolio = {
@@ -98,6 +108,9 @@ describe('API mode pages', () => {
     render(<ApiTodayPage asOf="2026-08-29T09:30:00Z" health={health} portfolio={emptyPortfolio} quotes={[quote]} />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Live data refresh')).toHaveTextContent(
+      'Persisted data refreshes every 60 seconds while this page is visible.',
+    )
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
     expect(screen.getAllByText(/ALPACA · IEX/)).toHaveLength(2)
     expect(screen.getByRole('region', { name: 'Current market reference' })).toBeInTheDocument()
@@ -106,6 +119,7 @@ describe('API mode pages', () => {
     expect(evidence).not.toHaveAttribute('open')
     expect(screen.getByText(/TradingView data is external current-market context/)).toBeInTheDocument()
     expect(screen.getByRole('status', { name: 'Some decision facts are unavailable' })).toHaveTextContent('No Fixture data was substituted')
+    expect(screen.getByText('Configure SEC_USER_AGENT with a monitored contact identity.')).toBeInTheDocument()
     expect(screen.queryByText('Fixture Mode')).not.toBeInTheDocument()
   })
 
@@ -113,6 +127,7 @@ describe('API mode pages', () => {
     render(<ApiResearchPage asOf="2026-08-29T09:30:00Z" dataQuality={[]} financialFacts={[]} idempotencyKey="research-form-1" quote={quote} records={[]} secFilings={[]} symbol="NVDA" />)
 
     expect(screen.getByRole('heading', { name: 'NVDA research' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Live data refresh')).toBeInTheDocument()
     expect(screen.getByRole('status', { name: 'Research evidence unavailable' })).toBeInTheDocument()
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Research symbol' })).toHaveValue('NVDA')
@@ -132,6 +147,7 @@ describe('API mode pages', () => {
         observedAt: '2026-08-29T09:20:00Z', provider: 'SEC', status: 'PASS',
       }]}
       financialFacts={[{
+        ...secLineage,
         accessionNumber: '0001045810-26-000001', availableAt: '2026-08-28T20:05:00Z',
         canonicalConcept: 'REVENUE', currency: 'USD', id: 'fact-1', mappingStatus: 'EXACT',
         periodEnd: '2026-07-31', periodStart: '2026-05-01', provider: 'SEC',
@@ -141,10 +157,11 @@ describe('API mode pages', () => {
       quote={quote}
       records={[]}
       secFilings={[{
+        ...secLineage,
         acceptedAt: '2026-08-28T20:05:00Z', accessionNumber: '0001045810-26-000001',
         availableAt: '2026-08-28T20:05:00Z', description: 'Quarterly report',
         documentRawObjectKey: 'live/SEC/filing_sections/hash.txt', filingDate: '2026-08-28',
-        form: '10-Q', id: 'filing-1', provider: 'SEC', reportDate: '2026-07-31',
+        form: '10-Q', id: 'filing-1', provider: 'SEC', rawObjectKey: 'live/SEC/filing_sections/hash.txt', reportDate: '2026-07-31',
       }]}
       symbol="NVDA"
     />)
@@ -163,37 +180,44 @@ describe('API mode pages', () => {
 
   it('searches SEC evidence and filters financial facts without hiding lineage', () => {
     const filings = [{
+      ...secLineage,
       acceptedAt: '2026-08-28T20:05:00Z', accessionNumber: '0001045810-26-000001',
       availableAt: '2026-08-28T20:05:00Z', description: 'Quarterly report',
       documentRawObjectKey: 'live/SEC/filing_sections/quarterly.txt', filingDate: '2026-08-28',
-      form: '10-Q', id: 'filing-quarterly', provider: 'SEC', reportDate: '2026-07-31',
+      form: '10-Q', id: 'filing-quarterly', provider: 'SEC', rawObjectKey: 'live/SEC/filing_sections/quarterly.txt', reportDate: '2026-07-31',
     }, {
+      ...secLineage,
       acceptedAt: '2026-02-20T20:05:00Z', accessionNumber: '0001045810-26-000002',
       availableAt: '2026-02-20T20:05:00Z', description: 'Annual report',
       documentRawObjectKey: 'live/SEC/filing_sections/annual.txt', filingDate: '2026-02-20',
-      form: '10-K', id: 'filing-annual', provider: 'SEC', reportDate: '2026-01-31',
+      form: '10-K', id: 'filing-annual', provider: 'SEC', rawObjectKey: 'live/SEC/filing_sections/annual.txt', reportDate: '2026-01-31',
     }]
     const facts = [{
+      ...secLineage,
       accessionNumber: '0001045810-26-000001', availableAt: '2026-08-28T20:05:00Z',
       canonicalConcept: 'REVENUE', currency: 'USD', id: 'fact-revenue-ytd', mappingStatus: 'EXACT' as const,
       periodEnd: '2026-07-31', periodStart: '2026-02-01', provider: 'SEC',
       sourceConcept: 'RevenueFromContractWithCustomer', taxonomy: 'us-gaap', unit: 'USD', value: '220',
     }, {
+      ...secLineage,
       accessionNumber: '0001045810-26-000001', availableAt: '2026-08-28T20:05:00Z',
       canonicalConcept: 'REVENUE', currency: 'USD', id: 'fact-revenue-latest', mappingStatus: 'EXACT' as const,
       periodEnd: '2026-07-31', periodStart: '2026-05-01', provider: 'SEC',
       sourceConcept: 'RevenueFromContractWithCustomer', taxonomy: 'us-gaap', unit: 'USD', value: '120',
     }, {
+      ...secLineage,
       accessionNumber: '0001045810-26-000002', availableAt: '2026-02-20T20:05:00Z',
       canonicalConcept: 'REVENUE', currency: 'USD', id: 'fact-revenue-older', mappingStatus: 'EXACT' as const,
       periodEnd: '2026-01-31', periodStart: '2025-11-01', provider: 'SEC',
       sourceConcept: 'Revenues', taxonomy: 'us-gaap', unit: 'USD', value: '100',
     }, {
+      ...secLineage,
       accessionNumber: '0001045810-26-000001', availableAt: '2026-08-28T20:05:00Z',
       canonicalConcept: 'ASSETS', currency: 'USD', id: 'fact-assets-latest', mappingStatus: 'EXACT' as const,
       periodEnd: '2026-07-31', periodStart: '2026-07-31', provider: 'SEC',
       sourceConcept: 'Assets', taxonomy: 'us-gaap', unit: 'USD', value: '350',
     }, {
+      ...secLineage,
       accessionNumber: '0001045810-26-000001', availableAt: '2026-08-28T20:05:00Z',
       canonicalConcept: null, currency: 'USD', id: 'fact-unmapped', mappingStatus: 'UNMAPPED' as const,
       periodEnd: '2026-07-31', periodStart: '2026-05-01', provider: 'SEC',
@@ -256,6 +280,9 @@ describe('API mode pages', () => {
       secFilings={[]}
       symbol="NVDA"
       unavailableDomains={['Analyst targets']}
+      unavailableReasons={{
+        'Analyst targets': 'Unsupported until an authoritative provider, schema, and license are approved.',
+      }}
     />)
 
     expect(screen.getByRole('table', { name: 'Persisted earnings events' })).toHaveTextContent('ALPHA_VANTAGE')
@@ -265,6 +292,9 @@ describe('API mode pages', () => {
     const degraded = screen.getByRole('status', { name: 'Research evidence unavailable' })
     expect(degraded).toHaveTextContent('Analyst targets')
     expect(degraded).not.toHaveTextContent('EarningsNewsOptions')
+    expect(screen.getByRole('region', { name: 'Unavailable research domains' })).toHaveTextContent(
+      'Unsupported until an authoritative provider, schema, and license are approved.',
+    )
   })
 
   it('leads with one latest conclusion and keeps older decisions subordinate', () => {
@@ -388,7 +418,11 @@ describe('API mode pages', () => {
       attributions: [{ category: 'TIMING_ERROR', controllable: true, id: 'a1', outcomeId: 'o1', rationale: 'Late entry.' }],
       calibration: [{ calibrationError: '0.2', confidence: '0.8', decisionId: 'd1', realizedReturn: '0.03', status: 'MATURED' }],
       lessons: [{ confidence: '0.7', id: 'l1', replayDelta: '0.1', statement: 'Wait for confirmation.', status: 'CANDIDATE' }],
-      outcomes: [{ confidence: '0.8', decisionId: 'd1', id: 'o1', opinion: 'BULLISH', returns: { '1': '0.03' }, status: 'MATURED', symbol: 'NVDA' }],
+      outcomes: [{
+        confidence: '0.8', decisionId: 'd1', excessReturns: { '1': '0.01' }, id: 'o1',
+        maximumAdverseExcursion: '-0.01', maximumFavorableExcursion: '0.04', opinion: 'BULLISH',
+        returns: { '1': '0.03' }, riskAdjustedReturn: '3', status: 'MATURED', symbol: 'NVDA',
+      }],
       replays: [],
       review: { dataCutoff: '2026-08-21T20:00:00Z', id: 'r1', status: 'COMPLETED' },
     }} />)
@@ -398,6 +432,12 @@ describe('API mode pages', () => {
     expect(screen.getByText('Late entry.')).toBeInTheDocument()
     expect(screen.getByText('Wait for confirmation.')).toBeInTheDocument()
     expect(screen.getAllByText('80.00%')).toHaveLength(2)
+    const outcomes = screen.getByRole('table', { name: 'Persisted weekly outcomes' })
+    expect(outcomes).toHaveTextContent('Benchmark comparison')
+    expect(outcomes).toHaveTextContent('+1.00%')
+    expect(outcomes).toHaveTextContent('+4.00%')
+    expect(outcomes).toHaveTextContent('-1.00%')
+    expect(outcomes).toHaveTextContent('3')
   })
 
   it('keeps API weekly benchmarks honest and replays ahead of candidate lessons', () => {
@@ -418,7 +458,7 @@ describe('API mode pages', () => {
     expect(degraded).toHaveTextContent('Wait for eligible decision outcomes to mature')
     expect(screen.getByRole('link', { name: 'Review research decisions' })).toHaveAttribute('href', '/research')
     expect(screen.queryByRole('link', { name: 'Review latest run' })).not.toBeInTheDocument()
-    expect(outcomes).toHaveTextContent('Benchmark comparison unavailable')
+    expect(outcomes).toHaveTextContent('Benchmark comparison awaits a matured outcome')
     expect(replay).toHaveTextContent('Aug 21, 2026')
     expect(replay.compareDocumentPosition(lessons) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })

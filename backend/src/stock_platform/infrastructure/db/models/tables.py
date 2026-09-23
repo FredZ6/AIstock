@@ -723,7 +723,7 @@ risk_decision = Table(
         "market_context_snapshot_id",
         UUID(as_uuid=True),
         ForeignKey("market_context_snapshot.id"),
-        nullable=False,
+        nullable=True,
     ),
     Column("reason_codes", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column(
@@ -734,6 +734,12 @@ risk_decision = Table(
     ),
     Column("decided_at", DateTime(timezone=True), nullable=False),
     created_at(),
+    CheckConstraint(
+        "market_context_snapshot_id IS NOT NULL OR "
+        "(status = 'REJECTED' AND "
+        "reason_codes @> '[\"MARKET_DATA_ENTITLEMENT\"]'::jsonb)",
+        name=conv("ck_risk_decision_market_context_required"),
+    ),
     CheckConstraint(
         "status IN ('APPROVED', 'CLIPPED', 'REJECTED')",
         name=conv("ck_risk_decision_status"),

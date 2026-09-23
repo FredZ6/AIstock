@@ -7,6 +7,7 @@ from stock_platform.workers.schedules import (
     beat_schedule,
     is_market_cutoff,
     is_market_session,
+    latest_completed_market_cutoff,
     schedule_key,
 )
 
@@ -42,17 +43,50 @@ def test_market_cutoffs_follow_new_york_daylight_saving_time() -> None:
     assert is_market_cutoff(datetime(2026, 1, 20, 21, 15, tzinfo=UTC), time(16, 15))
 
 
+def test_latest_completed_market_cutoff_skips_weekends_holidays_and_rejects_naive_time() -> None:
+    saturday = datetime(2026, 9, 19, 12, tzinfo=UTC)
+    july_fifth = datetime(2026, 7, 5, 12, tzinfo=UTC)
+
+    assert latest_completed_market_cutoff(saturday, cutoff=time(16, 15)) == datetime(
+        2026, 9, 18, 20, 15, tzinfo=UTC
+    )
+    assert latest_completed_market_cutoff(july_fifth, cutoff=time(16, 15)) == datetime(
+        2026, 7, 2, 20, 15, tzinfo=UTC
+    )
+    with pytest.raises(ValueError, match="timezone-aware"):
+        latest_completed_market_cutoff(datetime(2026, 9, 19, 12), cutoff=time(16, 15))
+
+
 def test_celery_is_at_least_once_without_authoritative_result_backend() -> None:
     assert celery_app.conf.task_ignore_result is True
     assert celery_app.conf.task_acks_late is True
     assert celery_app.conf.task_reject_on_worker_lost is True
     assert celery_app.conf.timezone == "UTC"
+    assert celery_app.conf.task_default_queue == "control"
+    assert celery_app.conf.task_routes[
+        "stock_platform.workers.ingestion_tasks.persist_alpaca_stream_event"
+    ] == {"queue": "stream-events"}
     assert celery_app.conf.task_routes[
         "stock_platform.workers.ingestion_tasks.run_alpaca_ingestion_job"
     ] == {"queue": "ingestion-low"}
     assert celery_app.conf.task_routes[
         "stock_platform.workers.ingestion_tasks.run_alpha_earnings_ingestion_job"
-    ] == {"queue": "ingestion-low"}
+    ] == {"queue": "research-ingestion"}
+    assert celery_app.conf.task_routes[
+        "stock_platform.workers.ingestion_tasks.run_sec_ingestion_job"
+    ] == {"queue": "research-ingestion"}
+    assert celery_app.conf.task_routes["stock_platform.workers.research_tasks.run_research"] == {
+        "queue": "agent-research"
+    }
+    assert celery_app.conf.task_routes["stock_platform.workers.portfolio_tasks.run_portfolio"] == {
+        "queue": "agent-portfolio"
+    }
+    assert celery_app.conf.task_routes["stock_platform.workers.research_tasks.monitor_market"] == {
+        "queue": "agent-alert"
+    }
+    assert celery_app.conf.task_routes["stock_platform.workers.review_tasks.run_weekly_review"] == {
+        "queue": "agent-review"
+    }
     assert set(beat_schedule) == {
         "daily-research-after-close",
         "intraday-market-monitor",
@@ -104,8 +138,12 @@ def test_documented_worker_consumes_the_low_priority_ingestion_queue() -> None:
     recovery = open("scripts/verify-recovery.sh", encoding="utf-8").read()
     runbook = open("docs/runbooks/stuck-run.md", encoding="utf-8").read()
 
-    assert "--queues=celery,ingestion-low" in recovery
-    assert "--queues=celery,ingestion-low" in runbook
+    queues = (
+        "--queues=control,ingestion-low,research-ingestion,stream-events,"
+        "agent-research,agent-portfolio,agent-alert,agent-review,celery"
+    )
+    assert queues in recovery
+    assert queues in runbook
 
 
 def test_alpaca_stream_has_managed_operator_entrypoint() -> None:

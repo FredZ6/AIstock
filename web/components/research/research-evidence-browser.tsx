@@ -44,6 +44,8 @@ export function SecFilingsDisclosure({ filings }: { filings: SecFiling[] }) {
     filing.accessionNumber,
     filing.filingDate,
     filing.reportDate,
+    filing.contentHash,
+    filing.rawObjectKey,
     filing.documentRawObjectKey,
   ].some((value) => includes(value, query))), [filings, query])
 
@@ -54,8 +56,8 @@ export function SecFilingsDisclosure({ filings }: { filings: SecFiling[] }) {
       <label>Search filings<input aria-label="Search SEC filings" type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
       <span aria-live="polite">{visible.length} of {filings.length} filings</span>
     </div>
-    {visible.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Persisted SEC filings"><thead><tr><th>Form</th><th>Filed</th><th>Report period</th><th>Accession</th><th>Record ID</th><th>Available</th><th>Raw source</th></tr></thead><tbody>
-      {visible.map((filing) => <tr key={filing.id}><td>{filing.form}</td><td>{filing.filingDate}</td><td>{filing.reportDate ?? 'Unavailable'}</td><td>{filing.accessionNumber}</td><td><code>{filing.id}</code></td><td>{formatDualTime(filing.availableAt).newYork}</td><td><code>{filing.documentRawObjectKey}</code></td></tr>)}
+    {visible.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Persisted SEC filings"><thead><tr><th>Form</th><th>Filed</th><th>Report period</th><th>Accession</th><th>Record ID</th><th>Provider</th><th>Event time</th><th>Available</th><th>Provenance</th></tr></thead><tbody>
+      {visible.map((filing) => <tr key={filing.id}><td>{filing.form}</td><td>{filing.filingDate}</td><td>{filing.reportDate ?? 'Unavailable'}</td><td>{filing.accessionNumber}</td><td><code>{filing.id}</code></td><td>{filing.provider}</td><td><time dateTime={filing.eventTime}>{formatDualTime(filing.eventTime).newYork}</time></td><td><time dateTime={filing.availableAt}>{formatDualTime(filing.availableAt).newYork}</time></td><td><code>{filing.rawObjectKey}</code><small>{filing.contentHash}</small></td></tr>)}
     </tbody></table></div> : <div aria-label="No SEC filings match active search" className="evidence-empty" role="status">
       <p>No SEC filings match search “{search}”.</p>
       <button type="button" onClick={() => setSearch('')}>Reset SEC filing search</button>
@@ -63,7 +65,7 @@ export function SecFilingsDisclosure({ filings }: { filings: SecFiling[] }) {
   </details>
 }
 
-export function FinancialFactsDisclosure({ facts, filings }: { facts: FinancialFact[]; filings: SecFiling[] }) {
+export function FinancialFactsDisclosure({ facts }: { facts: FinancialFact[] }) {
   const [category, setCategory] = useState('ALL')
   const [period, setPeriod] = useState('ALL')
   const [search, setSearch] = useState('')
@@ -71,9 +73,6 @@ export function FinancialFactsDisclosure({ facts, filings }: { facts: FinancialF
   const categories = useMemo(() => [...new Set(facts.map(factCategory))].sort(), [facts])
   const periods = useMemo(() => [...new Set(facts.map((fact) => fact.periodEnd))].sort().reverse(), [facts])
   const latest = useMemo(() => newestFacts(facts.filter((fact) => fact.canonicalConcept !== null)), [facts])
-  const rawSourceByAccession = useMemo(() => new Map(
-    filings.map((filing) => [filing.accessionNumber, filing.documentRawObjectKey]),
-  ), [filings])
   const visible = useMemo(() => facts.filter((fact) => (
     (category === 'ALL' || category === fact.canonicalConcept || (category === 'UNMAPPED' && fact.canonicalConcept === null))
     && (period === 'ALL' || fact.periodEnd === period)
@@ -108,8 +107,8 @@ export function FinancialFactsDisclosure({ facts, filings }: { facts: FinancialF
       <label>Reporting period<select aria-label="Financial fact period" value={period} onChange={(event) => setPeriod(event.target.value)}><option value="ALL">All periods</option>{periods.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
       <span aria-live="polite">{visible.length} of {facts.length} facts</span>
     </div>
-    {visible.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Persisted financial facts"><thead><tr><th>Concept</th><th>Source concept</th><th>Value</th><th>Period</th><th>Mapping</th><th>Accession</th><th>Fact ID</th><th>Available</th><th>Raw source</th></tr></thead><tbody>
-      {visible.map((fact) => <tr key={fact.id}><td>{concept(fact)}</td><td>{fact.sourceConcept}<small>{fact.taxonomy}</small></td><td>{formatDecimal(fact.value)} {fact.currency ?? fact.unit}</td><td>{fact.periodStart} — {fact.periodEnd}</td><td>{fact.mappingStatus}</td><td>{fact.accessionNumber}</td><td><code>{fact.id}</code></td><td>{formatDualTime(fact.availableAt).newYork}</td><td><code>{rawSourceByAccession.get(fact.accessionNumber) ?? 'Unavailable'}</code></td></tr>)}
+    {visible.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Persisted financial facts"><thead><tr><th>Concept</th><th>Source concept</th><th>Value</th><th>Period</th><th>Mapping</th><th>Accession</th><th>Fact ID</th><th>Provider</th><th>Event time</th><th>Available</th><th>Provenance</th></tr></thead><tbody>
+      {visible.map((fact) => <tr key={fact.id}><td>{concept(fact)}</td><td>{fact.sourceConcept}<small>{fact.taxonomy}</small></td><td>{formatDecimal(fact.value)} {fact.currency ?? fact.unit}</td><td>{fact.periodStart} — {fact.periodEnd}</td><td>{fact.mappingStatus}</td><td>{fact.accessionNumber}</td><td><code>{fact.id}</code></td><td>{fact.provider}</td><td><time dateTime={fact.eventTime}>{formatDualTime(fact.eventTime).newYork}</time></td><td><time dateTime={fact.availableAt}>{formatDualTime(fact.availableAt).newYork}</time></td><td><code>{fact.rawObjectKey}</code><small>{fact.contentHash}</small></td></tr>)}
     </tbody></table></div> : <div aria-label="No financial facts match active filters" className="evidence-empty" role="status">
       <p>No financial facts match {[
         search ? `search “${search}”` : null,
