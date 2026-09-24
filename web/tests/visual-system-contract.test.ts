@@ -84,6 +84,16 @@ describe('visual system contract', () => {
     )
   })
 
+  it('defines the MacBook Air density scale without shrinking readable text or targets', () => {
+    expect(css).toContain('--space-dashboard: clamp(0.75rem, 1.4vw, 1.25rem);')
+    expect(css).toContain('--row-compact: 2.75rem;')
+    expect(css).toMatch(
+      /\.page-heading-compact h1\s*\{[^}]*font-size:\s*clamp\(2\.25rem,[^;]*2\.75rem\)/s,
+    )
+    expect(css).toMatch(/@media \(max-width: 80rem\)/)
+    expect(css).toMatch(/@media \(max-width: 64rem\)/)
+  })
+
   it('provides equivalent feedback for motion, transparency, and contrast preferences', () => {
     expect(css).toContain('font-optical-sizing: auto;')
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)/)
