@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { AppShell } from '../components/layout/app-shell'
+import { FixtureNotice, PageHeading } from '../components/ui/product-ui'
 
 const storedThemes = new Map<string, string>()
 
@@ -132,5 +133,33 @@ describe('product shell', () => {
       'data-open',
       'false',
     )
+  })
+
+  it('exposes the shared chrome as a translucent material surface', () => {
+    const { container } = render(
+      <AppShell currentPath="/">
+        <h1>Today</h1>
+      </AppShell>,
+    )
+
+    expect(container.querySelector('.app-chrome')).toHaveAttribute('data-material', 'chrome')
+  })
+
+  it('groups page context and fixture status into compact shared primitives', () => {
+    const { container } = render(
+      <>
+        <PageHeading
+          asOf="2026-09-24T12:00:00Z"
+          eyebrow="Decision workspace"
+          summary="Current facts and decisions."
+          title="Today"
+        />
+        <FixtureNotice />
+      </>,
+    )
+
+    expect(container.querySelector('.page-heading')).toHaveClass('page-heading-compact')
+    expect(container.querySelector('[aria-label="Snapshot time"]')).toHaveClass('page-context')
+    expect(screen.getByRole('note')).toHaveClass('runtime-badge')
   })
 })

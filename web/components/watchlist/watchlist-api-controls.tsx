@@ -202,7 +202,7 @@ export function WatchlistApiControls({
 }) {
   const quoteBySymbol = new Map(quotes.map((quote) => [quote.symbol, quote]))
   return (
-    <section className="terminal-section first-section" aria-labelledby="watchlist-api-count">
+    <section aria-label="Watchlist critical summary" className="terminal-section first-section route-critical-summary watchlist-critical-summary">
       <div className="section-heading">
         <div>
           <p className="section-kicker">Persisted research universe</p>
@@ -210,6 +210,8 @@ export function WatchlistApiControls({
         </div>
         <span className="muted-copy">PostgreSQL configuration · paper trading only</span>
       </div>
+      <section aria-label="Watchlist configuration" className="watchlist-mutation-region">
+      <div className="watchlist-controls watchlist-primary-action"><AddWatchlistForm /></div>
       <ol className="ranked-watchlist" aria-label="Ranked research watchlist">
         {items.map((item, index) => {
           const quote = quoteBySymbol.get(item.symbol)
@@ -254,12 +256,12 @@ export function WatchlistApiControls({
           </li>
         })}
       </ol>
-      <section className="watchlist-configuration" aria-labelledby="watchlist-configuration-title">
+      <details aria-label="Watchlist settings" className="watchlist-configuration route-secondary-disclosure">
+        <summary>Watchlist configuration · {items.length} {items.length === 1 ? 'symbol' : 'symbols'}</summary>
         <div className="section-heading">
           <div><p className="section-kicker">Configure</p><h3 id="watchlist-configuration-title">Watchlist configuration</h3></div>
           <span className="muted-copy">Changes are confirmed by FastAPI before refresh.</span>
         </div>
-        <div className="watchlist-controls"><AddWatchlistForm /></div>
         <div className="watchlist-config-list">
           {items.map((item) => <section aria-label={`${item.symbol} settings`} key={item.symbol}>
             <details>
@@ -268,6 +270,7 @@ export function WatchlistApiControls({
             </details>
           </section>)}
         </div>
+      </details>
       </section>
     </section>
   )

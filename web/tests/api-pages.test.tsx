@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ApiAlertsPage, ApiPortfolioPage, ApiResearchPage, ApiRunMetadataPage, ApiTodayPage, ApiWeeklyReviewPage } from '../components/live/api-pages'
+import { ApiAlertsPage, ApiEvalPage, ApiPortfolioPage, ApiResearchPage, ApiRunMetadataPage, ApiTodayPage, ApiWeeklyReviewPage } from '../components/live/api-pages'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -78,6 +78,25 @@ describe('API mode pages', () => {
     expect(screen.getByRole('link', { name: 'Open latest run trace' })).toHaveAttribute('href', '/runs/latest')
     expect(screen.queryByText(/Detailed presentation remains constrained/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Fixture Mode/)).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Alert triage summary' })).toHaveClass('route-critical-summary')
+    expect(screen.getByRole('group', { name: 'Complete alert evidence for NVDA' })).not.toHaveAttribute('open')
+  })
+
+  it('keeps persisted evaluation status and pins visible while deferring metric tables', () => {
+    render(<ApiEvalPage asOf="2026-08-29T09:30:00Z" detail={{
+      gates: [{ comparison: 'AT_LEAST', name: 'accuracy', observed: '0.8', passed: true, reason: 'met', threshold: '0.7' }],
+      metrics: [{ caseHashes: ['hash-1'], caseIds: ['case-1'], name: 'accuracy', value: '0.8' }],
+      run: {
+        caseCount: 1, confidencePolicyVersion: 'confidence-v1', createdAt: '2026-08-29T09:20:00Z',
+        dataCutoff: '2026-08-29T09:00:00Z', datasetVersion: 'dataset-v1', executionPolicyVersion: 'execution-v1',
+        gatePolicyVersion: 'gate-v1', id: 'eval-1', mode: 'fixture', modelVersion: 'model-v1', passed: true,
+        promptVersion: 'prompt-v1', researchScoringPolicyVersion: 'scoring-v1', riskPolicyVersion: 'risk-v1',
+        status: 'PASSED', summaryHash: 'hash-summary',
+      },
+    }} />)
+
+    expect(screen.getByRole('article', { name: 'Evaluation critical summary' })).toHaveClass('route-critical-summary')
+    expect(screen.getByRole('group', { name: 'Complete evaluation metrics and gates' })).not.toHaveAttribute('open')
   })
 
   it('renders the closed persisted report with lineage, gaps, pins, and deterministic diff', () => {
@@ -102,6 +121,8 @@ describe('API mode pages', () => {
     expect(screen.getByText('prompt-v1')).toBeInTheDocument()
     expect(screen.getByText('deterministic-v1')).toBeInTheDocument()
     expect(screen.getByText('DETERMINISTIC_CODE')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Run operations summary' })).toHaveClass('route-critical-summary')
+    expect(screen.getByRole('group', { name: 'Complete durable event trace' })).not.toHaveAttribute('open')
   })
 
   it('shows real Today facts and explicit degraded domains without a Fixture notice', () => {
@@ -111,8 +132,8 @@ describe('API mode pages', () => {
     expect(screen.getByLabelText('Live data refresh')).toHaveTextContent(
       'Persisted data refreshes every 60 seconds while this page is visible.',
     )
-    expect(screen.getByText('USD 217.55')).toBeInTheDocument()
-    expect(screen.getAllByText(/ALPACA · IEX/)).toHaveLength(2)
+    expect(within(screen.getByRole('list', { name: 'Market watchlist' })).getByText('USD 217.55')).toBeInTheDocument()
+    expect(screen.getAllByText(/ALPACA · IEX/).length).toBeGreaterThanOrEqual(2)
     expect(screen.getByRole('region', { name: 'Current market reference' })).toBeInTheDocument()
     expect(screen.queryByRole('list', { name: 'Latest persisted quotes' })).not.toBeInTheDocument()
     const evidence = screen.getByText('Persisted quote evidence · 1 symbol').closest('details')
@@ -121,6 +142,15 @@ describe('API mode pages', () => {
     expect(screen.getByRole('status', { name: 'Some decision facts are unavailable' })).toHaveTextContent('No Fixture data was substituted')
     expect(screen.getByText('Configure SEC_USER_AGENT with a monitored contact identity.')).toBeInTheDocument()
     expect(screen.queryByText('Fixture Mode')).not.toBeInTheDocument()
+
+    const workspace = screen.getByRole('region', { name: 'Today decision workspace' })
+    expect(workspace).toHaveClass('today-decision-workspace')
+    expect(within(workspace).getByRole('region', { name: 'Portfolio overview' })).toBeInTheDocument()
+    expect(within(workspace).getByRole('list', { name: 'Market watchlist' })).toHaveClass('market-list')
+    expect(within(workspace).getByRole('region', { name: 'Decision activity' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Provider diagnostics' })).not.toHaveAttribute('open')
+    expect(screen.getByRole('group', { name: 'Complete market lineage' })).not.toHaveAttribute('open')
+    expect(screen.getByText('Current market context · not decision-time evidence')).toBeInTheDocument()
   })
 
   it('keeps current quote visible when persisted research is empty', () => {
@@ -291,6 +321,7 @@ describe('API mode pages', () => {
     expect(screen.getByText('live/earnings.csv')).toBeInTheDocument()
     const degraded = screen.getByRole('status', { name: 'Research evidence unavailable' })
     expect(degraded).toHaveTextContent('Analyst targets')
+    expect(degraded).toHaveTextContent('UNSUPPORTED · Analyst targets')
     expect(degraded).not.toHaveTextContent('EarningsNewsOptions')
     expect(screen.getByRole('region', { name: 'Unavailable research domains' })).toHaveTextContent(
       'Unsupported until an authoritative provider, schema, and license are approved.',
@@ -317,7 +348,11 @@ describe('API mode pages', () => {
       symbol="NVDA"
     />)
 
+    const summary = screen.getByRole('region', { name: 'Research critical summary' })
+    expect(summary).toHaveClass('route-critical-summary')
     const conclusion = screen.getByRole('region', { name: 'Latest research conclusion' })
+    expect(within(summary).getByRole('region', { name: 'Latest research conclusion' })).toBe(conclusion)
+    expect(within(summary).getByRole('region', { name: 'Research evidence summary' })).toHaveTextContent('Decision history1')
     expect(conclusion).toHaveTextContent('BULLISH')
     expect(conclusion).toHaveTextContent('82.00%')
     expect(conclusion).toHaveTextContent(latest.summary)
@@ -328,6 +363,7 @@ describe('API mode pages', () => {
     expect(history).toHaveTextContent('30.00%')
     const currentMarket = screen.getByRole('region', { name: 'Current market reference' })
     expect(conclusion.compareDocumentPosition(currentMarket) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'External current market chart' })).not.toHaveAttribute('open')
   })
 
   it('shows an empty persisted paper portfolio without inventing NAV or ledger facts', () => {
@@ -348,6 +384,7 @@ describe('API mode pages', () => {
     expect(screen.getByText('USD 100,000.00')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Initialize USD/ })).not.toBeInTheDocument()
     expect(screen.getByRole('status', { name: 'Portfolio evidence is partial' })).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Portfolio evidence is partial' })).toHaveTextContent('EMPTY · NAV history')
   })
 
   it('labels the persisted API portfolio snapshot and evidence availability explicitly', () => {
@@ -356,12 +393,16 @@ describe('API mode pages', () => {
       portfolio={{ ...emptyPortfolio, cash: { balance: '100000', currency: 'USD' }, initializedAt: '2026-08-29T09:00:00Z', status: 'SUCCESS' }}
     />)
 
-    const summary = screen.getByRole('region', { name: 'Portfolio snapshot' })
+    const critical = screen.getByRole('region', { name: 'Portfolio critical summary' })
+    expect(critical).toHaveClass('route-critical-summary')
+    const summary = within(critical).getByRole('region', { name: 'Portfolio snapshot' })
     expect(within(summary).getByText('Net asset value').parentElement).toHaveTextContent('Unavailable')
     expect(within(summary).getByText('Available cash').parentElement).toHaveTextContent('USD 100,000.00')
     expect(summary).toHaveTextContent('As of')
-    const evidence = screen.getByRole('region', { name: 'Paper trading evidence availability' })
-    expect(within(evidence).getByText('Positions').parentElement).toHaveTextContent('0')
+    const evidenceSummary = within(critical).getByRole('region', { name: 'Portfolio evidence summary' })
+    expect(within(evidenceSummary).getByText('Positions').parentElement).toHaveTextContent('0')
+    expect(screen.getByRole('region', { name: 'Paper trading evidence availability' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Complete portfolio accounting' })).not.toHaveAttribute('open')
   })
 
   it('treats authoritative zero activity as empty history rather than missing evidence', () => {
@@ -438,6 +479,10 @@ describe('API mode pages', () => {
     expect(outcomes).toHaveTextContent('+4.00%')
     expect(outcomes).toHaveTextContent('-1.00%')
     expect(outcomes).toHaveTextContent('3')
+    expect(screen.getByRole('region', { name: 'Weekly outcome summary' })).toHaveClass('route-critical-summary')
+    for (const name of ['Complete confidence calibration', 'Complete error attribution', 'Complete point-in-time replays', 'Complete candidate lessons']) {
+      expect(screen.getByRole('group', { name })).not.toHaveAttribute('open')
+    }
   })
 
   it('keeps API weekly benchmarks honest and replays ahead of candidate lessons', () => {
@@ -456,6 +501,7 @@ describe('API mode pages', () => {
     const lessons = screen.getByRole('region', { name: 'Candidate lessons' })
     const degraded = screen.getByRole('status', { name: 'Weekly review has no matured outcomes' })
     expect(degraded).toHaveTextContent('Wait for eligible decision outcomes to mature')
+    expect(degraded).toHaveTextContent('EMPTY · Matured outcomes')
     expect(screen.getByRole('link', { name: 'Review research decisions' })).toHaveAttribute('href', '/research')
     expect(screen.queryByRole('link', { name: 'Review latest run' })).not.toBeInTheDocument()
     expect(outcomes).toHaveTextContent('Benchmark comparison awaits a matured outcome')

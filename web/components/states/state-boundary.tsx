@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import type { AvailabilityFact } from '../../lib/availability'
 import { parseAwareInstant } from '../../lib/time'
 import { RetryButton } from './retry-button'
 
@@ -28,7 +29,7 @@ type StaleState = MessageState & {
 type DegradedState = MessageState & {
   kind: 'degraded'
   providers?: string[]
-  groups?: { label: string; items: string[] }[]
+  groups?: { label: string; items: Array<string | AvailabilityFact> }[]
 }
 
 type PartialState = MessageState & {
@@ -78,7 +79,22 @@ function DegradedDetails({ state }: { state: DegradedState }) {
           <section aria-label={group.label} key={group.label}>
             <h3>{group.label}</h3>
             <ul className="state-tags">
-              {group.items.map((item) => <li key={item}>{item}</li>)}
+              {group.items.map((item) => typeof item === 'string'
+                ? <li className="state-fact" data-availability-state="EMPTY" key={item}>
+                    <div className="state-fact-heading">
+                      <strong className="state-fact-state">EMPTY · </strong>
+                      <span className="state-fact-label">{item}</span>
+                    </div>
+                    <p className="state-fact-reason">No persisted producer output is available.</p>
+                  </li>
+                : <li className="state-fact" data-availability-state={item.state} key={item.key}>
+                    <div className="state-fact-heading">
+                      <strong className="state-fact-state">{item.state} · </strong>
+                      <span className="state-fact-label">{item.label}</span>
+                    </div>
+                    <p className="state-fact-reason">{item.reason}</p>
+                    {item.action ? <Link href={item.action.href}>{item.action.label}</Link> : null}
+                  </li>)}
             </ul>
           </section>
         ))}

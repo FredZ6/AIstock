@@ -48,6 +48,11 @@ describe('live data API client', () => {
       }))
 
     const page = await getEvalRuns({ ...options, fetchImpl })
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('audience=operator'),
+      expect.any(Object),
+    )
     await expect(getEvalRunDetail({ ...options, fetchImpl }, page.items[0].id)).resolves.toMatchObject({
       run: { caseCount: 200, modelVersion: 'fixture-deterministic-v1' },
       metrics: [{ name: 'directional_accuracy', value: '0.91' }],

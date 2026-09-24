@@ -28,6 +28,11 @@ describe('research workflow pages', () => {
   it('supports a fixture-session watchlist draft with schedules, thresholds, and earnings dates', () => {
     render(<WatchlistPage snapshot={fixtureWatchlistSnapshot} />)
 
+    const summary = screen.getByRole('region', { name: 'Watchlist critical summary' })
+    expect(summary).toHaveClass('route-critical-summary')
+    expect(within(summary).getByRole('list', { name: 'Ranked research watchlist' })).toBeInTheDocument()
+    expect(within(summary).getByRole('textbox', { name: 'Add symbol' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Watchlist settings' })).not.toHaveAttribute('open')
     expect(screen.getByRole('heading', { name: 'Watchlist controls' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'NVDA daily research' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'NVDA intraday monitoring' })).toBeChecked()
@@ -102,6 +107,10 @@ describe('research workflow pages', () => {
     render(<ResearchPage snapshot={fixtureResearchSnapshot} />)
 
     const main = screen.getByRole('main')
+    const summary = screen.getByRole('region', { name: 'Research critical summary' })
+    expect(summary).toHaveClass('route-critical-summary')
+    expect(within(summary).getByRole('region', { name: 'NVDA research conclusion' })).toBeInTheDocument()
+    expect(within(summary).getByRole('region', { name: 'Research evidence summary' })).toBeInTheDocument()
     const conclusion = screen.getByRole('region', { name: 'NVDA research conclusion' })
     const currentMarket = screen.getByRole('region', { name: 'NVDA current market overview' })
     const pitEvidence = screen.getByRole('region', { name: 'Point-in-time research evidence' })
@@ -111,6 +120,8 @@ describe('research workflow pages', () => {
     expect(main.contains(conclusion)).toBe(true)
     expect(conclusion.compareDocumentPosition(currentMarket)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     expect(currentMarket.compareDocumentPosition(pitEvidence)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(screen.getByRole('group', { name: 'Current market reference' })).not.toHaveAttribute('open')
+    expect(screen.getByRole('group', { name: 'Complete decision history' })).not.toHaveAttribute('open')
   })
 
   it('exposes each research question as a labelled region', () => {
@@ -151,6 +162,7 @@ describe('research workflow pages', () => {
     render(<RunTracePage snapshot={fixtureRunTrace} />)
 
     const summary = screen.getByRole('region', { name: 'Run operations summary' })
+    expect(summary).toHaveClass('route-critical-summary')
     const events = screen.getByRole('region', { name: 'Durable event trace' })
     expect(summary).toHaveTextContent('RUNNING')
     expect(within(summary).getByText('Elapsed').parentElement).toHaveTextContent('28,000 ms')
@@ -161,5 +173,6 @@ describe('research workflow pages', () => {
     expect(summary).toHaveTextContent('Data cutoff')
     expect(summary.querySelector('time')).toHaveAttribute('datetime', fixtureRunTrace.asOf)
     expect(summary.compareDocumentPosition(events) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'Complete durable event trace' })).not.toHaveAttribute('open')
   })
 })

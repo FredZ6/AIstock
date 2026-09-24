@@ -124,10 +124,17 @@ describe('Watchlist route data boundaries', () => {
     expect(screen.getByRole('status', { name: 'Research enrichment unavailable' })).toHaveTextContent(
       'ALPACA market quotes remain visible',
     )
+    expect(screen.getByRole('status', { name: 'Research enrichment unavailable' })).toHaveTextContent(
+      'EMPTY · NVDA trend',
+    )
     expect(screen.getByLabelText('Live data refresh')).toBeInTheDocument()
     expect(screen.queryByRole('status', { name: 'Market and research data unavailable' })).not.toBeInTheDocument()
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
     expect(screen.queryByText('STALE')).not.toBeInTheDocument()
+    const summary = screen.getByRole('region', { name: 'Watchlist critical summary' })
+    expect(summary).toHaveClass('route-critical-summary')
+    expect(within(summary).getByRole('textbox', { name: 'Add symbol' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Watchlist settings' })).not.toHaveAttribute('open')
   })
 
   it('labels a persisted quote stale relative to the visible point-in-time cutoff', () => {
@@ -167,6 +174,9 @@ describe('Watchlist route data boundaries', () => {
 
     expect(screen.getByRole('status', { name: 'Market and research data unavailable' })).toHaveTextContent(
       'Market quote quality',
+    )
+    expect(screen.getByRole('status', { name: 'Market and research data unavailable' })).toHaveTextContent(
+      'DEGRADED · Market quote quality',
     )
   })
 

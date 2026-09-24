@@ -9,15 +9,15 @@ export function Signal({ children, tone }: { children: ReactNode; tone: string }
 }
 
 export function FixtureNotice() {
-  return <div className="fixture-notice" role="note"><strong>Fixture Mode</strong><span>Frozen synthetic fixture · not current market data</span></div>
+  return <div className="fixture-notice runtime-badge" role="note"><strong>Fixture Mode</strong><span>Frozen synthetic fixture · not current market data</span></div>
 }
 
 export function PageHeading({ eyebrow, summary, title, asOf }: { asOf: string; eyebrow: string; summary: string; title: string }) {
   const times = formatDualTime(asOf)
   return (
-    <header className="today-heading page-heading">
+    <header className="today-heading page-heading page-heading-compact">
       <div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p className="today-summary">{summary}</p></div>
-      <div className="time-context" aria-label="Snapshot time">
+      <div className="time-context page-context" aria-label="Snapshot time">
         <p><span>New York</span><time dateTime={asOf}>{times.newYork}</time></p>
         <p><span>Shanghai</span><time dateTime={asOf}>{times.shanghai}</time></p>
       </div>

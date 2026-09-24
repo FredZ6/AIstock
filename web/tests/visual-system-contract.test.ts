@@ -20,12 +20,15 @@ describe('visual system contract', () => {
     }
   })
 
-  it('keeps the product canvas quiet and compact navigation discoverable', () => {
+  it('uses one quiet canvas wash and compact translucent navigation', () => {
     const bodyRule = css.match(/body\s*\{[^}]+\}/s)?.[0] ?? ''
     const darkBodyRule = css.match(/:root\[data-theme="dark"\]\s+body\s*\{[^}]+\}/s)?.[0] ?? ''
 
-    expect(bodyRule).not.toContain('radial-gradient')
-    expect(darkBodyRule).not.toContain('radial-gradient')
+    expect(bodyRule).toContain('radial-gradient')
+    expect(darkBodyRule).toContain('radial-gradient')
+    expect(css).toContain('--material-chrome:')
+    expect(css).toContain('--shadow-elevated:')
+    expect(css).toMatch(/\.app-chrome\s*\{[^}]*backdrop-filter:\s*blur\(/s)
     expect(css).not.toMatch(/\.primary-nav::-webkit-scrollbar\s*\{[^}]*display:\s*none/s)
   })
 
@@ -67,18 +70,35 @@ describe('visual system contract', () => {
     )
   })
 
-  it('uses an editorial terminal hierarchy instead of repeated glass cards', () => {
-    expect(css).toContain('--radius-section: 0.5rem;')
-    expect(css).toContain('--radius-control: 0.4rem;')
+  it('uses restrained Apple Finance surfaces instead of terminal rules', () => {
+    expect(css).toContain('--radius-section: 1.25rem;')
+    expect(css).toContain('--radius-control: 0.75rem;')
     expect(css).toContain('--font-caption: 0.75rem;')
     expect(css).toContain('--font-data: 0.875rem;')
 
     expect(css).toMatch(
-      /\.surface-card\s*\{[^}]*box-shadow:\s*none;[^}]*backdrop-filter:\s*none;/s,
+      /\.surface-card\s*\{[^}]*border-radius:\s*var\(--radius-section\);[^}]*box-shadow:\s*var\(--shadow-surface\);/s,
     )
     expect(css).toMatch(
-      /\.terminal-section\s*\{[^}]*border-radius:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s,
+      /\.terminal-section\s*\{[^}]*border-radius:\s*var\(--radius-section\);[^}]*background:\s*var\(--surface-section\);/s,
     )
+  })
+
+  it('defines the MacBook Air density scale without shrinking readable text or targets', () => {
+    expect(css).toContain('--space-dashboard: clamp(0.75rem, 1.4vw, 1.25rem);')
+    expect(css).toContain('--row-compact: 2.75rem;')
+    expect(css).toMatch(
+      /\.page-heading-compact h1\s*\{[^}]*font-size:\s*clamp\(2\.25rem,[^;]*2\.75rem\)/s,
+    )
+    expect(css).toMatch(/@media \(max-width: 80rem\)/)
+    expect(css).toMatch(/@media \(max-width: 64rem\)/)
+  })
+
+  it('provides equivalent feedback for motion, transparency, and contrast preferences', () => {
+    expect(css).toContain('font-optical-sizing: auto;')
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)/)
+    expect(css).toMatch(/@media \(prefers-reduced-transparency: reduce\)/)
+    expect(css).toMatch(/@media \(prefers-contrast: more\)/)
   })
 
   it('keeps secondary labels legible and financial values aligned', () => {

@@ -622,7 +622,7 @@ function evalRun(value: unknown, path: string): EvalRunRecord {
 }
 
 export async function getEvalRuns(options: LiveDataClientOptions): Promise<EvalRunPage> {
-  const query = new URLSearchParams({ decision_time: options.decisionTime, limit: '50' })
+  const query = new URLSearchParams({ decision_time: options.decisionTime, limit: '50', audience: 'operator' })
   const value = await requestJson(options, `/api/v1/evals/runs?${query}`)
   return contract(() => {
     const source = record(value, 'eval_runs')

@@ -42,7 +42,7 @@ test.describe('isolated real API runtime', () => {
     await expect(page.getByRole('alert', { name: 'Watchlist unavailable' })).toBeVisible()
     await expect(page.getByRole('list', { name: 'Ranked research watchlist' })).toHaveCount(0)
     await start()
-    await page.getByRole('link', { name: 'Try again' }).click()
+    await page.getByRole('button', { name: 'Try again' }).click()
     await expect(page.getByRole('list', { name: 'Ranked research watchlist' })).toBeVisible()
     await expect(page.getByText('Fixture Mode', { exact: true })).toHaveCount(0)
   })
@@ -64,6 +64,29 @@ test.describe('isolated real API runtime', () => {
     await expect(page.getByRole('list', { name: 'Durable run events' }).getByRole('listitem')).toHaveCount(ids.length)
     const accessibility = await new AxeBuilder({ page }).analyze()
     expect(accessibility.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')).toEqual([])
+  })
+
+  test('availability summaries remain truthful, keyboard-operable, and accessible', async ({ page }) => {
+    await page.goto('/')
+    const summary = page.getByRole('status', { name: 'Some decision facts are unavailable' })
+    await expect(summary).toBeVisible()
+    const disclosure = summary.locator('summary')
+    await disclosure.focus()
+    await disclosure.press('Enter')
+    const factCount = await summary.locator('.state-fact').count()
+    expect(factCount).toBeGreaterThan(0)
+    await expect(disclosure).toHaveText(`${factCount} unavailable facts`)
+    await expect(summary.getByText('UNCONFIGURED · SEC')).toBeVisible()
+    await expect(summary.getByText('UNCONFIGURED · ALPHA VANTAGE')).toBeVisible()
+    await expect(summary.getByText('EMPTY · Portfolio NAV')).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    const accessibility = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()
+    expect(accessibility.violations.filter(({ impact }) => impact === 'serious' || impact === 'critical')).toEqual([])
+
+    await page.goto('/eval')
+    await expect(page.getByRole('status', { name: 'No persisted evaluation runs' })).toContainText(
+      'operator-only offline evaluation persistence workflow',
+    )
   })
 
   test('duplicate API admissions return the same durable run', async ({ request }) => {

@@ -13,7 +13,11 @@ describe('research directory', () => {
   it('selects only from the authoritative universe and orders persisted recent research', () => {
     render(<ResearchDirectoryPage mode="api" symbols={[...symbols]} />)
 
+    const summary = screen.getByRole('region', { name: 'Research critical summary' })
+    expect(summary).toHaveClass('route-critical-summary')
     const selector = screen.getByRole('combobox', { name: 'Research symbol' })
+    expect(within(summary).getByRole('combobox', { name: 'Research symbol' })).toBe(selector)
+    expect(within(summary).getByRole('heading', { name: 'Recent persisted research' })).toBeInTheDocument()
     expect(within(selector).getAllByRole('option').map((option) => option.textContent)).toEqual([
       'AAPL', 'MSFT', 'NVDA',
     ])
