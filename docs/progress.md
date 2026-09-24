@@ -4094,3 +4094,27 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   the next run caught a Docker/PostgreSQL clock drift in migration 0035. Starting the declared services
   and confirming host/container/database UTC alignment made the unchanged migration regression pass;
   no product fact, migration, or append-only history was modified to mask either environment failure.
+
+## 2026-09-25 — MacBook Air dense interface acceptance
+
+- Applied the approved Apple-style information hierarchy across all eight product routes for a
+  13-inch MacBook Air baseline. Decision-critical status, summary metrics and primary actions remain
+  in the first viewport; provider diagnostics, complete lineage, historical tables, policy
+  administration, replay evidence and raw audit detail now use explicit default-closed disclosures.
+  The underlying API contracts, paper-only boundary, point-in-time facts and unavailable states were
+  not changed or substituted.
+- TDD coverage now asserts the critical-summary hierarchy and closed evidence boundaries for Today,
+  Watchlist, Research, Run Trace, Portfolio, Alerts, Weekly Review and Eval/Admin in Fixture and API
+  modes. The complete frontend unit run exited 0 with 35 files and 238/238 tests passed; TypeScript,
+  ESLint and the Next.js production build exited 0.
+- Browser acceptance exited 0 with 10/10 desktop tests. It verifies the eight routes at 1440x800 and
+  the 1280x720 safety viewport, page-level overflow across the existing viewport matrix, 200% text
+  zoom, keyboard focus, theme behavior, explicit disclosure interaction, blocked TradingView
+  fallbacks, and zero serious or critical Axe violations. After generating the declared offline Eval
+  artifact, the updated end-to-end fixture demo also exited 0 with 1/1 passed.
+- The first repository verification attempt was intentionally retained as infrastructure evidence:
+  PostgreSQL, then Redis and MinIO were stopped after Docker Desktop restart, causing connection
+  refusals at ports 55432, 56379 and 59000. After starting only the declared project services, the
+  unchanged final `make verify` exited 0: Ruff format/check clean for 339 files, Mypy clean for 292
+  source files, Alembic drift and generated-contract checks passed, backend 765 passed / 5 optional
+  live-provider tests skipped, frontend 238/238 passed, and the production build succeeded.

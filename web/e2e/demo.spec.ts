@@ -23,6 +23,7 @@ test('the ten-minute fixture demo exposes every interview acceptance artifact', 
   await page.screenshot({ fullPage: true, path: path.join(projectScreenshotDirectory, '01-research.png') })
 
   await page.goto('/alerts')
+  await page.getByRole('group', { name: 'Complete alert evidence for NVDA' }).first().locator('summary').click()
   await expect(page.getByRole('button', { name: 'Acknowledge alert alert-nvda-volume-001' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Relative volume and return z-score crossed the frozen deterministic rule.' })).toBeVisible()
 
@@ -30,8 +31,10 @@ test('the ten-minute fixture demo exposes every interview acceptance artifact', 
   const portfolioSnapshot = page.getByRole('region', { name: 'Portfolio snapshot' })
   await expect(portfolioSnapshot.getByText('USD 100,425.18', { exact: true })).toBeVisible()
   await expect(portfolioSnapshot.getByText('-1.80%', { exact: true })).toBeVisible()
+  await page.getByRole('group', { name: 'Complete risk decisions' }).locator('summary').click()
   await expect(page.getByRole('rowheader', { name: 'risk-decision-001' })).toBeVisible()
   await expect(page.getByText('REJECTED', { exact: true })).toBeVisible()
+  await page.getByRole('group', { name: 'Complete paper fills' }).locator('summary').click()
   await expect(page.getByRole('rowheader', { name: 'fill-nvda-001' })).toBeVisible()
   for (const benchmark of ['Cash', 'QQQ', 'Equal weight', 'Momentum']) {
     await expect(page.getByText(benchmark, { exact: true })).toBeVisible()
@@ -41,6 +44,7 @@ test('the ten-minute fixture demo exposes every interview acceptance artifact', 
   await page.screenshot({ fullPage: true, path: path.join(projectScreenshotDirectory, '02-portfolio.png') })
 
   await page.goto('/weekly-review')
+  await page.getByRole('group', { name: 'Complete candidate lesson' }).locator('summary').click()
   await expect(page.getByRole('heading', { level: 2, name: 'lesson-risk-regime-001' })).toBeVisible()
   await expect(page.getByText('APPROVED', { exact: true })).toBeVisible()
   await expect(page.getByText(/Unapproved activation rejected/)).toBeVisible()

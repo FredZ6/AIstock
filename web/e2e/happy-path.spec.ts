@@ -11,6 +11,17 @@ const pages = [
   ['/eval', 'Eval & Admin'],
 ] as const
 
+const criticalTargets = [
+  ['/', '.today-decision-workspace'],
+  ['/watchlist', '.route-critical-summary'],
+  ['/research/NVDA', '.research-critical-summary'],
+  ['/runs/latest', '.run-overview'],
+  ['/portfolio', '.portfolio-critical-summary'],
+  ['/alerts', '.alert-cards > li:first-child'],
+  ['/weekly-review', '.outcome-strip'],
+  ['/eval', '.operations-status-grid'],
+] as const
+
 async function exposeNavigation(page: import('@playwright/test').Page) {
   const navigation = page.getByRole('navigation', { name: 'Primary' })
   if (!(await navigation.isVisible())) {
@@ -63,6 +74,7 @@ test('a reviewer traces a Today conclusion through report, evidence, provider, T
 
   await page.getByRole('link', { name: 'Open run trace' }).click()
   await expect(page).toHaveURL(/\/runs\/latest$/)
+  await page.getByRole('group', { name: 'Complete durable event trace' }).locator('summary').click()
   await expect(page.getByRole('list', { name: 'Durable run events' })).toBeVisible()
   await expect(page.getByText(/Last-Event-ID/)).toBeVisible()
 })
@@ -96,6 +108,24 @@ test('all product routes remain readable across the locked viewport matrix', asy
   }
 })
 
+test('decision-critical content lands inside the MacBook Air first viewport', async ({ page }) => {
+  for (const viewport of [{ width: 1440, height: 800 }, { width: 1280, height: 720 }]) {
+    await page.setViewportSize(viewport)
+    for (const [path, selector] of criticalTargets) {
+      await page.goto(path)
+      const target = page.locator(selector).first()
+      await expect(target, `${path} critical target missing at ${viewport.width}x${viewport.height}`).toBeVisible()
+      const bounds = await target.boundingBox()
+      expect(bounds, `${path} critical target has no bounds`).not.toBeNull()
+      expect(bounds!.y, `${path} critical target begins below the first viewport at ${viewport.width}x${viewport.height}`).toBeLessThan(viewport.height)
+      expect(
+        Math.min(bounds!.y + bounds!.height, viewport.height),
+        `${path} exposes too little critical content at ${viewport.width}x${viewport.height}`,
+      ).toBeGreaterThanOrEqual(bounds!.y + Math.min(88, bounds!.height))
+    }
+  }
+})
+
 test('theme and reduced-motion preferences preserve a calm readable surface', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
@@ -111,6 +141,7 @@ test('theme and reduced-motion preferences preserve a calm readable surface', as
 
 test('a blocked TradingView embed retains an accessible current-market fallback', async ({ page }) => {
   await page.goto('/research/NVDA')
+  await page.getByRole('group', { name: 'Current market reference' }).locator('summary').click()
   const widget = page.getByRole('region', { name: 'NVDA current market overview' })
   await widget.scrollIntoViewIfNeeded()
 
@@ -121,6 +152,7 @@ test('a blocked TradingView embed retains an accessible current-market fallback'
   await expect(widget).toContainText('Not decision-time evidence')
 
   await page.goto('/portfolio')
+  await page.getByRole('group', { name: 'Complete positions' }).locator('summary').click()
   const miniChart = page.locator('section.market-widget-mini-chart').first()
   await miniChart.scrollIntoViewIfNeeded()
   await expect(miniChart.getByRole('status', { name: 'Current market reference unavailable' }))
