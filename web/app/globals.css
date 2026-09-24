@@ -124,9 +124,11 @@ a:active, button:active { transform: scale(0.98); transition: transform 100ms ea
 .state-timestamp { margin: 0.65rem 0 0; color: var(--text-tertiary); font-size: 0.7rem; }
 .state-tags { display: flex; flex-wrap: wrap; gap: 0.45rem; padding: 0; margin: 0.7rem 0 0; list-style: none; }
 .state-tags li { padding: 0.35rem 0.6rem; border: 1px solid color-mix(in oklch, var(--signal) 35%, var(--line)); border-radius: 999px; color: var(--signal); font-size: 0.68rem; font-weight: 650; }
-.state-tags li.state-fact { display: grid; gap: 0.25rem; min-width: min(18rem, 100%); padding: 0.65rem 0.75rem; border-radius: 1rem; color: var(--text); font-weight: 500; }
-.state-fact strong { color: var(--signal-text); font-size: 0.68rem; letter-spacing: 0.04em; }
-.state-fact span { color: var(--text-secondary); line-height: 1.45; }
+.state-tags li.state-fact { display: grid; grid-template-columns: minmax(9rem, 0.72fr) minmax(14rem, 1.6fr) auto; gap: 0.75rem 1rem; width: 100%; min-width: min(30rem, 100%); padding: 0.8rem 0.9rem; border-color: var(--line-soft); border-radius: var(--radius-control); background: color-mix(in oklch, var(--ink-raised) 76%, transparent); color: var(--text); font-weight: 500; }
+.state-fact-heading { display: flex; min-width: 0; align-items: baseline; gap: 0.35rem; }
+.state-fact-state { flex: 0 0 auto; color: var(--signal-text); font-size: 0.64rem; letter-spacing: 0.04em; }
+.state-fact-label { overflow: hidden; color: var(--text); font-size: 0.72rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.state-fact-reason { margin: 0; color: var(--text-secondary); font-size: 0.7rem; line-height: 1.45; }
 .state-fact a { width: fit-content; color: var(--signal-text); font-weight: 700; }
 .state-details { margin-left: auto; }
 .state-details summary { color: var(--signal-text); cursor: pointer; font-size: 0.7rem; font-weight: 700; }
@@ -672,6 +674,7 @@ small,
   .today-meta .fixture-notice { align-items: center; flex-direction: row; margin: 0; }
   .state-compact { flex-wrap: wrap; }
   .state-compact .state-tags { margin-left: auto !important; }
+  .state-tags li.state-fact { grid-template-columns: 1fr; }
   .metric-list { grid-template-columns: 1fr; }
   .benchmark-strip { grid-template-columns: repeat(2, 1fr); }
   .attention-grid { grid-template-columns: 1fr; gap: 0; }

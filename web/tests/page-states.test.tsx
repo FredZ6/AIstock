@@ -136,6 +136,13 @@ describe('StateBoundary', () => {
     expect(status).toHaveTextContent('Configure SEC_USER_AGENT')
     expect(status).toHaveTextContent('No approved read-only producer exists')
     expect(screen.getByRole('link', { name: 'Review runtime configuration' })).toHaveAttribute('href', '/eval')
+    const facts = status.querySelectorAll('.state-fact')
+    expect(facts).toHaveLength(2)
+    expect(facts[0]).toHaveAttribute('data-availability-state', 'UNCONFIGURED')
+    expect(facts[0].querySelector('.state-fact-heading')).toBeInTheDocument()
+    expect(facts[0].querySelector('.state-fact-state')).toHaveTextContent('UNCONFIGURED')
+    expect(facts[0].querySelector('.state-fact-label')).toHaveTextContent('SEC filings')
+    expect(facts[0].querySelector('.state-fact-reason')).toHaveTextContent('Configure SEC_USER_AGENT')
   })
 
   it('keeps available records visible when a response is partial', () => {
