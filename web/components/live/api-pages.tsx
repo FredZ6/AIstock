@@ -357,27 +357,38 @@ export function ApiResearchPage({
       <LiveDataRefresh />
       <PageHeading asOf={asOf} eyebrow="Research · API Mode" title={`${symbol} research`} summary="Persisted research only; current market reference remains separate from historical decision evidence." />
       <StateBoundary state={state}>
-        {Object.keys(unavailableReasons).length ? <section aria-label="Unavailable research domains" className="terminal-section">
-          <p className="section-kicker">Operator action</p>
-          <h2>Unavailable research domains</h2>
-          <ul className="plain-list">{Object.entries(unavailableReasons).map(([domain, reason]) => <li key={domain}><strong>{domain}</strong><p>{reason}</p></li>)}</ul>
-        </section> : null}
-        {latestRecord ? <section className="decision-hero" aria-label="Latest research conclusion">
-          <div>
-            <p className="section-kicker">Latest research conclusion · {symbol}</p>
-            <h2>{latestRecord.opinion ? <Signal tone={latestRecord.opinion}>{latestRecord.opinion}</Signal> : 'Opinion unavailable'}</h2>
-            <p className="thesis-copy">{latestRecord.summary}</p>
-            <p className="research-freshness">Evidence cutoff <time dateTime={latestRecord.asOf}>{formatDualTime(latestRecord.asOf).newYork}</time></p>
-          </div>
-          <dl className="decision-facts"><div><dt>Confidence</dt><dd>{formatPercent(latestRecord.confidence, { signed: false })}</dd></div><div><dt>Direction</dt><dd>{latestRecord.direction}</dd></div><div><dt>Horizon</dt><dd>{latestRecord.horizon}</dd></div></dl>
-        </section> : null}
-        <ResearchRunControl idempotencyKey={idempotencyKey} symbol={symbol} />
-        {quote ? <section className="decision-hero" aria-label="Current market reference">
-          <div><p className="section-kicker">Current market reference</p><h2>{quote.symbol}</h2><p className="thesis-copy">{formatMoney(quote.close, 'USD')}</p></div>
-          <dl className="decision-facts"><div><dt>Provider</dt><dd>{quote.provider}</dd></div><div><dt>Coverage</dt><dd>{quote.coverage}</dd></div><div><dt>Available</dt><dd>{formatDualTime(quote.availableAt).newYork}</dd></div></dl>
-        </section> : <p className="unavailable-value">Current quote unavailable.</p>}
-        <p className="muted-copy">TradingView is a current-market reference only; it is not point-in-time decision evidence.</p>
-        <TradingViewWidget kind="symbol-overview" symbol={symbol} />
+        <section aria-label="Research critical summary" className="route-critical-summary research-critical-summary">
+          {latestRecord ? <section className="decision-hero research-conclusion" aria-label="Latest research conclusion">
+            <div>
+              <p className="section-kicker">Latest research conclusion · {symbol}</p>
+              <h2>{latestRecord.opinion ? <Signal tone={latestRecord.opinion}>{latestRecord.opinion}</Signal> : 'Opinion unavailable'}</h2>
+              <p className="thesis-copy">{latestRecord.summary}</p>
+              <p className="research-freshness">Evidence cutoff <time dateTime={latestRecord.asOf}>{formatDualTime(latestRecord.asOf).newYork}</time></p>
+            </div>
+            <dl className="decision-facts"><div><dt>Confidence</dt><dd>{formatPercent(latestRecord.confidence, { signed: false })}</dd></div><div><dt>Direction</dt><dd>{latestRecord.direction}</dd></div><div><dt>Horizon</dt><dd>{latestRecord.horizon}</dd></div></dl>
+          </section> : null}
+          <ResearchRunControl idempotencyKey={idempotencyKey} symbol={symbol} />
+          {quote ? <section className="decision-hero current-market-summary" aria-label="Current market reference">
+            <div><p className="section-kicker">Current market reference</p><h2>{quote.symbol}</h2><p className="thesis-copy">{formatMoney(quote.close, 'USD')}</p></div>
+            <dl className="decision-facts"><div><dt>Provider</dt><dd>{quote.provider}</dd></div><div><dt>Coverage</dt><dd>{quote.coverage}</dd></div><div><dt>Available</dt><dd>{formatDualTime(quote.availableAt).newYork}</dd></div></dl>
+          </section> : <p className="unavailable-value">Current quote unavailable.</p>}
+          <section aria-label="Research evidence summary" className="research-evidence-summary">
+            <dl><div><dt>SEC filings</dt><dd>{secFilings.length}</dd></div><div><dt>Financial facts</dt><dd>{financialFacts.length}</dd></div><div><dt>Decision history</dt><dd>{previousRecords.length}</dd></div><div><dt>Unavailable domains</dt><dd>{unavailableDomains.length}</dd></div></dl>
+          </section>
+        </section>
+        {Object.keys(unavailableReasons).length ? <details aria-label="Unavailable research domains" className="terminal-section route-secondary-disclosure">
+          <summary>Unavailable research domains · {Object.keys(unavailableReasons).length}</summary>
+          <section aria-label="Unavailable research domains">
+            <p className="section-kicker">Operator action</p>
+            <h2>Unavailable research domains</h2>
+            <ul className="plain-list">{Object.entries(unavailableReasons).map(([domain, reason]) => <li key={domain}><strong>{domain}</strong><p>{reason}</p></li>)}</ul>
+          </section>
+        </details> : null}
+        <details aria-label="External current market chart" className="route-secondary-disclosure current-market-disclosure">
+          <summary>External current market chart</summary>
+          <p className="muted-copy">TradingView is a current-market reference only; it is not point-in-time decision evidence.</p>
+          <TradingViewWidget kind="symbol-overview" symbol={symbol} />
+        </details>
         {previousRecords.length ? <details className="terminal-section research-disclosure">
           <summary>Decision history · {previousRecords.length} previous</summary>
           {previousRecords.map((record) => <article key={record.id}>

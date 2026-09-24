@@ -514,6 +514,20 @@ input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--l
 .watchlist-provenance-details code, .watchlist-provenance-details small { display: block; max-width: 100%; overflow-wrap: anywhere; }
 .watchlist-configuration { margin-top: var(--space-section); padding-top: var(--space-section); border-top: 1px solid var(--line); }
 .watchlist-configuration h3 { margin: 0.4rem 0 0; }
+.route-secondary-disclosure { margin-top: var(--space-dashboard); border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--surface-section); }
+.route-secondary-disclosure > summary { min-height: var(--row-compact); padding: 0.65rem 0.9rem; align-content: center; cursor: pointer; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 700; }
+.route-secondary-disclosure[open] > summary { border-bottom: 1px solid var(--line-soft); color: var(--signal); }
+.route-secondary-disclosure > :not(summary) { margin-right: 0.9rem; margin-left: 0.9rem; }
+.route-critical-summary { margin-top: var(--space-dashboard); }
+.watchlist-critical-summary .watchlist-primary-action { margin: 0 0 0.65rem; padding: 0.65rem 0.75rem; }
+.watchlist-critical-summary .ranked-watchlist { margin-top: 0; }
+.watchlist-critical-summary .ranked-watchlist > li { min-height: 3.5rem; padding: 0.5rem 0; }
+.watchlist-critical-summary .watchlist-identity span,
+.watchlist-critical-summary .watchlist-quote span,
+.watchlist-critical-summary .watchlist-provenance { font-size: 0.8125rem; }
+.watchlist-critical-summary .watchlist-configuration { padding: 0; border-top: 1px solid var(--line-soft); }
+.watchlist-critical-summary .watchlist-configuration > .section-heading,
+.watchlist-critical-summary .watchlist-configuration > div { margin: 0.75rem 0.9rem; }
 .watchlist-config-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--line-soft); }
 .watchlist-config-list > section { min-width: 0; padding: 1rem; background: var(--surface-interactive); }
 .watchlist-config-list h4 { margin: 0 0 0.85rem; font-size: 0.8rem; }
@@ -547,6 +561,9 @@ input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--l
 .evidence-empty { padding: 1rem; border: 1px dashed var(--line); border-radius: var(--radius-control); background: var(--surface-soft); }
 .evidence-empty p { margin-top: 0; }
 .research-directory + .research-directory { margin-top: 1.5rem; }
+.research-directory-workspace { display: grid; grid-template-columns: minmax(18rem, 0.72fr) minmax(0, 1.28fr); gap: var(--space-dashboard); }
+.research-directory-workspace > .research-directory { margin-top: 0; }
+.research-directory-workspace .research-directory-list a { min-height: var(--row-compact); padding: 0.55rem 0.75rem; font-size: 0.8125rem; }
 .research-directory-control { display: flex; align-items: end; gap: 0.75rem; flex-wrap: wrap; }
 .research-directory-control label { display: grid; flex: 1 1 16rem; gap: 0.35rem; color: var(--text-secondary); font-size: 0.78rem; font-weight: 700; }
 .research-directory-control select { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--text-primary); }
@@ -554,6 +571,22 @@ input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--l
 .research-directory-list { display: grid; gap: 1px; margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--line-soft); list-style: none; }
 .research-directory-list a { display: grid; grid-template-columns: minmax(5rem, 0.6fr) minmax(7rem, 0.7fr) minmax(12rem, 1fr); gap: 1rem; align-items: center; min-height: 3.5rem; padding: 0.8rem 1rem; background: var(--surface); color: var(--text-primary); }
 .research-directory-list time, .research-directory-list span { color: var(--text-secondary); }
+.research-critical-summary { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.65fr); gap: var(--space-dashboard); }
+.research-critical-summary > .decision-hero,
+.research-critical-summary > .research-run-control { margin: 0; padding: clamp(1rem, 1.6vw, 1.35rem); }
+.research-critical-summary > .research-conclusion { grid-column: 1; grid-row: 1 / span 2; }
+.research-critical-summary > .research-run-control { grid-column: 2; grid-row: 1; grid-template-columns: 1fr; align-items: start; }
+.research-critical-summary > .research-run-control form { grid-template-columns: 1fr; }
+.research-critical-summary > .research-run-control label { grid-column: 1; }
+.research-critical-summary > .current-market-summary { grid-column: 2; grid-row: 2; grid-template-columns: 1fr; }
+.research-critical-summary > .current-market-summary .decision-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.research-critical-summary .thesis-copy { margin-top: 0.75rem; font-size: clamp(1rem, 1.5vw, 1.35rem); }
+.research-evidence-summary { grid-column: 1 / -1; padding: 0.75rem; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--surface-section); }
+.research-evidence-summary dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin: 0; background: var(--line-soft); }
+.research-evidence-summary dl > div { min-height: var(--row-compact); padding: 0.55rem 0.75rem; background: var(--surface); }
+.research-evidence-summary dt { color: var(--text-secondary); font-size: 0.8125rem; }
+.research-evidence-summary dd { margin: 0.25rem 0 0; font-size: 1rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+.current-market-disclosure .market-widget { margin: 0.9rem 0; }
 @media (max-width: 640px) {
   .evidence-toolbar, .evidence-toolbar label, .evidence-toolbar input, .evidence-toolbar select { width: 100%; }
   .evidence-toolbar > span { margin-left: 0; }
@@ -682,6 +715,12 @@ small,
   .today-decision-workspace > .today-watchlist,
   .today-decision-workspace > .decision-activity { grid-column: 1; grid-row: auto; }
   .today-decision-workspace .market-regime-compact { border-top: 1px solid var(--line-soft); border-left: 0; }
+  .research-directory-workspace,
+  .research-critical-summary { grid-template-columns: 1fr; }
+  .research-critical-summary > .research-conclusion,
+  .research-critical-summary > .research-run-control,
+  .research-critical-summary > .current-market-summary,
+  .research-critical-summary > .research-evidence-summary { grid-column: 1; grid-row: auto; }
   .market-portfolio-grid,
   .attention-grid,
   .decision-activity { grid-template-columns: 1fr; }

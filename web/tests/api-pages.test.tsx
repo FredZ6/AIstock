@@ -327,7 +327,11 @@ describe('API mode pages', () => {
       symbol="NVDA"
     />)
 
+    const summary = screen.getByRole('region', { name: 'Research critical summary' })
+    expect(summary).toHaveClass('route-critical-summary')
     const conclusion = screen.getByRole('region', { name: 'Latest research conclusion' })
+    expect(within(summary).getByRole('region', { name: 'Latest research conclusion' })).toBe(conclusion)
+    expect(within(summary).getByRole('region', { name: 'Research evidence summary' })).toHaveTextContent('Decision history1')
     expect(conclusion).toHaveTextContent('BULLISH')
     expect(conclusion).toHaveTextContent('82.00%')
     expect(conclusion).toHaveTextContent(latest.summary)
@@ -338,6 +342,7 @@ describe('API mode pages', () => {
     expect(history).toHaveTextContent('30.00%')
     const currentMarket = screen.getByRole('region', { name: 'Current market reference' })
     expect(conclusion.compareDocumentPosition(currentMarket) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'External current market chart' })).not.toHaveAttribute('open')
   })
 
   it('shows an empty persisted paper portfolio without inventing NAV or ledger facts', () => {

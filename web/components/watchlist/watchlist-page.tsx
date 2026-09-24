@@ -123,8 +123,17 @@ export function WatchlistPage({ snapshot }: { snapshot: WatchlistSnapshot }) {
     <AppShell currentPath="/watchlist">
       <PageHeading asOf={snapshot.asOf} eyebrow="Discover" title="Watchlist" summary="Rank attention without turning uncertainty into a trading instruction." />
       <FixtureNotice />
-      <section className="terminal-section first-section" aria-labelledby="watchlist-count">
+      <section aria-label="Watchlist critical summary" className="terminal-section first-section route-critical-summary watchlist-critical-summary">
         <div className="section-heading"><div><p className="section-kicker">Research universe</p><h2 id="watchlist-count">{symbols.length} of {snapshot.limit} symbols</h2></div><span className="muted-copy">Long-only US technology equities</span></div>
+        <section aria-label="Watchlist configuration" className="watchlist-mutation-region">
+        <div className="watchlist-controls watchlist-primary-action">
+          <div><h3>Add a symbol</h3><p>Add a symbol to this frozen session.</p></div>
+          <form onSubmit={addSymbol}>
+            <label htmlFor="add-symbol">Add symbol</label>
+            <input id="add-symbol" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={10} autoCapitalize="characters" />
+            <button type="submit">Add to watchlist</button>
+          </form>
+        </div>
         <ol className="ranked-watchlist" aria-label="Ranked research watchlist">
           {symbols.map((item, index) => <li key={item.symbol}>
             <span className="watchlist-rank" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
@@ -134,22 +143,20 @@ export function WatchlistPage({ snapshot }: { snapshot: WatchlistSnapshot }) {
             <div className="watchlist-provenance"><QualityFacts quality={item.dataQuality} /><time dateTime={item.lastResearchAt}>Persisted {formatDualTime(item.lastResearchAt).newYork}</time></div>
           </li>)}
         </ol>
-        <section className="watchlist-configuration" aria-labelledby="watchlist-controls-title">
-        <div className="watchlist-controls">
-          <div><h3 id="watchlist-controls-title">Watchlist controls</h3><p>Daily research, intraday monitoring, and thresholds are a session-only configuration draft in Fixture Mode.</p></div>
-          <form onSubmit={addSymbol}>
-            <label htmlFor="add-symbol">Add symbol</label>
-            <input id="add-symbol" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={10} autoCapitalize="characters" />
-            <button type="submit">Add to watchlist</button>
-          </form>
-        </div>
+        <details aria-label="Watchlist settings" className="watchlist-configuration route-secondary-disclosure">
+        <summary>Watchlist configuration · {symbols.length} symbols</summary>
+        <div><h3 id="watchlist-controls-title">Watchlist controls</h3><p>Daily research, intraday monitoring, and thresholds are a session-only configuration draft in Fixture Mode.</p></div>
         <div className="watchlist-config-list">{symbols.map((item) => <section aria-label={`${item.symbol} settings`} key={item.symbol}><details><summary>{item.symbol} settings · {item.portfolioAction}</summary><div className="watchlist-config-heading"><h4>{item.symbol}</h4><span><Signal tone={item.portfolioAction}>{item.portfolioAction}</Signal></span></div><div className="watchlist-settings">
                 <label><input type="checkbox" checked={item.dailyResearch} onChange={(event) => updateSymbol(item.symbol, { dailyResearch: event.target.checked })} /> <span>{item.symbol} daily research</span></label>
                 <label><input type="checkbox" checked={item.intradayMonitoring} onChange={(event) => updateSymbol(item.symbol, { intradayMonitoring: event.target.checked })} /> <span>{item.symbol} intraday monitoring</span></label>
                 <label><span>{item.symbol} alert threshold</span><input aria-label={`${item.symbol} alert threshold`} inputMode="decimal" value={item.alertThreshold} onChange={(event) => updateSymbol(item.symbol, { alertThreshold: event.target.value })} /></label>
               </div><p className="watchlist-setting-note">Next earnings: {item.nextEarningsAt ? <time dateTime={item.nextEarningsAt}>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(parseAwareInstant(item.nextEarningsAt))}</time> : 'Not in fixture'}</p></details></section>)}</div>
+        </details>
         </section>
-        <TradingViewTickerList symbols={symbols.map((item) => item.symbol)} />
+        <details aria-label="External current market chart" className="route-secondary-disclosure">
+          <summary>External current market chart</summary>
+          <TradingViewTickerList symbols={symbols.map((item) => item.symbol)} />
+        </details>
       </section>
     </AppShell>
   )

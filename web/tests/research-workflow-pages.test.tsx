@@ -28,6 +28,11 @@ describe('research workflow pages', () => {
   it('supports a fixture-session watchlist draft with schedules, thresholds, and earnings dates', () => {
     render(<WatchlistPage snapshot={fixtureWatchlistSnapshot} />)
 
+    const summary = screen.getByRole('region', { name: 'Watchlist critical summary' })
+    expect(summary).toHaveClass('route-critical-summary')
+    expect(within(summary).getByRole('list', { name: 'Ranked research watchlist' })).toBeInTheDocument()
+    expect(within(summary).getByRole('textbox', { name: 'Add symbol' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Watchlist settings' })).not.toHaveAttribute('open')
     expect(screen.getByRole('heading', { name: 'Watchlist controls' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'NVDA daily research' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'NVDA intraday monitoring' })).toBeChecked()
@@ -102,6 +107,10 @@ describe('research workflow pages', () => {
     render(<ResearchPage snapshot={fixtureResearchSnapshot} />)
 
     const main = screen.getByRole('main')
+    const summary = screen.getByRole('region', { name: 'Research critical summary' })
+    expect(summary).toHaveClass('route-critical-summary')
+    expect(within(summary).getByRole('region', { name: 'NVDA research conclusion' })).toBeInTheDocument()
+    expect(within(summary).getByRole('region', { name: 'Research evidence summary' })).toBeInTheDocument()
     const conclusion = screen.getByRole('region', { name: 'NVDA research conclusion' })
     const currentMarket = screen.getByRole('region', { name: 'NVDA current market overview' })
     const pitEvidence = screen.getByRole('region', { name: 'Point-in-time research evidence' })
@@ -111,6 +120,8 @@ describe('research workflow pages', () => {
     expect(main.contains(conclusion)).toBe(true)
     expect(conclusion.compareDocumentPosition(currentMarket)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     expect(currentMarket.compareDocumentPosition(pitEvidence)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(screen.getByRole('group', { name: 'Current market reference' })).not.toHaveAttribute('open')
+    expect(screen.getByRole('group', { name: 'Complete decision history' })).not.toHaveAttribute('open')
   })
 
   it('exposes each research question as a labelled region', () => {

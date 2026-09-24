@@ -17,11 +17,19 @@ export function ResearchPage({ snapshot }: { snapshot: ResearchSnapshot }) {
     <AppShell currentPath={`/research/${snapshot.symbol}`}>
       <PageHeading asOf={snapshot.asOf} eyebrow="Research" title={`${snapshot.symbol} research`} summary="A decision record whose conclusions stay attached to evidence, gaps, and provenance." />
       <FixtureNotice />
-      <section className="decision-hero research-conclusion" aria-label={`${snapshot.symbol} research conclusion`}>
-        <div><p className="section-kicker">Latest conclusion · {snapshot.symbol}</p><h2 id="thesis-title">Investment thesis</h2><p className="thesis-copy">{snapshot.thesis.summary}</p><p className="muted-copy">Report <strong>{snapshot.report.id}</strong> · <time dateTime={snapshot.report.generatedAt}>{formatDualTime(snapshot.report.generatedAt).newYork}</time></p><p className="research-freshness"><span>Evidence freshness</span><time dateTime={freshestEvidenceAt}>{formatDualTime(freshestEvidenceAt).newYork}</time></p></div>
-        <dl className="decision-facts"><div><dt>Research opinion</dt><dd><Signal tone={snapshot.researchOpinion}>{snapshot.researchOpinion}</Signal></dd></div><div><dt>Portfolio action</dt><dd><Signal tone={snapshot.portfolioAction}>{snapshot.portfolioAction}</Signal></dd></div><div><dt>Confidence</dt><dd>{formatPercent(snapshot.thesis.confidence, { signed: false })}</dd></div><div><dt>Horizon</dt><dd>{snapshot.thesis.horizon}</dd></div></dl>
+      <section aria-label="Research critical summary" className="route-critical-summary research-critical-summary">
+        <section className="decision-hero research-conclusion" aria-label={`${snapshot.symbol} research conclusion`}>
+          <div><p className="section-kicker">Latest conclusion · {snapshot.symbol}</p><h2 id="thesis-title">Investment thesis</h2><p className="thesis-copy">{snapshot.thesis.summary}</p><p className="muted-copy">Report <strong>{snapshot.report.id}</strong> · <time dateTime={snapshot.report.generatedAt}>{formatDualTime(snapshot.report.generatedAt).newYork}</time></p><p className="research-freshness"><span>Evidence freshness</span><time dateTime={freshestEvidenceAt}>{formatDualTime(freshestEvidenceAt).newYork}</time></p></div>
+          <dl className="decision-facts"><div><dt>Research opinion</dt><dd><Signal tone={snapshot.researchOpinion}>{snapshot.researchOpinion}</Signal></dd></div><div><dt>Portfolio action</dt><dd><Signal tone={snapshot.portfolioAction}>{snapshot.portfolioAction}</Signal></dd></div><div><dt>Confidence</dt><dd>{formatPercent(snapshot.thesis.confidence, { signed: false })}</dd></div><div><dt>Horizon</dt><dd>{snapshot.thesis.horizon}</dd></div></dl>
+        </section>
+        <section aria-label="Research evidence summary" className="research-evidence-summary">
+          <dl><div><dt>Evidence links</dt><dd>{snapshot.lineage.length}</dd></div><div><dt>Evidence gaps</dt><dd>{snapshot.gaps.length}</dd></div><div><dt>Decision history</dt><dd>{snapshot.decisionHistory.length}</dd></div><div><dt>Policy pins</dt><dd>{snapshot.policyPins.length}</dd></div></dl>
+        </section>
       </section>
-      <TradingViewWidget kind="symbol-overview" symbol={snapshot.symbol} />
+      <details aria-label="Current market reference" className="route-secondary-disclosure current-market-disclosure">
+        <summary>Current market reference · TradingView</summary>
+        <TradingViewWidget kind="symbol-overview" symbol={snapshot.symbol} />
+      </details>
       <section className="research-domain-grid" aria-label="Point-in-time research evidence">
         <section aria-labelledby="fundamentals-title"><h2 id="fundamentals-title">Fundamentals</h2><dl>{snapshot.fundamentals.map((fact) => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}<small>{fact.source}</small></dd></div>)}</dl></section>
         <section aria-labelledby="earnings-title"><h2 id="earnings-title">Earnings</h2>{snapshot.earnings.map((item) => <div key={item.period}><strong>{item.period}</strong><p>{item.summary}</p><time dateTime={item.reportedAt}>{formatDualTime(item.reportedAt).newYork}</time></div>)}</section>
@@ -47,10 +55,13 @@ export function ResearchPage({ snapshot }: { snapshot: ResearchSnapshot }) {
         <section className="terminal-section" aria-labelledby="diff-title"><p className="section-kicker">Change</p><h2 id="diff-title">Decision diff</h2><p className="muted-copy">Deterministic comparison with the prior immutable decision.</p><dl className="diff-list">{snapshot.decisionDiff.map((diff) => <div key={diff.field}><dt>{diff.field.replace('_', ' ')}</dt><dd><s>{diff.from}</s><span aria-hidden="true">→</span><strong>{diff.to}</strong><span className="sr-only">{diff.field} changed from {diff.from} to {diff.to}</span></dd></div>)}</dl></section>
         <section className="terminal-section" aria-labelledby="pins-title"><p className="section-kicker">Reproduce</p><h2 id="pins-title">Frozen policy versions</h2><dl className="pin-list">{snapshot.policyPins.map((pin) => <div key={pin.label}><dt>{pin.label}</dt><dd>{pin.version}</dd></div>)}</dl></section>
       </div>
-      <section className="terminal-section" aria-labelledby="decision-history-title">
-        <p className="section-kicker">History</p><h2 id="decision-history-title">Decision history</h2>
-        <div className="table-scroll"><table aria-label="Immutable decision history" tabIndex={0}><thead><tr><th scope="col">Decision</th><th scope="col">As of</th><th scope="col">Research opinion</th><th scope="col">Portfolio action</th><th scope="col">Confidence</th></tr></thead><tbody>{snapshot.decisionHistory.map((decision) => <tr key={decision.id}><th scope="row">{decision.id}</th><td><time dateTime={decision.asOf}>{formatDualTime(decision.asOf).newYork}</time></td><td><Signal tone={decision.researchOpinion}>{decision.researchOpinion}</Signal></td><td><Signal tone={decision.portfolioAction}>{decision.portfolioAction}</Signal></td><td>{formatPercent(decision.confidence, { signed: false })}</td></tr>)}</tbody></table></div>
-      </section>
+      <details aria-label="Complete decision history" className="terminal-section route-secondary-disclosure">
+        <summary>Decision history · {snapshot.decisionHistory.length}</summary>
+        <section aria-labelledby="decision-history-title">
+          <p className="section-kicker">History</p><h2 id="decision-history-title">Decision history</h2>
+          <div className="table-scroll"><table aria-label="Immutable decision history" tabIndex={0}><thead><tr><th scope="col">Decision</th><th scope="col">As of</th><th scope="col">Research opinion</th><th scope="col">Portfolio action</th><th scope="col">Confidence</th></tr></thead><tbody>{snapshot.decisionHistory.map((decision) => <tr key={decision.id}><th scope="row">{decision.id}</th><td><time dateTime={decision.asOf}>{formatDualTime(decision.asOf).newYork}</time></td><td><Signal tone={decision.researchOpinion}>{decision.researchOpinion}</Signal></td><td><Signal tone={decision.portfolioAction}>{decision.portfolioAction}</Signal></td><td>{formatPercent(decision.confidence, { signed: false })}</td></tr>)}</tbody></table></div>
+        </section>
+      </details>
     </AppShell>
   )
 }
