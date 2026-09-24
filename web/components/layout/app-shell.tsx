@@ -58,7 +58,7 @@ export function AppShell({ children, currentPath }: AppShellProps) {
     <MarketThemeContext.Provider value={dark === null ? null : dark ? 'dark' : 'light'}>
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to main content</a>
-      <header className="app-chrome">
+      <header className="app-chrome" data-material="chrome">
         <div className="brand-lockup">
           <span aria-hidden="true" className="brand-mark">A</span>
           <p><strong>AI Stock Research</strong><span>Evidence before action</span></p>
