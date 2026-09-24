@@ -118,10 +118,30 @@ describe('TodayPage', () => {
     expect(screen.getByText('1 unavailable fact').closest('details')).not.toHaveAttribute('open')
   })
 
+  it('groups every decision-critical region into the dense desktop workspace', () => {
+    render(<TodayPage snapshot={snapshot} />)
+
+    const workspace = screen.getByRole('region', { name: 'Today decision workspace' })
+    expect(workspace).toHaveClass('today-decision-workspace')
+    expect(within(workspace).getByRole('region', { name: 'Portfolio overview' })).toHaveClass(
+      'portfolio-overview',
+    )
+    expect(within(workspace).getByRole('region', { name: 'Market regime' })).toHaveClass(
+      'market-regime-compact',
+    )
+    expect(within(workspace).getByRole('list', { name: 'Watchlist signals' })).toHaveClass(
+      'market-list',
+    )
+    expect(within(workspace).getByRole('region', { name: 'Decision activity' })).toHaveClass(
+      'decision-activity',
+    )
+    expect(screen.getByRole('group', { name: 'Provider diagnostics' })).not.toHaveAttribute('open')
+  })
+
   it('renders a non-color-only watchlist heatmap with distinct decisions and raw quality facts', () => {
     render(<TodayPage snapshot={snapshot} />)
 
-    const heatmap = screen.getByRole('list', { name: 'Watchlist heatmap' })
+    const heatmap = screen.getByRole('list', { name: 'Watchlist signals' })
     expect(within(heatmap).getByRole('link', { name: 'NVDA' })).toHaveAttribute('href', '/research/NVDA')
     expect(within(heatmap).getByText('+2.14%')).toBeInTheDocument()
     expect(within(heatmap).getByText('BULLISH')).toBeInTheDocument()

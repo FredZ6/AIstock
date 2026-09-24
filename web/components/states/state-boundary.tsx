@@ -82,14 +82,14 @@ function DegradedDetails({ state }: { state: DegradedState }) {
               {group.items.map((item) => typeof item === 'string'
                 ? <li className="state-fact" data-availability-state="EMPTY" key={item}>
                     <div className="state-fact-heading">
-                      <strong className="state-fact-state">EMPTY ·</strong>
+                      <strong className="state-fact-state">EMPTY · </strong>
                       <span className="state-fact-label">{item}</span>
                     </div>
                     <p className="state-fact-reason">No persisted producer output is available.</p>
                   </li>
                 : <li className="state-fact" data-availability-state={item.state} key={item.key}>
                     <div className="state-fact-heading">
-                      <strong className="state-fact-state">{item.state} ·</strong>
+                      <strong className="state-fact-state">{item.state} · </strong>
                       <span className="state-fact-label">{item.label}</span>
                     </div>
                     <p className="state-fact-reason">{item.reason}</p>
