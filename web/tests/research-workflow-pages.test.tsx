@@ -162,6 +162,7 @@ describe('research workflow pages', () => {
     render(<RunTracePage snapshot={fixtureRunTrace} />)
 
     const summary = screen.getByRole('region', { name: 'Run operations summary' })
+    expect(summary).toHaveClass('route-critical-summary')
     const events = screen.getByRole('region', { name: 'Durable event trace' })
     expect(summary).toHaveTextContent('RUNNING')
     expect(within(summary).getByText('Elapsed').parentElement).toHaveTextContent('28,000 ms')
@@ -172,5 +173,6 @@ describe('research workflow pages', () => {
     expect(summary).toHaveTextContent('Data cutoff')
     expect(summary.querySelector('time')).toHaveAttribute('datetime', fixtureRunTrace.asOf)
     expect(summary.compareDocumentPosition(events) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'Complete durable event trace' })).not.toHaveAttribute('open')
   })
 })

@@ -317,6 +317,24 @@ tbody th a { min-height: 2.75rem; display: inline-flex; align-items: center; fon
 .portfolio-evidence-grid { display: grid; gap: 1.25rem; margin-top: 1.25rem; }
 .portfolio-evidence-grid > section { padding: clamp(1.15rem, 3vw, 2rem); border: 1px solid var(--line); border-radius: 1.35rem; background: var(--ink-raised); }
 .portfolio-evidence-grid h2 { margin: 0 0 1rem; font-size: 1rem; }
+.run-overview.route-critical-summary { gap: var(--space-dashboard); padding: 1rem 1.25rem; border: 1px solid var(--line); border-radius: var(--radius-section); background: var(--surface-section); box-shadow: var(--shadow-surface); }
+.run-overview.route-critical-summary .run-progress-facts div,
+.run-overview.route-critical-summary .budget-strip div { min-height: var(--row-compact); padding: 0.55rem 0.75rem; }
+.run-overview.route-critical-summary dt,
+.run-overview.route-critical-summary dd { font-size: 0.8125rem; }
+.portfolio-critical-summary { display: grid; gap: 0.75rem; }
+.portfolio-critical-summary .portfolio-snapshot { margin-top: 0; padding: 1rem 1.25rem; gap: var(--space-dashboard); }
+.portfolio-evidence-summary { padding: 0.65rem; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--surface-section); }
+.portfolio-evidence-summary .evidence-counts div,
+.portfolio-evidence-summary dl > div { min-height: var(--row-compact); padding: 0.55rem 0.75rem; }
+.portfolio-evidence-summary dt,
+.portfolio-evidence-summary dd { font-size: 0.8125rem; }
+.portfolio-critical-summary + .performance-overview { margin-top: var(--space-dashboard); }
+.portfolio-critical-summary + .performance-overview .performance-head { padding: 0.85rem 1rem; }
+.portfolio-critical-summary + .performance-overview .performance-facts { padding: 0.65rem 1rem; }
+.portfolio-critical-summary + .performance-overview .performance-plot svg { height: clamp(6rem, 10vw, 8rem); }
+.portfolio-evidence-grid > .route-secondary-disclosure { margin-top: 0; }
+.portfolio-evidence-grid > .route-secondary-disclosure > section { margin: 0; padding: 0.9rem; }
 .api-performance-chart { margin: 1.25rem 0 0; color: var(--signal); }
 .api-performance-chart svg { display: block; width: 100%; height: clamp(10rem, 24vw, 16rem); }
 .api-performance-chart .chart-area { fill: url(#api-nav-fill); stroke: none; }

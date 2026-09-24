@@ -102,6 +102,8 @@ describe('API mode pages', () => {
     expect(screen.getByText('prompt-v1')).toBeInTheDocument()
     expect(screen.getByText('deterministic-v1')).toBeInTheDocument()
     expect(screen.getByText('DETERMINISTIC_CODE')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Run operations summary' })).toHaveClass('route-critical-summary')
+    expect(screen.getByRole('group', { name: 'Complete durable event trace' })).not.toHaveAttribute('open')
   })
 
   it('shows real Today facts and explicit degraded domains without a Fixture notice', () => {
@@ -372,12 +374,16 @@ describe('API mode pages', () => {
       portfolio={{ ...emptyPortfolio, cash: { balance: '100000', currency: 'USD' }, initializedAt: '2026-08-29T09:00:00Z', status: 'SUCCESS' }}
     />)
 
-    const summary = screen.getByRole('region', { name: 'Portfolio snapshot' })
+    const critical = screen.getByRole('region', { name: 'Portfolio critical summary' })
+    expect(critical).toHaveClass('route-critical-summary')
+    const summary = within(critical).getByRole('region', { name: 'Portfolio snapshot' })
     expect(within(summary).getByText('Net asset value').parentElement).toHaveTextContent('Unavailable')
     expect(within(summary).getByText('Available cash').parentElement).toHaveTextContent('USD 100,000.00')
     expect(summary).toHaveTextContent('As of')
-    const evidence = screen.getByRole('region', { name: 'Paper trading evidence availability' })
-    expect(within(evidence).getByText('Positions').parentElement).toHaveTextContent('0')
+    const evidenceSummary = within(critical).getByRole('region', { name: 'Portfolio evidence summary' })
+    expect(within(evidenceSummary).getByText('Positions').parentElement).toHaveTextContent('0')
+    expect(screen.getByRole('region', { name: 'Paper trading evidence availability' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Complete portfolio accounting' })).not.toHaveAttribute('open')
   })
 
   it('treats authoritative zero activity as empty history rather than missing evidence', () => {

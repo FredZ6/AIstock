@@ -464,17 +464,23 @@ export function ApiPortfolioPage({ asOf, portfolio }: { asOf: string; portfolio:
           <input name="idempotency_key" type="hidden" value={`portfolio-init:${asOf}`} />
           <button className="state-retry" type="submit">Initialize USD 100,000 paper portfolio</button>
         </form> : <>
-          <section className="portfolio-snapshot" aria-label="Portfolio snapshot">
-            <div><p className="section-kicker">Paper portfolio</p><h2>Persisted snapshot</h2><p>As of <time dateTime={asOf}>{formatDualTime(asOf).newYork}</time></p></div>
-            <dl><div><dt>Net asset value</dt><dd>{portfolio.latestNav ? formatMoney(portfolio.latestNav.nav, 'USD') : <span className="unavailable-value">Unavailable</span>}</dd></div><div><dt>Day return</dt><dd className={dayReturn ? undefined : 'unavailable-value'}>{dayReturn ? formatPercent(dayReturn) : 'Unavailable'}</dd></div><div><dt>Current drawdown</dt><dd className={drawdown ? undefined : 'unavailable-value'}>{drawdown ? formatPercent(drawdown) : 'Unavailable'}</dd></div><div><dt>Available cash</dt><dd>{portfolio.cash ? formatMoney(portfolio.cash.balance, portfolio.cash.currency) : <span className="unavailable-value">Unavailable</span>}</dd></div></dl>
+          <section aria-label="Portfolio critical summary" className="route-critical-summary portfolio-critical-summary">
+            <section className="portfolio-snapshot" aria-label="Portfolio snapshot">
+              <div><p className="section-kicker">Paper portfolio</p><h2>Persisted snapshot</h2><p>As of <time dateTime={asOf}>{formatDualTime(asOf).newYork}</time></p></div>
+              <dl><div><dt>Net asset value</dt><dd>{portfolio.latestNav ? formatMoney(portfolio.latestNav.nav, 'USD') : <span className="unavailable-value">Unavailable</span>}</dd></div><div><dt>Day return</dt><dd className={dayReturn ? undefined : 'unavailable-value'}>{dayReturn ? formatPercent(dayReturn) : 'Unavailable'}</dd></div><div><dt>Current drawdown</dt><dd className={drawdown ? undefined : 'unavailable-value'}>{drawdown ? formatPercent(drawdown) : 'Unavailable'}</dd></div><div><dt>Available cash</dt><dd>{portfolio.cash ? formatMoney(portfolio.cash.balance, portfolio.cash.currency) : <span className="unavailable-value">Unavailable</span>}</dd></div></dl>
+            </section>
+            <section aria-label="Portfolio evidence summary" className="portfolio-evidence-summary">
+              <dl className="evidence-counts"><div><dt>Positions</dt><dd>{portfolio.positions.length}</dd></div><div><dt>Risk decisions</dt><dd>{portfolio.riskDecisions.length}</dd></div><div><dt>Paper fills</dt><dd>{portfolio.fills.length}</dd></div><div><dt>Cash ledger entries</dt><dd>{portfolio.cashLedger.length}</dd></div></dl>
+            </section>
           </section>
           {history.length ? <section className="terminal-section" aria-labelledby="portfolio-history-title">
             <div className="section-heading"><div><p className="section-kicker">Decimal-derived history</p><h2 id="portfolio-history-title">NAV performance</h2></div><span className="muted-copy">{history.length} persisted snapshots</span></div>
             <figure className="api-performance-chart"><svg aria-label="Net asset value history" preserveAspectRatio="none" role="img" viewBox="0 0 1000 240"><defs><linearGradient id="api-nav-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopOpacity="0.25" /><stop offset="100%" stopOpacity="0" /></linearGradient></defs><line className="chart-baseline" x1="0" x2="1000" y1="220" y2="220" /><path className="chart-area" d={navArea} /><path className="chart-line" d={navLine} /></svg><figcaption>Persisted paper NAV through <time dateTime={history.at(-1)?.availableAt}>{formatDualTime(history.at(-1)!.availableAt).newYork}</time></figcaption></figure>
           </section> : null}
+          <details aria-label="Complete portfolio accounting" className="route-secondary-disclosure">
+          <summary>Complete portfolio accounting</summary>
           <section className="terminal-section" aria-label="Paper trading evidence availability">
             <p className="section-kicker">Persisted evidence</p><h2>Audit evidence</h2>
-            <dl className="evidence-counts"><div><dt>Positions</dt><dd>{portfolio.positions.length}</dd></div><div><dt>Risk decisions</dt><dd>{portfolio.riskDecisions.length}</dd></div><div><dt>Paper fills</dt><dd>{portfolio.fills.length}</dd></div><div><dt>Cash ledger entries</dt><dd>{portfolio.cashLedger.length}</dd></div></dl>
             <h3>Positions and P&amp;L</h3>
             {portfolio.positions.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Paper positions"><thead><tr><th>Symbol</th><th>Quantity</th><th>Average cost</th><th>Market price</th><th>Market value</th><th>Unrealized P&amp;L</th><th>Price available</th></tr></thead><tbody>{portfolio.positions.map((position) => <tr key={position.symbol}><th>{position.symbol}</th><td>{formatDecimal(position.quantity)}</td><td>{formatMoney(position.averageCost, 'USD')}</td><td>{position.marketPrice ? formatMoney(position.marketPrice, 'USD') : 'Unavailable'}</td><td>{position.marketValue ? formatMoney(position.marketValue, 'USD') : 'Unavailable'}</td><td>{position.unrealizedPnl ? formatMoney(position.unrealizedPnl, 'USD') : 'Unavailable'}</td><td>{position.priceAvailableAt ? <time dateTime={position.priceAvailableAt}>{formatDualTime(position.priceAvailableAt).newYork}</time> : 'Unavailable'}</td></tr>)}</tbody></table></div> : <p className="unavailable-value">No positions persisted at this cutoff.</p>}
             <h3>Risk decisions</h3>
@@ -484,6 +490,7 @@ export function ApiPortfolioPage({ asOf, portfolio }: { asOf: string; portfolio:
             <h3>Cash ledger</h3>
             {portfolio.cashLedger.length ? <div className="table-scroll" tabIndex={0}><table aria-label="Cash ledger"><thead><tr><th>Account</th><th>Debit</th><th>Credit</th><th>Transaction</th><th>Occurred</th><th>Reversal</th></tr></thead><tbody>{portfolio.cashLedger.map((entry) => <tr key={entry.id}><th>{entry.account}</th><td>{formatMoney(entry.debit, 'USD')}</td><td>{formatMoney(entry.credit, 'USD')}</td><td>{entry.transactionId}</td><td><time dateTime={entry.occurredAt}>{formatDualTime(entry.occurredAt).newYork}</time></td><td>{entry.reversalOfId ?? 'None'}</td></tr>)}</tbody></table></div> : <p className="unavailable-value">No cash ledger entries persisted at this cutoff.</p>}
           </section>
+          </details>
         </>}
       </StateBoundary>
     </AppShell>

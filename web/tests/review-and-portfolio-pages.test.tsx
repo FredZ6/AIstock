@@ -101,7 +101,14 @@ describe('portfolio and review pages', () => {
   it('puts the complete portfolio snapshot before the analytical chart and evidence tables', () => {
     render(<PortfolioPage snapshot={fixturePortfolioSnapshot} />)
 
-    const snapshot = screen.getByRole('region', { name: 'Portfolio snapshot' })
+    const critical = screen.getByRole('region', { name: 'Portfolio critical summary' })
+    expect(critical).toHaveClass('route-critical-summary')
+    const snapshot = within(critical).getByRole('region', { name: 'Portfolio snapshot' })
+    const evidenceSummary = within(critical).getByRole('region', { name: 'Portfolio evidence summary' })
+    expect(evidenceSummary).toHaveTextContent(`Positions${fixturePortfolioSnapshot.positions.length}`)
+    expect(evidenceSummary).toHaveTextContent(`Risk decisions${fixturePortfolioSnapshot.riskDecisions.length}`)
+    expect(evidenceSummary).toHaveTextContent(`Paper fills${fixturePortfolioSnapshot.fills.length}`)
+    expect(evidenceSummary).toHaveTextContent(`Cash ledger${fixturePortfolioSnapshot.cashLedger.length}`)
     const chart = screen.getByRole('figure', { name: 'Portfolio performance' })
     expect(snapshot).toHaveTextContent('Net asset value')
     expect(snapshot).toHaveTextContent('USD 100,425.18')
@@ -115,6 +122,9 @@ describe('portfolio and review pages', () => {
     expectBefore(snapshot, chart)
     for (const name of ['Positions', 'Risk decisions', 'Paper fills', 'Cash ledger']) {
       expect(screen.getByRole('region', { name })).toBeInTheDocument()
+    }
+    for (const name of ['Complete positions', 'Complete risk decisions', 'Complete paper fills', 'Complete cash ledger']) {
+      expect(screen.getByRole('group', { name })).not.toHaveAttribute('open')
     }
   })
 

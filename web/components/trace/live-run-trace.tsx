@@ -94,7 +94,7 @@ export function LiveRunTrace({ initialRun }: { initialRun: ResearchRun }) {
   const checkpoints = events.filter((item) => item.type.startsWith('checkpoint.')).length
 
   return <>
-    <section className="run-overview" aria-label="Run operations summary">
+    <section className="run-overview route-critical-summary" aria-label="Run operations summary">
       <div><p className="section-kicker">Status</p><Signal tone={initialRun.status}>{initialRun.status}</Signal><small>{initialRun.runId}</small></div>
       <div>
         <div role="status" aria-label="Agent event connection" className="muted-copy">Event stream · {connection}</div>
@@ -108,12 +108,15 @@ export function LiveRunTrace({ initialRun }: { initialRun: ResearchRun }) {
         </dl>
       </div>
     </section>
-    <section className="terminal-section first-section" aria-labelledby="live-events-title">
-      <div className="section-heading"><div><p className="section-kicker">Sequence</p><h2 id="live-events-title">Durable event trace</h2></div><span className="muted-copy">Authoritative persisted events</span></div>
-      {events.length ? <ol aria-label="Durable run events" className="trace-list">{events.map((item) => <li key={item.event_id}>
-        <span className="trace-sequence">{String(item.sequence).padStart(2, '0')}</span>
-        <div><div className="trace-title"><strong>{item.type}</strong></div><p>{typeof item.payload.node === 'string' ? item.payload.node : JSON.stringify(item.payload)}</p><small>{item.event_id} · <time dateTime={item.event_time}>{formatDualTime(item.event_time).newYork}</time></small></div>
-      </li>)}</ol> : <p className="unavailable-value">No durable event received yet.</p>}
-    </section>
+    <details aria-label="Complete durable event trace" className="route-secondary-disclosure">
+      <summary>Complete durable event trace · {events.length} events</summary>
+      <section className="terminal-section" aria-labelledby="live-events-title">
+        <div className="section-heading"><div><p className="section-kicker">Sequence</p><h2 id="live-events-title">Durable event trace</h2></div><span className="muted-copy">Authoritative persisted events</span></div>
+        {events.length ? <ol aria-label="Durable run events" className="trace-list">{events.map((item) => <li key={item.event_id}>
+          <span className="trace-sequence">{String(item.sequence).padStart(2, '0')}</span>
+          <div><div className="trace-title"><strong>{item.type}</strong></div><p>{typeof item.payload.node === 'string' ? item.payload.node : JSON.stringify(item.payload)}</p><small>{item.event_id} · <time dateTime={item.event_time}>{formatDualTime(item.event_time).newYork}</time></small></div>
+        </li>)}</ol> : <p className="unavailable-value">No durable event received yet.</p>}
+      </section>
+    </details>
   </>
 }
