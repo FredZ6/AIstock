@@ -237,20 +237,20 @@ export function ApiTodayPage({
         actionLabel: 'Review watchlist',
         groups,
       } : { kind: 'success' as const }}>
-        {health ? <section className="terminal-section first-section" aria-labelledby="provider-health-title">
-          <div className="section-heading"><div><p className="section-kicker">Runtime coverage</p><h2 id="provider-health-title">Provider health</h2></div><span className="muted-copy">{health.mode} · read only</span></div>
-          <ul className="plain-list" aria-label="Provider health facts">{Object.entries(health.providers).map(([name, provider]) => <li key={name}><strong>{name.replaceAll('_', ' ').toUpperCase()}</strong><p>{providerDisplay(name, provider)}</p></li>)}</ul>
-        </section> : null}
-        <section className="terminal-section first-section" aria-labelledby="live-market-title">
-          <div className="section-heading">
-            <div><p className="section-kicker">External current market</p><h2 id="live-market-title">Market watchlist</h2></div>
-            <span className="muted-copy">TradingView data is external current-market context · Not decision-time evidence</span>
-          </div>
-          <TradingViewTickerList symbols={quotes.map((quote) => quote.symbol)} />
-          <details className="persisted-quote-evidence">
-            <summary>Persisted quote evidence · {quotes.length} {quotes.length === 1 ? 'symbol' : 'symbols'}</summary>
-            <p>PIT cutoff · {formatDualTime(asOf).newYork}</p>
-            <ul aria-label="Persisted quote evidence">
+        <section aria-label="Today decision workspace" className="today-decision-workspace">
+          <section aria-label="Portfolio overview" className="terminal-section first-section portfolio-overview">
+            <p className="section-kicker">Paper only</p><h2 id="paper-portfolio-title">Paper portfolio</h2>
+            {portfolio?.latestNav
+              ? <p><strong>{formatMoney(portfolio.latestNav.nav, 'USD')}</strong> at <time dateTime={portfolio.latestNav.eventTime}>{formatDualTime(portfolio.latestNav.eventTime).newYork}</time></p>
+              : <p className="unavailable-value">No persisted NAV is available.</p>}
+          </section>
+
+          <section className="terminal-section first-section today-watchlist" aria-labelledby="live-market-title">
+            <div className="section-heading">
+              <div><p className="section-kicker">External current market</p><h2 id="live-market-title">Market watchlist</h2></div>
+              <span className="muted-copy"><span>Current market context · not decision-time evidence</span><small>TradingView data is external current-market context · Not decision-time evidence</small></span>
+            </div>
+            <ul aria-label="Market watchlist" className="market-list persisted-market-list">
               {quotes.map((quote) => <li key={quote.symbol}>
                 <Link href={`/research/${quote.symbol}`}>{quote.symbol}</Link>
                 <strong>{formatMoney(quote.close, 'USD')}</strong>
@@ -258,22 +258,44 @@ export function ApiTodayPage({
                 <time dateTime={quote.availableAt}>Available {formatDualTime(quote.availableAt).newYork}</time>
               </li>)}
             </ul>
-          </details>
+          </section>
+
+          <section aria-label="Decision activity" className="decision-activity">
+            <section className="terminal-section" aria-labelledby="today-research-title">
+              <div className="section-heading"><div><p className="section-kicker">Latest persisted conclusions</p><h2 id="today-research-title">Research decisions</h2></div>{research.length ? <Link href={`/research/${research[0].symbol}`}>Open research</Link> : <Link href="/research">Open research</Link>}</div>
+              {research.length
+                ? <ul className="lineage-list">{research.slice(0, 3).map((record) => <li key={record.id}><div className="section-heading"><strong>{record.symbol}</strong>{record.opinion ? <Signal tone={record.opinion}>{record.opinion}</Signal> : null}</div><p>{record.summary}</p><small>Confidence {formatPercent(record.confidence, { signed: false })} · cutoff <time dateTime={record.asOf}>{formatDualTime(record.asOf).newYork}</time></small></li>)}</ul>
+                : <p className="unavailable-value">No persisted research decision is available.</p>}
+            </section>
+            <section className="terminal-section" aria-labelledby="today-alerts-title">
+              <div className="section-heading"><div><p className="section-kicker">Actionable persisted events</p><h2 id="today-alerts-title">Alerts</h2></div><Link href="/alerts">View all</Link></div>
+              {alerts.length
+                ? <ul className="lineage-list">{alerts.slice(0, 3).map((alert) => <li key={alert.id}><div className="section-heading"><strong>{alert.symbol}</strong><Signal tone={alert.severity}>{alert.severity}</Signal></div><p>{alert.ruleId} · {alert.ruleVersion}</p><small>Materiality {formatPercent(alert.materiality, { signed: false })} · <time dateTime={alert.eventTime}>{formatDualTime(alert.eventTime).newYork}</time></small></li>)}</ul>
+                : <p className="unavailable-value">No persisted actionable alert is available.</p>}
+            </section>
+          </section>
         </section>
-        {research.length ? <section className="terminal-section" aria-labelledby="today-research-title">
-          <div className="section-heading"><div><p className="section-kicker">Latest persisted conclusions</p><h2 id="today-research-title">Research decisions</h2></div><Link href={`/research/${research[0].symbol}`}>Open research</Link></div>
-          <ul className="lineage-list">{research.map((record) => <li key={record.id}><div className="section-heading"><strong>{record.symbol}</strong>{record.opinion ? <Signal tone={record.opinion}>{record.opinion}</Signal> : null}</div><p>{record.summary}</p><small>Confidence {formatPercent(record.confidence, { signed: false })} · cutoff <time dateTime={record.asOf}>{formatDualTime(record.asOf).newYork}</time></small></li>)}</ul>
-        </section> : null}
-        {alerts.length ? <section className="terminal-section" aria-labelledby="today-alerts-title">
-          <div className="section-heading"><div><p className="section-kicker">Actionable persisted events</p><h2 id="today-alerts-title">Alerts</h2></div><Link href="/alerts">View all</Link></div>
-          <ul className="lineage-list">{alerts.map((alert) => <li key={alert.id}><div className="section-heading"><strong>{alert.symbol}</strong><Signal tone={alert.severity}>{alert.severity}</Signal></div><p>{alert.ruleId} · {alert.ruleVersion}</p><small>Materiality {formatPercent(alert.materiality, { signed: false })} · <time dateTime={alert.eventTime}>{formatDualTime(alert.eventTime).newYork}</time></small></li>)}</ul>
-        </section> : null}
-        <section className="terminal-section" aria-labelledby="paper-portfolio-title">
-          <p className="section-kicker">Paper only</p><h2 id="paper-portfolio-title">Paper portfolio</h2>
-          {portfolio?.latestNav
-            ? <p><strong>{formatMoney(portfolio.latestNav.nav, 'USD')}</strong> at <time dateTime={portfolio.latestNav.eventTime}>{formatDualTime(portfolio.latestNav.eventTime).newYork}</time></p>
-            : <p className="unavailable-value">No persisted NAV is available.</p>}
-        </section>
+
+        {health ? <details aria-label="Provider diagnostics" className="provider-diagnostics">
+          <summary>Provider diagnostics</summary>
+          <section aria-labelledby="provider-health-title">
+            <div className="section-heading"><div><p className="section-kicker">Runtime coverage</p><h2 id="provider-health-title">Provider health</h2></div><span className="muted-copy">{health.mode} · read only</span></div>
+            <ul className="plain-list" aria-label="Provider health facts">{Object.entries(health.providers).map(([name, provider]) => <li key={name}><strong>{name.replaceAll('_', ' ').toUpperCase()}</strong><p>{providerDisplay(name, provider)}</p></li>)}</ul>
+          </section>
+        </details> : null}
+        <details aria-label="Complete market lineage" className="persisted-quote-evidence">
+          <summary>Persisted quote evidence · {quotes.length} {quotes.length === 1 ? 'symbol' : 'symbols'}</summary>
+          <TradingViewTickerList symbols={quotes.map((quote) => quote.symbol)} />
+          <p>PIT cutoff · {formatDualTime(asOf).newYork}</p>
+          <ul aria-label="Persisted quote evidence">
+            {quotes.map((quote) => <li key={quote.symbol}>
+              <Link href={`/research/${quote.symbol}`}>{quote.symbol}</Link>
+              <strong>{formatMoney(quote.close, 'USD')}</strong>
+              <span>{quote.provider} · {quote.coverage}</span>
+              <time dateTime={quote.availableAt}>Available {formatDualTime(quote.availableAt).newYork}</time>
+            </li>)}
+          </ul>
+        </details>
       </StateBoundary>
     </AppShell>
   )

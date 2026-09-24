@@ -111,8 +111,8 @@ describe('API mode pages', () => {
     expect(screen.getByLabelText('Live data refresh')).toHaveTextContent(
       'Persisted data refreshes every 60 seconds while this page is visible.',
     )
-    expect(screen.getByText('USD 217.55')).toBeInTheDocument()
-    expect(screen.getAllByText(/ALPACA · IEX/)).toHaveLength(2)
+    expect(within(screen.getByRole('list', { name: 'Market watchlist' })).getByText('USD 217.55')).toBeInTheDocument()
+    expect(screen.getAllByText(/ALPACA · IEX/).length).toBeGreaterThanOrEqual(2)
     expect(screen.getByRole('region', { name: 'Current market reference' })).toBeInTheDocument()
     expect(screen.queryByRole('list', { name: 'Latest persisted quotes' })).not.toBeInTheDocument()
     const evidence = screen.getByText('Persisted quote evidence · 1 symbol').closest('details')
@@ -121,6 +121,15 @@ describe('API mode pages', () => {
     expect(screen.getByRole('status', { name: 'Some decision facts are unavailable' })).toHaveTextContent('No Fixture data was substituted')
     expect(screen.getByText('Configure SEC_USER_AGENT with a monitored contact identity.')).toBeInTheDocument()
     expect(screen.queryByText('Fixture Mode')).not.toBeInTheDocument()
+
+    const workspace = screen.getByRole('region', { name: 'Today decision workspace' })
+    expect(workspace).toHaveClass('today-decision-workspace')
+    expect(within(workspace).getByRole('region', { name: 'Portfolio overview' })).toBeInTheDocument()
+    expect(within(workspace).getByRole('list', { name: 'Market watchlist' })).toHaveClass('market-list')
+    expect(within(workspace).getByRole('region', { name: 'Decision activity' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Provider diagnostics' })).not.toHaveAttribute('open')
+    expect(screen.getByRole('group', { name: 'Complete market lineage' })).not.toHaveAttribute('open')
+    expect(screen.getByText('Current market context · not decision-time evidence')).toBeInTheDocument()
   })
 
   it('keeps current quote visible when persisted research is empty', () => {

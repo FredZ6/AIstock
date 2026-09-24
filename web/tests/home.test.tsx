@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('next/navigation', () => ({
@@ -56,7 +56,7 @@ describe('home page', () => {
 
     render(await Home())
 
-    expect(screen.getByText('USD 217.55')).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: 'Market watchlist' })).getByText('USD 217.55')).toBeInTheDocument()
     const degraded = screen.getByRole('status', { name: 'Some decision facts are unavailable' })
     expect(degraded).toHaveTextContent('1 unavailable fact')
     expect(screen.getByText('Decision Domain')).toBeInTheDocument()
@@ -97,7 +97,7 @@ describe('home page', () => {
 
     render(await Home())
 
-    expect(screen.getByText('USD 217.55')).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: 'Market watchlist' })).getByText('USD 217.55')).toBeInTheDocument()
     expect(screen.getByRole('status', { name: 'Some decision facts are unavailable' })).toHaveTextContent(
       'Market quote quality',
     )
