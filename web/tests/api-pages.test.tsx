@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ApiAlertsPage, ApiPortfolioPage, ApiResearchPage, ApiRunMetadataPage, ApiTodayPage, ApiWeeklyReviewPage } from '../components/live/api-pages'
+import { ApiAlertsPage, ApiEvalPage, ApiPortfolioPage, ApiResearchPage, ApiRunMetadataPage, ApiTodayPage, ApiWeeklyReviewPage } from '../components/live/api-pages'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -78,6 +78,25 @@ describe('API mode pages', () => {
     expect(screen.getByRole('link', { name: 'Open latest run trace' })).toHaveAttribute('href', '/runs/latest')
     expect(screen.queryByText(/Detailed presentation remains constrained/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Fixture Mode/)).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Alert triage summary' })).toHaveClass('route-critical-summary')
+    expect(screen.getByRole('group', { name: 'Complete alert evidence for NVDA' })).not.toHaveAttribute('open')
+  })
+
+  it('keeps persisted evaluation status and pins visible while deferring metric tables', () => {
+    render(<ApiEvalPage asOf="2026-08-29T09:30:00Z" detail={{
+      gates: [{ comparison: 'AT_LEAST', name: 'accuracy', observed: '0.8', passed: true, reason: 'met', threshold: '0.7' }],
+      metrics: [{ caseHashes: ['hash-1'], caseIds: ['case-1'], name: 'accuracy', value: '0.8' }],
+      run: {
+        caseCount: 1, confidencePolicyVersion: 'confidence-v1', createdAt: '2026-08-29T09:20:00Z',
+        dataCutoff: '2026-08-29T09:00:00Z', datasetVersion: 'dataset-v1', executionPolicyVersion: 'execution-v1',
+        gatePolicyVersion: 'gate-v1', id: 'eval-1', mode: 'fixture', modelVersion: 'model-v1', passed: true,
+        promptVersion: 'prompt-v1', researchScoringPolicyVersion: 'scoring-v1', riskPolicyVersion: 'risk-v1',
+        status: 'PASSED', summaryHash: 'hash-summary',
+      },
+    }} />)
+
+    expect(screen.getByRole('article', { name: 'Evaluation critical summary' })).toHaveClass('route-critical-summary')
+    expect(screen.getByRole('group', { name: 'Complete evaluation metrics and gates' })).not.toHaveAttribute('open')
   })
 
   it('renders the closed persisted report with lineage, gaps, pins, and deterministic diff', () => {
@@ -460,6 +479,10 @@ describe('API mode pages', () => {
     expect(outcomes).toHaveTextContent('+4.00%')
     expect(outcomes).toHaveTextContent('-1.00%')
     expect(outcomes).toHaveTextContent('3')
+    expect(screen.getByRole('region', { name: 'Weekly outcome summary' })).toHaveClass('route-critical-summary')
+    for (const name of ['Complete confidence calibration', 'Complete error attribution', 'Complete point-in-time replays', 'Complete candidate lessons']) {
+      expect(screen.getByRole('group', { name })).not.toHaveAttribute('open')
+    }
   })
 
   it('keeps API weekly benchmarks honest and replays ahead of candidate lessons', () => {

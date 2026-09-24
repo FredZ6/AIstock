@@ -158,6 +158,15 @@ describe('portfolio and review pages', () => {
     expect(first.querySelector('time')).toHaveAttribute('datetime', '2026-08-21T19:45:00Z')
   })
 
+  it('keeps alert triage visible while deferring complete lineage', () => {
+    render(<AlertsPage snapshot={fixtureAlertsSnapshot} />)
+
+    expect(screen.getByRole('region', { name: 'Alert triage summary' })).toHaveClass('route-critical-summary')
+    expect(screen.getAllByRole('group', { name: /Complete alert evidence/ }).every(
+      (group) => !group.hasAttribute('open'),
+    )).toBe(true)
+  })
+
   it('makes weekly lesson approval consequences and replay evidence explicit', () => {
     render(<WeeklyReviewPage snapshot={fixtureWeeklyReviewSnapshot} />)
 
@@ -193,6 +202,15 @@ describe('portfolio and review pages', () => {
     expectBefore(replay, lesson)
   })
 
+  it('keeps the weekly outcome summary visible while deferring review evidence', () => {
+    render(<WeeklyReviewPage snapshot={fixtureWeeklyReviewSnapshot} />)
+
+    expect(screen.getByRole('region', { name: 'Weekly outcome summary' })).toHaveClass('route-critical-summary')
+    for (const name of ['Complete thesis outcomes and calibration', 'Complete attribution and replay', 'Complete candidate lesson']) {
+      expect(screen.getByRole('group', { name })).not.toHaveAttribute('open')
+    }
+  })
+
   it('keeps Eval and policy administration read-only in fixture mode', () => {
     render(<EvalAdminPage snapshot={fixtureEvalAdminSnapshot} />)
 
@@ -214,5 +232,12 @@ describe('portfolio and review pages', () => {
     expect(within(operations).getByRole('region', { name: 'Regression comparison' })).toHaveTextContent('Unavailable')
     expect(within(operations).getByRole('region', { name: 'Provider health' })).toHaveTextContent('Unavailable')
     expect(within(operations).getByRole('region', { name: 'Policy state' })).toBeInTheDocument()
+  })
+
+  it('keeps evaluation status visible while deferring policy administration', () => {
+    render(<EvalAdminPage snapshot={fixtureEvalAdminSnapshot} />)
+
+    expect(screen.getByRole('region', { name: 'Operational evidence' })).toHaveClass('route-critical-summary')
+    expect(screen.getByRole('group', { name: 'Complete policy administration' })).not.toHaveAttribute('open')
   })
 })

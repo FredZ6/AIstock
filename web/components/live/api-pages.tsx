@@ -46,13 +46,13 @@ export function ApiEvalPage({ detail, asOf }: { detail: EvalRunDetail; asOf: str
   const { run } = detail
   return <AppShell currentPath="/eval">
     <PageHeading asOf={asOf} eyebrow="Govern · API Mode" title="Eval & Admin" summary="Persisted, version-pinned evaluation evidence. No Fixture report was substituted." />
-    <article className="terminal-section first-section" aria-labelledby="persisted-eval-title">
+    <article className="terminal-section first-section route-critical-summary" aria-label="Evaluation critical summary">
       <div className="section-heading"><div><p className="section-kicker">Measured evidence</p><h2 id="persisted-eval-title">Persisted evaluation run</h2></div><Signal tone={run.passed ? 'healthy' : 'failure'}>{run.status}</Signal></div>
       <dl className="metric-list"><div><dt>Dataset</dt><dd>{run.datasetVersion}</dd></div><div><dt>Cases</dt><dd>{run.caseCount}</dd></div><div><dt>Data cutoff</dt><dd><time dateTime={run.dataCutoff}>{formatDualTime(run.dataCutoff).newYork}</time></dd></div><div><dt>Gate policy</dt><dd>{run.gatePolicyVersion}</dd></div></dl>
       <section aria-label="Pinned evaluation versions"><h3>Version pins</h3><dl className="pin-list"><div><dt>Model</dt><dd>{run.modelVersion}</dd></div><div><dt>Prompt</dt><dd>{run.promptVersion}</dd></div><div><dt>Research scoring</dt><dd>{run.researchScoringPolicyVersion}</dd></div><div><dt>Risk</dt><dd>{run.riskPolicyVersion}</dd></div><div><dt>Execution</dt><dd>{run.executionPolicyVersion}</dd></div><div><dt>Confidence</dt><dd>{run.confidencePolicyVersion}</dd></div></dl></section>
-      <div className="table-scroll" tabIndex={0}><table aria-label="Persisted evaluation metrics"><thead><tr><th>Metric</th><th>Value</th><th>Cases</th></tr></thead><tbody>{detail.metrics.map((metric) => <tr key={metric.name}><th scope="row">{metric.name}</th><td>{metric.value}</td><td>{metric.caseIds.length}</td></tr>)}</tbody></table></div>
+      <details aria-label="Complete evaluation metrics and gates" className="route-secondary-disclosure"><summary>Evaluation metrics, regression gates, and artifact hash</summary><div className="route-detail-content"><div className="table-scroll" tabIndex={0}><table aria-label="Persisted evaluation metrics"><thead><tr><th>Metric</th><th>Value</th><th>Cases</th></tr></thead><tbody>{detail.metrics.map((metric) => <tr key={metric.name}><th scope="row">{metric.name}</th><td>{metric.value}</td><td>{metric.caseIds.length}</td></tr>)}</tbody></table></div>
       <div className="table-scroll" tabIndex={0}><table aria-label="Regression gates"><thead><tr><th>Gate</th><th>Observed</th><th>Threshold</th><th>Result</th></tr></thead><tbody>{detail.gates.map((gate) => <tr key={gate.name}><th scope="row">{gate.name}</th><td>{gate.observed ?? 'Unavailable'}</td><td>{gate.comparison} {gate.threshold}</td><td><Signal tone={gate.passed ? 'healthy' : 'failure'}>{gate.passed ? 'PASS' : 'FAIL'}</Signal></td></tr>)}</tbody></table></div>
-      <p className="muted-copy">Summary SHA-256 · <code>{run.summaryHash}</code></p>
+      <p className="muted-copy">Summary SHA-256 · <code>{run.summaryHash}</code></p></div></details>
     </article>
   </AppShell>
 }
@@ -73,7 +73,7 @@ export function ApiAlertsPage({ alerts, asOf }: { alerts: AlertRecord[]; asOf: s
         actionHref: '/watchlist',
         actionLabel: 'Configure alert monitoring',
       } : { kind: 'success' }}>
-        <section className="terminal-section first-section" aria-labelledby="persisted-alerts-title">
+        <section className="terminal-section first-section route-critical-summary alert-triage-summary" aria-label="Alert triage summary">
           <div className="section-heading">
             <div><p className="section-kicker">Persisted records</p><h2 id="persisted-alerts-title">Alert stream</h2></div>
             <span className="muted-copy">PIT cutoff · {formatDualTime(asOf).newYork}</span>
@@ -88,7 +88,7 @@ export function ApiAlertsPage({ alerts, asOf }: { alerts: AlertRecord[]; asOf: s
                 <strong>{formatPercent(alert.materiality, { signed: false })}</strong>
               </div>
               <p>{alert.ruleId} · {alert.ruleVersion}</p>
-              <dl className="decision-facts">
+              <details aria-label={`Complete alert evidence for ${alert.symbol}`} className="route-secondary-disclosure alert-evidence-disclosure"><summary>Complete alert evidence</summary><div className="route-detail-content"><dl className="decision-facts">
                 <div><dt>Event time</dt><dd><time dateTime={alert.eventTime}>{formatDualTime(alert.eventTime).newYork}</time></dd></div>
                 <div><dt>Recorded</dt><dd><time dateTime={alert.createdAt}>{formatDualTime(alert.createdAt).newYork}</time></dd></div>
                 <div><dt>Acknowledgement</dt><dd>{alert.acknowledgedAt
@@ -96,16 +96,16 @@ export function ApiAlertsPage({ alerts, asOf }: { alerts: AlertRecord[]; asOf: s
                   : 'Not acknowledged'}</dd></div>
                 <div><dt>Alert key</dt><dd><code>{alert.alertKey}</code></dd></div>
               </dl>
-              <details>
-                <summary>Conditions, metrics, and data quality</summary>
+              <div>
+                <h4>Conditions, metrics, and data quality</h4>
                 <div className="decision-facts">
                   <div><dt>Conditions</dt><dd><pre>{alertEvidence(alert.conditions)}</pre></dd></div>
                   <div><dt>Metrics</dt><dd><pre>{alertEvidence(alert.metrics)}</pre></dd></div>
                   <div><dt>Data quality</dt><dd><pre>{alertEvidence(alert.dataQuality)}</pre></dd></div>
                 </div>
-              </details>
+              </div>
               <p><small>Correlation ID · <code>{alert.correlationId}</code></small></p>
-              <p><Link href="/runs/latest">Open latest run trace</Link></p>
+              <p><Link href="/runs/latest">Open latest run trace</Link></p></div></details>
             </li>)}
           </ul>
         </section>
@@ -510,7 +510,7 @@ export function ApiWeeklyReviewPage({ asOf, detail }: { asOf: string; detail: We
         actionLabel: 'Review research decisions',
         providers: ['Matured outcomes'],
       } : { kind: 'success' }}>
-        <section className="terminal-section first-section" aria-label="Weekly outcome summary">
+        <section className="terminal-section first-section route-critical-summary" aria-label="Weekly outcome summary">
           <div className="section-heading"><div><p className="section-kicker">Measure</p><h2 id="weekly-outcomes-title">Outcome attribution</h2></div><span className="muted-copy">{detail.outcomes.length ? 'Point-in-time QQQ benchmark comparison' : 'Benchmark comparison awaits a matured outcome'}</span></div>
           <div className="table-scroll" tabIndex={0}><table aria-label="Persisted weekly outcomes"><thead><tr><th>Symbol</th><th>Opinion</th><th>Confidence</th><th>Return</th><th>Benchmark comparison (excess)</th><th>MFE</th><th>MAE</th><th>Risk adjusted</th><th>Status</th></tr></thead><tbody>
             {detail.outcomes.map((outcome) => {
@@ -522,22 +522,22 @@ export function ApiWeeklyReviewPage({ asOf, detail }: { asOf: string; detail: We
             })}
           </tbody></table></div>
         </section>
-        <section className="terminal-section" aria-labelledby="weekly-calibration-title">
+        <details aria-label="Complete confidence calibration" className="route-secondary-disclosure"><summary>Confidence calibration</summary><section className="terminal-section route-detail-content" aria-labelledby="weekly-calibration-title">
           <p className="section-kicker">Calibrate</p><h2 id="weekly-calibration-title">Confidence calibration</h2>
           <ul className="plain-list">{detail.calibration.map((item) => <li key={item.decisionId}><strong>{formatPercent(item.confidence, { signed: false })}</strong><p>{item.realizedReturn ? `Realized ${formatPercent(item.realizedReturn)}` : 'Outcome pending'} · error {formatPercent(item.calibrationError, { signed: false })}</p></li>)}</ul>
-        </section>
-        <section className="terminal-section" aria-labelledby="weekly-attribution-title">
+        </section></details>
+        <details aria-label="Complete error attribution" className="route-secondary-disclosure"><summary>Error attribution</summary><section className="terminal-section route-detail-content" aria-labelledby="weekly-attribution-title">
           <p className="section-kicker">Attribute</p><h2 id="weekly-attribution-title">Error attribution</h2>
           <ul className="plain-list">{detail.attributions.map((item) => <li key={item.id}><strong>{item.category}</strong><p>{item.rationale}</p></li>)}</ul>
-        </section>
-        <section className="terminal-section" aria-label="Point-in-time replays">
+        </section></details>
+        <details aria-label="Complete point-in-time replays" className="route-secondary-disclosure"><summary>Point-in-time replays</summary><section className="terminal-section route-detail-content" aria-label="Point-in-time replays">
           <p className="section-kicker">Verify</p><h2>Point-in-time replays</h2>
           {detail.replays.length ? <ul className="plain-list">{detail.replays.map((replay) => <li key={replay.id}><strong>{replay.id}</strong><p>Lesson {replay.lessonId} · delta {formatPercent(replay.delta)}</p><time dateTime={replay.dataCutoff}>{formatDualTime(replay.dataCutoff).newYork}</time></li>)}</ul> : <p className="unavailable-value">No replay evidence persisted.</p>}
-        </section>
-        <section className="terminal-section" aria-label="Candidate lessons">
+        </section></details>
+        <details aria-label="Complete candidate lessons" className="route-secondary-disclosure"><summary>Candidate lessons</summary><section className="terminal-section route-detail-content" aria-label="Candidate lessons">
           <p className="section-kicker">Control</p><h2 id="weekly-lessons-title">Candidate lessons</h2>
           <ul className="plain-list">{detail.lessons.map((lesson) => <li key={lesson.id}><strong>{lesson.status}</strong><p>{lesson.statement}</p><small>Confidence {formatPercent(lesson.confidence, { signed: false })} · replay delta {formatPercent(lesson.replayDelta)}</small></li>)}</ul>
-        </section>
+        </section></details>
       </StateBoundary>
     </AppShell>
   )

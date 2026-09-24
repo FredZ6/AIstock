@@ -724,6 +724,15 @@ small,
   .section-heading { margin-bottom: var(--space-dashboard); }
 }
 
+.alert-triage-summary .alert-cards { gap: 8px; }
+.alert-triage-summary .alert-cards > li { padding: 12px 14px; }
+.alert-triage-summary .alert-scan-facts { margin-bottom: 0; }
+.alert-evidence-disclosure { margin-top: 8px; }
+.weekly-outcome-summary .outcome-strip { margin-bottom: 8px; }
+.operational-evidence.route-critical-summary,
+.route-critical-summary + .route-secondary-disclosure { margin-top: 12px; }
+.route-detail-content { margin-top: 12px; }
+
 @media (max-width: 64rem) {
   .page-heading-compact { align-items: flex-start; }
   .time-context.page-context { min-width: min(100%, 15rem); }
