@@ -71,3 +71,17 @@ test('desktop Today keeps the portfolio NAV on one rendered line', async ({ page
     expect(renderedLines, `${viewport.width}px NAV line count`).toBe(1)
   }
 })
+
+test('desktop Today exposes collapsed provider diagnostics in the first viewport', async ({ page }) => {
+  const viewport = { width: 1280, height: 720 }
+  await page.setViewportSize(viewport)
+  await page.goto('/')
+
+  const diagnostics = page.getByRole('group', { name: 'Provider diagnostics' })
+  const diagnosticsBounds = await diagnostics.boundingBox()
+  const summaryBounds = await diagnostics.locator('summary').boundingBox()
+
+  expect(diagnosticsBounds).not.toBeNull()
+  expect(summaryBounds).not.toBeNull()
+  expect(summaryBounds!.y + summaryBounds!.height).toBeLessThanOrEqual(viewport.height)
+})

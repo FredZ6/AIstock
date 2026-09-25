@@ -136,6 +136,7 @@ a:active, button:active { transform: scale(0.98); transition: transform 100ms ea
 .state-details { margin-left: auto; }
 .state-details summary { color: var(--signal-text); cursor: pointer; font-size: 0.7rem; font-weight: 700; }
 .state-detail-groups { display: grid; gap: 0.65rem; min-width: min(38rem, 80vw); padding-top: 0.7rem; }
+.state-details:not([open]) .state-detail-groups { width: 0; min-width: 0; overflow: hidden; }
 .state-detail-groups h3 { margin: 0; color: var(--text-secondary); font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; }
 .state-detail-groups .state-tags { margin-top: 0.35rem; }
 .state-retry { display: inline-block; margin-top: 0.7rem; color: var(--signal-text); font-size: 0.75rem; font-weight: 700; }
@@ -246,9 +247,13 @@ tbody th a { min-height: 2.75rem; display: inline-flex; align-items: center; fon
 .today-decision-workspace .performance-overview.is-compact .performance-facts dd { font-size: clamp(1.1rem, 1.7vw, 1.5rem); white-space: nowrap; }
 .today-decision-workspace .performance-overview.is-compact .performance-plot svg { height: clamp(5.5rem, 9vw, 7.5rem); }
 .today-decision-workspace .performance-overview.is-compact .performance-fixture { padding-top: 0.45rem; }
+.today-decision-workspace .regime-title { gap: 0.5rem; margin-top: 0.75rem; }
+.today-decision-workspace .algorithm-version { padding: 0.5rem 0.65rem; }
 .today-decision-workspace .benchmark-strip { margin-top: 0.65rem; padding-top: 0.65rem; }
 .today-decision-workspace .metric-list { margin-top: 0.75rem; }
-.today-decision-workspace .metric-list div { padding: 0.65rem; }
+.today-decision-workspace .metric-list div { padding: 0.55rem; }
+.today-decision-workspace .benchmark-pulse dl { margin-top: 0.4rem; }
+.today-decision-workspace .benchmark-pulse dl div { padding: 0.45rem; }
 .today-decision-workspace .section-heading { margin-bottom: 0.65rem; }
 .today-decision-workspace .alert-list li { padding: 0.65rem 0; }
 .today-decision-workspace .alert-list li:last-child { border-bottom: 0; }
@@ -440,6 +445,7 @@ button:disabled { cursor: not-allowed; opacity: 0.48; }
 .state-compact .state-tags li { padding: 0.25rem 0.5rem; font-size: 0.62rem; }
 .today-page .market-portfolio-grid { margin-top: 0.85rem; }
 .today-page .provider-diagnostics { margin-top: var(--today-gap); }
+.today-page .provider-diagnostics:not([open]) { margin-top: 0; padding-block: 0.35rem; }
 .terminal-section,
 .operations-rail,
 .decision-hero,
@@ -745,6 +751,10 @@ small,
 
 @media (max-width: 80rem) {
   .app-main { padding: clamp(1rem, 2vw, 1.5rem); }
+  .app-main.app-main-today { padding-top: 0.75rem; }
+  .today-page .today-meta { min-width: min(36rem, 50vw); }
+  .today-page .time-context { min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+  .today-page .time-context p { grid-template-columns: auto 1fr; gap: 0.5rem; }
   .terminal-section { padding: clamp(1rem, 1.6vw, 1.35rem); }
   .section-heading { margin-bottom: var(--space-dashboard); }
 }
@@ -818,15 +828,17 @@ small,
   .today-heading { align-items: start; flex-direction: column; gap: 1.5rem; }
   .today-page .today-heading { align-items: start; gap: 0.55rem; }
   .today-page .today-heading h1 { font-size: 2.5rem; }
-  .today-meta { width: 100%; min-width: 0; gap: 0.35rem; }
+  .today-page .today-meta { width: 100%; min-width: 0; gap: 0.35rem; }
   .time-context { width: 100%; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
-  .time-context p { grid-template-columns: 1fr; gap: 0.1rem; }
-  .time-context time { text-align: left; font-size: 0.7rem; white-space: nowrap; }
+  .today-page .time-context p { grid-template-columns: 1fr; gap: 0.1rem; }
+  .today-page .time-context time { text-align: left; font-size: 0.7rem; white-space: nowrap; }
   .fixture-notice { align-items: flex-start; flex-direction: column; gap: 0.2rem; }
   .today-meta .fixture-notice { align-items: center; flex-direction: row; margin: 0; padding: 0.35rem 0.6rem; }
   .today-meta .fixture-notice strong { white-space: nowrap; }
   .today-page .state-compact { min-height: 2.5rem; margin-top: 0.35rem; padding: 0.35rem 0.6rem; }
   .state-compact { flex-wrap: wrap; }
+  .state-compact .state-details[open] { width: 100%; margin-left: 0; }
+  .state-compact .state-details[open] .state-detail-groups { width: 100%; min-width: 0; }
   .state-compact .state-tags { margin-left: auto !important; }
   .state-tags li.state-fact { grid-template-columns: 1fr; }
   .metric-list { grid-template-columns: 1fr; }
