@@ -243,6 +243,7 @@ tbody th a { min-height: 2.75rem; display: inline-flex; align-items: center; fon
 .provider-diagnostics[open], .persisted-quote-evidence[open] { padding-bottom: 1rem; }
 .today-decision-workspace .performance-overview.is-compact .performance-head { padding-bottom: 0.6rem; }
 .today-decision-workspace .performance-overview.is-compact .performance-facts { padding: 0.65rem 0; }
+.today-decision-workspace .performance-overview.is-compact .performance-facts dd { font-size: clamp(1.1rem, 1.7vw, 1.5rem); white-space: nowrap; }
 .today-decision-workspace .performance-overview.is-compact .performance-plot svg { height: clamp(5.5rem, 9vw, 7.5rem); }
 .today-decision-workspace .performance-overview.is-compact .performance-fixture { padding-top: 0.45rem; }
 .today-decision-workspace .benchmark-strip { margin-top: 0.65rem; padding-top: 0.65rem; }

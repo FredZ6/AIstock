@@ -48,3 +48,26 @@ test('desktop Today keeps decision activity labels on one line', async ({ page }
   expect(await lineCount('#alerts-title')).toBe(1)
   expect(await lineCount('a[href="/alerts"]')).toBe(1)
 })
+
+test('desktop Today keeps the portfolio NAV on one rendered line', async ({ page }) => {
+  for (const viewport of [
+    { width: 1440, height: 800 },
+    { width: 1280, height: 720 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await page.goto('/')
+
+    const nav = page
+      .getByRole('region', { name: 'Portfolio overview' })
+      .getByText('Net asset value')
+      .locator('..')
+      .locator('dd')
+    const renderedLines = await nav.evaluate((element) => {
+      const range = document.createRange()
+      range.selectNodeContents(element)
+      return range.getClientRects().length
+    })
+
+    expect(renderedLines, `${viewport.width}px NAV line count`).toBe(1)
+  }
+})
