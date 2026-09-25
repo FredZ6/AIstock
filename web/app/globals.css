@@ -223,7 +223,7 @@ tbody th a { min-height: 2.75rem; display: inline-flex; align-items: center; fon
 .today-decision-workspace > .today-watchlist { grid-column: 2; grid-row: 1; align-self: stretch; margin-top: 0; }
 .today-decision-workspace > .decision-activity { grid-column: 2; grid-row: 2; align-self: stretch; }
 .decision-activity { display: grid; align-content: start; gap: var(--space-dashboard); }
-.today-decision-workspace > .decision-activity { grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: stretch; gap: var(--today-gap); }
+.today-decision-workspace > .decision-activity { grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); align-content: stretch; gap: var(--today-gap); }
 .decision-activity > .terminal-section, .decision-activity > .operations-rail { margin-top: 0; }
 .today-decision-workspace .terminal-section,
 .today-decision-workspace .operations-rail { padding: 0.75rem; }

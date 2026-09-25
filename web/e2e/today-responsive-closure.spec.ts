@@ -33,3 +33,18 @@ test('mobile Today brings portfolio facts into the upper half of the first viewp
   expect(portfolioBounds!.y).toBeLessThanOrEqual(400)
   await expect(page.locator('.mobile-current')).toHaveCSS('display', 'none')
 })
+
+test('desktop Today keeps decision activity labels on one line', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await page.goto('/')
+
+  const activity = page.getByRole('region', { name: 'Decision activity' })
+  const lineCount = async (selector: string) => activity.locator(selector).evaluate((element) => {
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    return range.getClientRects().length
+  })
+
+  expect(await lineCount('#alerts-title')).toBe(1)
+  expect(await lineCount('a[href="/alerts"]')).toBe(1)
+})
