@@ -155,6 +155,16 @@ test('Today uses the approved split workspace without overlapping facts', async 
     expect(watchlistBounds!.y, `watchlist was not above decision activity at ${viewport.width}x${viewport.height}`)
       .toBeLessThan(activityBounds!.y)
     expect(
+      Math.abs(summaryBounds!.y + summaryBounds!.height - (activityBounds!.y + activityBounds!.height)),
+      `decision activity did not align with the portfolio bottom at ${viewport.width}x${viewport.height}`,
+    ).toBeLessThanOrEqual(2)
+    const horizontalGap = watchlistBounds!.x - (summaryBounds!.x + summaryBounds!.width)
+    const verticalGap = activityBounds!.y - (watchlistBounds!.y + watchlistBounds!.height)
+    expect(
+      Math.abs(horizontalGap - verticalGap),
+      `Today surface gaps were inconsistent at ${viewport.width}x${viewport.height}`,
+    ).toBeLessThanOrEqual(2)
+    expect(
       workspaceBounds!.y + workspaceBounds!.height,
       `Today workspace exceeded the first viewport at ${viewport.width}x${viewport.height}`,
     ).toBeLessThanOrEqual(viewport.height)
@@ -171,6 +181,9 @@ test('Today uses the approved split workspace without overlapping facts', async 
         `watchlist facts overlapped at ${viewport.width}x${viewport.height}`,
       ).toBeGreaterThanOrEqual(verticalFacts[index - 1].bottom - 1)
     }
+
+    await expect(activity.locator('.alert-list > li').last()).toHaveCSS('border-bottom-width', '0px')
+    await expect(summary.locator('.performance-overview.is-compact .chart-dates')).toHaveCSS('border-top-width', '0px')
   }
 })
 
