@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Recompose Today into a 65/35 desktop split so Portfolio/Market and Watchlist/Alerts/Run all fit inside the MacBook Air first viewport.
+**Goal:** Recompose Today into an adaptive two-column desktop split so Portfolio/Market and Watchlist/Alerts/Run all fit inside the MacBook Air first viewport.
 
 **Architecture:** Keep the existing semantic DOM and data contracts, and change only the Today grid placement and compact right-column presentation. Fixture and API Today share the same direct-child classes; desktop CSS assigns those children to the two-column workspace, while the existing 64rem breakpoint restores semantic single-column order.
 
@@ -51,7 +51,7 @@ Do not weaken the existing 1440×800, 1280×720, text-zoom, or mobile overflow a
 
 **Step 1: Apply minimal desktop grid placement**
 
-- Set the Today workspace to `minmax(0, 1.85fr) minmax(22rem, 1fr)`.
+- Set the Today workspace to `minmax(0, 1.5fr) minmax(24rem, 1fr)` so the action rail remains readable at 1280×720.
 - Place `.market-portfolio-grid` and API `.portfolio-overview` in column 1 spanning both rows.
 - Place `.today-watchlist` in column 2, row 1.
 - Place `.decision-activity` in column 2, row 2.

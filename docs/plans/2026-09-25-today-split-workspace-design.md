@@ -7,7 +7,9 @@ shrinking body text below 13px, hiding facts, or changing any data behavior.
 
 ## Approved desktop composition
 
-At widths above 1024px, Today uses a 65/35 split workspace:
+At widths above 1024px, Today uses an approximately 60/40 split workspace with a 24rem minimum
+action column. The wider action column prevents decision labels and timestamps from wrapping into a
+tall rail at the 1280×720 safety viewport:
 
 - The left column spans both workspace rows and contains the Paper Portfolio plus Market Regime.
 - The right column places Watchlist first, followed by Alerts and Research Run activity.
@@ -20,7 +22,7 @@ cards rather than reducing type size, so scanning order stays Portfolio → Watc
 
 ## Responsive behavior
 
-- Above 1024px: 65/35 split with the left summary spanning both rows.
+- Above 1024px: approximately 60/40 split with the left summary spanning both rows.
 - At or below 1024px: one readable column in semantic DOM order.
 - At 1280×720: all critical regions remain usable without page-level horizontal scrolling.
 - At mobile widths and 200% text zoom: readability takes priority over the single-screen target.
