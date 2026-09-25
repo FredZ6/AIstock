@@ -765,6 +765,7 @@ small,
   .today-decision-workspace > .portfolio-overview,
   .today-decision-workspace > .today-watchlist,
   .today-decision-workspace > .decision-activity { grid-column: 1; grid-row: auto; }
+  .today-page .today-decision-workspace > .market-portfolio-grid { grid-template-columns: 1fr; }
   .today-decision-workspace .market-regime-compact { border-top: 1px solid var(--line-soft); border-left: 0; }
   .research-directory-workspace,
   .research-critical-summary { grid-template-columns: 1fr; }
