@@ -59,16 +59,6 @@ export function TodayPage({ snapshot }: TodayPageProps) {
               <section className="market-portfolio-grid surface-card" aria-label="Market and portfolio summary">
                 <div aria-label="Portfolio overview" className="portfolio-summary portfolio-overview" role="region">
                   <PerformanceChart compact snapshot={{ ...snapshot.portfolio, asOf: snapshot.asOf }} />
-                  <dl className="benchmark-strip" aria-label="Portfolio benchmarks">
-                    {[
-                      ['Cash', snapshot.portfolio.benchmarks.cash],
-                      ['QQQ', snapshot.portfolio.benchmarks.qqq],
-                      ['Equal weight', snapshot.portfolio.benchmarks.equalWeight],
-                      ['Momentum', snapshot.portfolio.benchmarks.momentum],
-                    ].map(([label, value]) => (
-                      <div key={label}><dt>{label}</dt><dd>{formatPercent(value)}</dd></div>
-                    ))}
-                  </dl>
                 </div>
 
                 <div aria-label="Market regime" className="market-regime market-regime-compact" role="region">
@@ -83,6 +73,19 @@ export function TodayPage({ snapshot }: TodayPageProps) {
                     <div><dt>SOXX relative strength</dt><dd>{formatPercent(snapshot.marketRegime.soxxRelativeStrength)}</dd></div>
                     <div><dt>VIX</dt><dd>{snapshot.marketRegime.vix}</dd></div>
                   </dl>
+                  <section className="benchmark-pulse" aria-labelledby="benchmark-pulse-title">
+                    <h3 id="benchmark-pulse-title">Benchmark pulse</h3>
+                    <dl aria-label="Portfolio benchmarks">
+                      {[
+                        ['Cash', snapshot.portfolio.benchmarks.cash],
+                        ['QQQ', snapshot.portfolio.benchmarks.qqq],
+                        ['Equal weight', snapshot.portfolio.benchmarks.equalWeight],
+                        ['Momentum', snapshot.portfolio.benchmarks.momentum],
+                      ].map(([label, value]) => (
+                        <div key={label}><dt>{label}</dt><dd>{formatPercent(value)}</dd></div>
+                      ))}
+                    </dl>
+                  </section>
                 </div>
               </section>
 

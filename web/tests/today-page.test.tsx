@@ -100,10 +100,16 @@ describe('TodayPage', () => {
     render(<TodayPage snapshot={snapshot} />)
 
     const summary = screen.getByRole('region', { name: 'Market and portfolio summary' })
+    const regime = within(summary).getByRole('region', { name: 'Market regime' })
     expect(summary).toHaveClass('surface-card')
     expect(within(summary).getByTestId('regime-metadata')).toContainElement(
       within(summary).getByText('market-regime-v1'),
     )
+    expect(within(regime).getByRole('heading', { name: 'Benchmark pulse' })).toBeInTheDocument()
+    for (const benchmark of ['Cash', 'QQQ', 'Equal weight', 'Momentum']) {
+      expect(within(regime).getByText(benchmark)).toBeInTheDocument()
+      expect(screen.getAllByText(benchmark)).toHaveLength(1)
+    }
   })
 
   it('keeps safety context compact so decision facts lead the first viewport', () => {

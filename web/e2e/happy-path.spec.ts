@@ -133,19 +133,28 @@ test('Today uses the approved split workspace without overlapping facts', async 
 
     const workspace = page.getByRole('region', { name: 'Today decision workspace' })
     const summary = page.getByRole('region', { name: 'Market and portfolio summary' })
+    const regime = summary.getByRole('region', { name: 'Market regime' })
+    const regimeMetrics = regime.locator('.metric-list')
+    const benchmarkPulse = regime.locator('.benchmark-pulse')
     const watchlist = page.locator('.today-watchlist')
     const activity = page.getByRole('region', { name: 'Decision activity' })
-    const [workspaceBounds, summaryBounds, watchlistBounds, activityBounds] = await Promise.all([
+    const [workspaceBounds, summaryBounds, watchlistBounds, activityBounds, regimeBounds, regimeMetricsBounds, benchmarkPulseBounds] = await Promise.all([
       workspace.boundingBox(),
       summary.boundingBox(),
       watchlist.boundingBox(),
       activity.boundingBox(),
+      regime.boundingBox(),
+      regimeMetrics.boundingBox(),
+      benchmarkPulse.boundingBox(),
     ])
 
     expect(workspaceBounds).not.toBeNull()
     expect(summaryBounds).not.toBeNull()
     expect(watchlistBounds).not.toBeNull()
     expect(activityBounds).not.toBeNull()
+    expect(regimeBounds).not.toBeNull()
+    expect(regimeMetricsBounds).not.toBeNull()
+    expect(benchmarkPulseBounds).not.toBeNull()
     expect(summaryBounds!.x, `summary was not in the left column at ${viewport.width}x${viewport.height}`)
       .toBeLessThan(watchlistBounds!.x)
     expect(
@@ -168,6 +177,14 @@ test('Today uses the approved split workspace without overlapping facts', async 
       workspaceBounds!.y + workspaceBounds!.height,
       `Today workspace exceeded the first viewport at ${viewport.width}x${viewport.height}`,
     ).toBeLessThanOrEqual(viewport.height)
+    expect(
+      benchmarkPulseBounds!.y,
+      `Benchmark pulse overlapped regime metrics at ${viewport.width}x${viewport.height}`,
+    ).toBeGreaterThanOrEqual(regimeMetricsBounds!.y + regimeMetricsBounds!.height)
+    expect(
+      benchmarkPulseBounds!.y + benchmarkPulseBounds!.height,
+      `Benchmark pulse escaped Market regime at ${viewport.width}x${viewport.height}`,
+    ).toBeLessThanOrEqual(regimeBounds!.y + regimeBounds!.height + 1)
 
     const firstCard = watchlist.locator('.watchlist-heatmap > li').first()
     const verticalFacts = await firstCard.locator(':scope > .heatmap-primary, :scope > span, :scope > .heatmap-decisions, :scope > .quality-line')
