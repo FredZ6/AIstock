@@ -22,3 +22,14 @@ test('mobile Today summary stacks every critical region without internal clippin
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(summaryBounds!.x + summaryBounds!.width + 1)
   }
 })
+
+test('mobile Today brings portfolio facts into the upper half of the first viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 })
+  await page.goto('/')
+
+  const portfolioBounds = await page.getByRole('region', { name: 'Portfolio overview' }).boundingBox()
+
+  expect(portfolioBounds).not.toBeNull()
+  expect(portfolioBounds!.y).toBeLessThanOrEqual(400)
+  await expect(page.locator('.mobile-current')).toHaveCSS('display', 'none')
+})
