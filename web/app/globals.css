@@ -209,15 +209,25 @@ tbody th a { min-height: 2.75rem; display: inline-flex; align-items: center; fon
 .muted-copy { color: var(--text-tertiary); font-size: 0.75rem; }
 .muted-copy > span, .muted-copy > small { display: block; }
 
-.today-decision-workspace { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 0.6fr); gap: var(--space-dashboard); margin-top: var(--space-dashboard); }
-.today-decision-workspace > .market-portfolio-grid { grid-column: 1 / -1; grid-template-columns: minmax(0, 1.45fr) minmax(18rem, 0.55fr); gap: 0; margin-top: 0; }
+.today-decision-workspace { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(24rem, 1fr); column-gap: var(--space-dashboard); row-gap: 0.5rem; align-items: start; margin-top: 0.5rem; }
+.today-page .today-decision-workspace > .market-portfolio-grid { grid-column: 1; grid-row: 1 / span 2; grid-template-columns: minmax(0, 1.45fr) minmax(15rem, 0.55fr); gap: 0; margin-top: 0; }
 .today-decision-workspace .portfolio-overview { border: 0; }
+.today-decision-workspace .portfolio-summary,
+.today-decision-workspace .market-regime { padding: 1rem; }
 .today-decision-workspace .market-regime-compact { border-left: 1px solid var(--line-soft); }
-.today-decision-workspace > .portfolio-overview { grid-column: 1; margin-top: 0; }
-.today-decision-workspace > .today-watchlist { grid-column: 1; margin-top: 0; }
-.today-decision-workspace > .decision-activity { grid-column: 2; grid-row: 1 / span 2; }
+.today-decision-workspace > .portfolio-overview { grid-column: 1; grid-row: 1 / span 2; margin-top: 0; }
+.today-decision-workspace > .today-watchlist { grid-column: 2; grid-row: 1; margin-top: 0; }
+.today-decision-workspace > .decision-activity { grid-column: 2; grid-row: 2; }
 .decision-activity { display: grid; align-content: start; gap: var(--space-dashboard); }
+.today-decision-workspace > .decision-activity { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
 .decision-activity > .terminal-section, .decision-activity > .operations-rail { margin-top: 0; }
+.today-decision-workspace .terminal-section,
+.today-decision-workspace .operations-rail { padding: 0.75rem; }
+.today-decision-workspace > .today-watchlist h2,
+.today-decision-workspace > .decision-activity h2 { font-size: 1.15rem; }
+.today-decision-workspace > .decision-activity .alert-meta { flex-wrap: wrap; gap: 0.4rem; }
+.today-decision-workspace > .decision-activity .alert-meta time { width: 100%; margin-left: 0; }
+.today-decision-workspace > .decision-activity .run-progress progress { margin-top: 0.6rem; }
 .research-activity { padding: clamp(1rem, 1.6vw, 1.35rem); border: 1px solid var(--line); border-radius: var(--radius-section); background: var(--surface-section); box-shadow: var(--shadow-surface); }
 .market-list { padding: 0; margin: 0; list-style: none; }
 .market-list > li { display: grid; min-height: var(--row-compact); grid-template-columns: minmax(4.5rem, 0.45fr) minmax(6rem, 0.65fr) minmax(7rem, 0.75fr) minmax(11rem, 1.15fr); align-items: center; gap: 0.5rem 1rem; padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--line-soft); font-size: max(0.8125rem, var(--font-data)); }
@@ -344,6 +354,12 @@ tbody th a { min-height: 2.75rem; display: inline-flex; align-items: center; fon
 .terminal-section[aria-label="Paper trading evidence availability"] h3 { margin: 2rem 0 0.75rem; font-size: 0.85rem; }
 .watchlist-heatmap { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 0.65rem; padding: 0; margin: 1.1rem 0 0; list-style: none; }
 .watchlist-heatmap li { min-width: 0; padding: 1rem; border: 1px solid var(--line-soft); border-radius: 1rem; background: var(--surface-highlight); }
+.today-watchlist .watchlist-heatmap { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.75rem; }
+.today-watchlist .watchlist-heatmap > li { display: block; min-height: 0; }
+.today-watchlist .watchlist-heatmap > li { padding: 0.5rem; }
+.today-watchlist .watchlist-heatmap > li > span { margin-top: 0.25rem; }
+.today-watchlist .watchlist-heatmap .heatmap-decisions { margin-top: 0.5rem; }
+.today-watchlist .watchlist-heatmap .quality-line { margin-top: 0.4rem; }
 .watchlist-heatmap li[data-direction="negative"] { background: var(--surface-highlight); }
 .heatmap-primary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .heatmap-primary a { font-size: 1.05rem; font-weight: 760; }
@@ -403,13 +419,13 @@ button:disabled { cursor: not-allowed; opacity: 0.48; }
 
 /* Calm information surfaces: one section language replaces nested card mosaics. */
 .fixture-notice { padding: 0.75rem 1rem; border: 1px solid var(--line-soft); border-radius: 1rem; background: color-mix(in oklch, var(--ink-raised) 72%, transparent); }
-.app-main-today { padding-top: clamp(1.25rem, 2.5vw, 2.5rem); }
+.app-main-today { padding-top: clamp(0.75rem, 1.5vw, 1.25rem); }
 .today-page .today-heading { align-items: center; }
-.today-page .today-heading h1 { font-size: clamp(2.9rem, 5vw, 4.5rem); }
-.today-page .today-summary { margin-top: 0.55rem; font-size: clamp(0.85rem, 1vw, 1rem); }
-.today-meta { display: grid; min-width: min(32rem, 45vw); gap: 0.7rem; }
+.today-page .today-heading h1 { font-size: clamp(2.75rem, 4vw, 3.5rem); }
+.today-page .today-summary { margin-top: 0.3rem; font-size: clamp(0.85rem, 1vw, 1rem); }
+.today-meta { display: grid; min-width: min(32rem, 45vw); gap: 0.4rem; }
 .today-meta .fixture-notice { width: fit-content; max-width: 100%; margin: 0 0 0 auto; padding: 0.42rem 0.7rem; border-radius: 999px; font-size: 0.68rem; }
-.state-compact { display: flex !important; min-height: 2.75rem; align-items: center; gap: 0.65rem; margin-top: 0.7rem; padding: 0.45rem 0.75rem; border-radius: 1rem; box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.55); }
+.state-compact { display: flex !important; min-height: 2.75rem; align-items: center; gap: 0.65rem; margin-top: 0.45rem; padding: 0.45rem 0.75rem; border-radius: 1rem; box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.55); }
 .state-compact h2 { margin: 0; font-size: 0.78rem; white-space: nowrap; }
 .state-compact .state-label { font-size: 0.58rem; }
 .state-compact .state-message { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

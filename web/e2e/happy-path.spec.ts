@@ -126,6 +126,54 @@ test('decision-critical content lands inside the MacBook Air first viewport', as
   }
 })
 
+test('Today uses the approved split workspace without overlapping facts', async ({ page }) => {
+  for (const viewport of [{ width: 1440, height: 800 }, { width: 1280, height: 720 }]) {
+    await page.setViewportSize(viewport)
+    await page.goto('/')
+
+    const workspace = page.getByRole('region', { name: 'Today decision workspace' })
+    const summary = page.getByRole('region', { name: 'Market and portfolio summary' })
+    const watchlist = page.locator('.today-watchlist')
+    const activity = page.getByRole('region', { name: 'Decision activity' })
+    const [workspaceBounds, summaryBounds, watchlistBounds, activityBounds] = await Promise.all([
+      workspace.boundingBox(),
+      summary.boundingBox(),
+      watchlist.boundingBox(),
+      activity.boundingBox(),
+    ])
+
+    expect(workspaceBounds).not.toBeNull()
+    expect(summaryBounds).not.toBeNull()
+    expect(watchlistBounds).not.toBeNull()
+    expect(activityBounds).not.toBeNull()
+    expect(summaryBounds!.x, `summary was not in the left column at ${viewport.width}x${viewport.height}`)
+      .toBeLessThan(watchlistBounds!.x)
+    expect(
+      Math.abs(watchlistBounds!.x - activityBounds!.x),
+      `watchlist and decision activity did not share the right column at ${viewport.width}x${viewport.height}`,
+    ).toBeLessThanOrEqual(2)
+    expect(watchlistBounds!.y, `watchlist was not above decision activity at ${viewport.width}x${viewport.height}`)
+      .toBeLessThan(activityBounds!.y)
+    expect(
+      workspaceBounds!.y + workspaceBounds!.height,
+      `Today workspace exceeded the first viewport at ${viewport.width}x${viewport.height}`,
+    ).toBeLessThanOrEqual(viewport.height)
+
+    const firstCard = watchlist.locator('.watchlist-heatmap > li').first()
+    const verticalFacts = await firstCard.locator(':scope > .heatmap-primary, :scope > span, :scope > .heatmap-decisions, :scope > .quality-line')
+      .evaluateAll((elements) => elements.map((element) => {
+        const bounds = element.getBoundingClientRect()
+        return { bottom: bounds.bottom, top: bounds.top }
+      }))
+    for (let index = 1; index < verticalFacts.length; index += 1) {
+      expect(
+        verticalFacts[index].top,
+        `watchlist facts overlapped at ${viewport.width}x${viewport.height}`,
+      ).toBeGreaterThanOrEqual(verticalFacts[index - 1].bottom - 1)
+    }
+  }
+})
+
 test('theme and reduced-motion preferences preserve a calm readable surface', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
