@@ -92,12 +92,12 @@ export function TodayPage({ snapshot }: TodayPageProps) {
               <section className="terminal-section today-watchlist" aria-labelledby="watchlist-title">
                 <div className="section-heading">
                   <div><p className="section-kicker">Discover</p><h2 id="watchlist-title">Watchlist signals</h2></div>
-                  <Link href="/watchlist">Manage watchlist</Link>
+                  <Link className="compact-hit-link" href="/watchlist">Manage watchlist</Link>
                 </div>
                 <ul className="watchlist-heatmap market-list" aria-label="Watchlist signals">
                   {snapshot.watchlist.map((item) => (
                     <li key={item.symbol} data-direction={item.dailyReturn.startsWith('-') ? 'negative' : 'positive'}>
-                      <div className="heatmap-primary"><Link href={`/research/${item.symbol}`}>{item.symbol}</Link><strong>{formatPercent(item.dailyReturn)}</strong></div>
+                      <div className="heatmap-primary"><Link className="compact-hit-link" href={`/research/${item.symbol}`}>{item.symbol}</Link><strong>{formatPercent(item.dailyReturn)}</strong></div>
                       <span>{formatMoney(item.price, 'USD')}</span>
                       <div className="heatmap-decisions"><Signal tone={item.researchOpinion.toLowerCase()}>{item.researchOpinion}</Signal><Signal tone={item.portfolioAction.toLowerCase()}>{item.portfolioAction}</Signal></div>
                       <div className="quality-line"><span>{item.dataQuality.freshness}</span><span>{formatPercent(item.dataQuality.coverage, { fractionDigits: 0, signed: false })} coverage</span><span>{item.dataQuality.provider}</span><span>{item.dataQuality.delaySeconds}s delay</span><span>{item.dataQuality.conflict ? 'Conflict detected' : 'No conflict'}</span></div>
@@ -110,14 +110,14 @@ export function TodayPage({ snapshot }: TodayPageProps) {
                 <section className="terminal-section" aria-labelledby="alerts-title">
                   <div className="section-heading">
                     <div><p className="section-kicker">Decide</p><h2 id="alerts-title">Actionable alerts</h2></div>
-                    <Link href="/alerts">View all</Link>
+                    <Link className="compact-hit-link" href="/alerts">View all</Link>
                   </div>
                   <ul className="alert-list">
                     {snapshot.alerts.slice(0, 3).map((alert) => (
                       <li key={alert.id}>
                         <div className="alert-meta">
                           <Signal tone={alert.severity.toLowerCase()}>{alert.severity}</Signal>
-                          <Link href={`/research/${alert.symbol}`}>{alert.symbol}</Link>
+                          <Link className="compact-hit-link" href={`/research/${alert.symbol}`}>{alert.symbol}</Link>
                           <time dateTime={alert.eventTime}>{formatDualTime(alert.eventTime).newYork}</time>
                         </div>
                         <p>{alert.summary}</p>
@@ -131,7 +131,7 @@ export function TodayPage({ snapshot }: TodayPageProps) {
                   <p className="section-kicker">Run progress</p><h2 id="run-title">Research execution</h2>
                   {snapshot.activeRun ? (
                     <div className="run-progress">
-                      <div><Link href={`/runs/${snapshot.activeRun.id}`}>{snapshot.activeRun.label}</Link><span>{snapshot.activeRun.status}</span></div>
+                      <div><Link className="compact-hit-link" href={`/runs/${snapshot.activeRun.id}`}>{snapshot.activeRun.label}</Link><span>{snapshot.activeRun.status}</span></div>
                       <progress aria-label={snapshot.activeRun.label} max={snapshot.activeRun.totalSteps} value={snapshot.activeRun.completedSteps} />
                       <p>{snapshot.activeRun.completedSteps} of {snapshot.activeRun.totalSteps} steps</p>
                     </div>

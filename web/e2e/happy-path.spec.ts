@@ -105,6 +105,22 @@ test('the five-symbol watchlist and deferred controls fit the 13-inch desktop fo
   expect(bottom).toBeLessThanOrEqual(900)
 })
 
+test('dense Today links retain a 44px pointer target', async ({ page }) => {
+  await page.setViewportSize({ height: 800, width: 1440 })
+  await page.goto('/')
+
+  const links = [
+    page.locator('.today-watchlist').getByRole('link', { name: 'NVDA', exact: true }),
+    page.locator('.today-watchlist').getByRole('link', { name: 'MSFT', exact: true }),
+    page.locator('.research-activity').getByRole('link', { name: 'Daily research · NVDA' }),
+  ]
+  for (const link of links) {
+    const bounds = await link.boundingBox()
+    expect(bounds).not.toBeNull()
+    expect(bounds!.height).toBeGreaterThanOrEqual(44)
+  }
+})
+
 test('all product routes remain readable across the locked viewport matrix', async ({ page }) => {
   test.slow()
   for (const width of [320, 393, 768, 1120, 1440]) {
