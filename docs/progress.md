@@ -4118,3 +4118,29 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   unchanged final `make verify` exited 0: Ruff format/check clean for 339 files, Mypy clean for 292
   source files, Alembic drift and generated-contract checks passed, backend 765 passed / 5 optional
   live-provider tests skipped, frontend 238/238 passed, and the production build succeeded.
+
+## 2026-09-26 — Frontend density batch 2 design closure
+
+- The second Apple-style density audit removed repeated Portfolio headline facts, moved cash and
+  immutable evidence counts into one compact snapshot rail, and retained the positions, risk decisions,
+  PaperFill and CashLedger tables as explicit default-closed evidence. Alerts now use a two-column
+  desktop triage grid while preserving the single-column mobile order. The five-symbol Watchlist plus
+  its configuration and external-current-market disclosures now fit the 1440x900 MacBook Air target
+  without reducing mobile readability or changing any data contract.
+- A generated 200-case Eval artifact exposed a previously hidden first-viewport failure. The frozen
+  evaluation result, dataset, case count, mode and gate policy now form a compact four-column desktop
+  and two-column mobile summary; the complete measured metric table and artifact path remain available
+  in a default-closed disclosure. Regression comparison, provider-health availability and policy
+  boundaries remain explicit and no missing evidence is synthesized.
+- Browser RED/GREEN evidence caught the Portfolio demo still querying headline performance inside the
+  old snapshot region. The acceptance now follows the canonical `Portfolio performance` figure and
+  passed on desktop and mobile after `make evaluate` regenerated the declared ignored artifact. The
+  5-width by 8-route containment matrix was also marked slow rather than weakening its 40 navigations;
+  its isolated rerun passed 2/2 after a full-suite load timeout.
+- Verification evidence: focused Portfolio/Watchlist/Eval unit suites passed 27/27 and then 14/14;
+  the locked Watchlist fold regression passed 2/2; the Eval first-viewport regression passed 2/2;
+  and the complete Fixture UI matrix passed 38/38 across desktop/mobile, Axe serious/critical scans,
+  theme startup, 200% text zoom, Demo, 1440x800 and 1280x720 first-view targets. The final fresh
+  `make verify` exited 0: Ruff format/check clean for 339 files, Mypy clean for 292 source files,
+  Alembic drift and generated-contract checks passed, backend 765 passed / 5 optional live-provider
+  tests skipped, frontend 35 files and 239/239 tests passed, and the Next.js production build succeeded.
