@@ -765,7 +765,10 @@ small,
 }
 
 .alert-triage-summary .alert-cards { gap: 8px; }
-.alert-triage-summary .alert-cards > li { padding: 12px 14px; }
+.alert-triage-summary .alert-comparison-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-dashboard); }
+.alert-triage-summary .alert-summary-card { min-width: 0; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--surface-interactive); }
+.alert-triage-summary .alert-summary-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.alert-triage-summary .alert-card-head { flex-wrap: wrap; }
 .alert-triage-summary .alert-scan-facts { margin-bottom: 0; }
 .alert-evidence-disclosure { margin-top: 8px; }
 .weekly-outcome-summary .outcome-strip { margin-bottom: 8px; }
@@ -786,9 +789,11 @@ small,
   .research-directory-workspace,
   .research-critical-summary { grid-template-columns: 1fr; }
   .portfolio-critical-summary,
-  .portfolio-evidence-grid { grid-template-columns: 1fr; }
+  .portfolio-evidence-grid,
+  .alert-triage-summary .alert-comparison-grid { grid-template-columns: 1fr; }
   .portfolio-critical-summary > .performance-overview,
   .portfolio-critical-summary > .benchmark-panel { grid-column: auto; grid-row: auto; }
+  .alert-triage-summary .alert-summary-card:last-child:nth-child(odd) { grid-column: auto; }
   .research-critical-summary > .research-conclusion,
   .research-critical-summary > .research-run-control,
   .research-critical-summary > .current-market-summary,

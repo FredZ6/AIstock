@@ -147,7 +147,9 @@ describe('portfolio and review pages', () => {
     render(<AlertsPage snapshot={fixtureAlertsSnapshot} />)
 
     const list = screen.getByRole('list', { name: 'Actionable alert queue' })
+    expect(list).toHaveClass('alert-comparison-grid')
     const first = within(list).getAllByRole('listitem')[0]
+    expect(first).toHaveClass('alert-summary-card')
     expect(first).toHaveTextContent('Severity HIGH')
     expect(first).toHaveTextContent('Category VOLUME')
     expect(first).toHaveTextContent('Scope NVDA')
