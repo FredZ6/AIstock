@@ -140,7 +140,7 @@ describe('portfolio and review pages', () => {
     expect(screen.getByText(/deterministic alert remains valid/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Acknowledge alert alert-nvda-volume-001' })).toBeDisabled()
     for (const category of ['PRICE', 'VOLUME', 'OPTIONS', 'EARNINGS', 'NEWS', 'ANALYST_TARGET', 'PORTFOLIO_RISK']) {
-      expect(screen.getByText(category)).toBeInTheDocument()
+      expect(screen.getAllByText(category).length).toBeGreaterThan(0)
     }
   })
 
@@ -162,10 +162,22 @@ describe('portfolio and review pages', () => {
   it('keeps alert triage visible while deferring complete lineage', () => {
     render(<AlertsPage snapshot={fixtureAlertsSnapshot} />)
 
-    expect(screen.getByRole('region', { name: 'Alert triage summary' })).toHaveClass('route-critical-summary')
+    const triage = screen.getByRole('region', { name: 'Alert triage summary' })
+    expect(triage).toHaveClass('route-critical-summary')
+    expect(within(triage).getByRole('combobox', { name: 'Filter by severity' })).toHaveValue('ALL')
+    expect(within(triage).getByRole('combobox', { name: 'Filter by category' })).toHaveValue('ALL')
+    expect(within(triage).getByRole('list', { name: 'Actionable alert queue' }).children).toHaveLength(4)
+    const completeQueue = screen.getByRole('group', { name: 'Complete alert queue' })
+    expect(completeQueue).not.toHaveAttribute('open')
+    expect(completeQueue).toHaveTextContent('ANALYST_TARGET')
     expect(screen.getAllByRole('group', { name: /Complete alert evidence/ }).every(
       (group) => !group.hasAttribute('open'),
     )).toBe(true)
+
+    fireEvent.change(within(triage).getByRole('combobox', { name: 'Filter by category' }), {
+      target: { value: 'VOLUME' },
+    })
+    expect(within(triage).getByRole('list', { name: 'Actionable alert queue' }).children).toHaveLength(1)
   })
 
   it('makes weekly lesson approval consequences and replay evidence explicit', () => {
@@ -220,8 +232,8 @@ describe('portfolio and review pages', () => {
     expect(screen.getByText(/No metric is substituted or invented/i)).toBeInTheDocument()
     expect(screen.getByRole('table', { name: 'Pinned policy versions' })).toBeInTheDocument()
     expect(screen.getByText('confidence-v1')).toBeInTheDocument()
-    expect(screen.getAllByText(/human authorization required/i)).toHaveLength(4)
-    expect(screen.getAllByText(/automatic activation is disabled/i)).toHaveLength(4)
+    expect(screen.getAllByText(/human authorization required/i)).toHaveLength(5)
+    expect(screen.getAllByText(/automatic activation is disabled/i)).toHaveLength(5)
     expect(screen.queryByText(/Live Broker/i)).not.toBeInTheDocument()
   })
 
@@ -239,6 +251,8 @@ describe('portfolio and review pages', () => {
     render(<EvalAdminPage snapshot={fixtureEvalAdminSnapshot} />)
 
     expect(screen.getByRole('region', { name: 'Operational evidence' })).toHaveClass('route-critical-summary')
+    expect(screen.getByRole('region', { name: 'Pinned policy controls' })).toHaveTextContent('confidence-v1')
+    expect(screen.getByRole('region', { name: 'Pinned policy controls' })).toHaveTextContent('Human authorization required')
     expect(screen.getByRole('group', { name: 'Complete policy administration' })).not.toHaveAttribute('open')
   })
 

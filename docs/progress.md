@@ -4154,3 +4154,29 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   removed a duplicate visually-hidden rule by reusing `.sr-only` on the Watchlist label. The focused
   regression passed 38/38, followed by the complete frontend 239/239 suite, TypeScript, ESLint, and the
   production build.
+
+## 2026-09-26 — Frontend density specification closure
+
+- Replaced the weakened first-viewport fallback with a strict 1440x800 contract for all eight product
+  routes. The Watchlist now keeps five symbols and their daily-research, intraday-monitoring, threshold,
+  earnings and portfolio-action controls in the visible ranked rows; its external current-market chart
+  remains available in a default-closed disclosure. Portfolio fixture and API compositions remain
+  independently scoped while the compact fixture chart, snapshot and benchmark rail fit the same fold.
+- Alerts now expose severity and the explicit PRICE, VOLUME, OPTIONS, EARNINGS, NEWS, ANALYST_TARGET and
+  PORTFOLIO_RISK categories in both Fixture and API modes. Four actionable records lead the page and the
+  complete queue remains in a default-closed disclosure without dropping evidence, acknowledgement,
+  PIT timing or correlation facts. Eval/Admin now leads with the persisted gate result or frozen report,
+  runtime/provider availability, visible read-only policy pins and the human-authorization boundary;
+  complete metrics, gates and policy administration remain inspectable through disclosures.
+- Added a computed-style browser assertion for every visible body/data text node on the eight routes.
+  The RED run found 76 undersized Today labels and then exposed equivalent Research, Run Trace,
+  Portfolio, Alerts, Weekly Review and Eval labels. GREEN establishes a 13 px caption floor while
+  compacting spacing rather than shrinking content; the strict Watchlist and eight-route MacBook Air
+  browser acceptance passed 2/2 at 1440x800.
+- Verification evidence: focused Alerts/Eval tests passed 31/31; the complete frontend suite passed
+  35 files and 240/240 tests; TypeScript, ESLint and the Next.js production build passed. The first
+  `make verify` attempt was blocked by sandbox access to the healthy local PostgreSQL port and was not
+  treated as a product failure. The authorized fresh rerun exited 0: Ruff format/check clean for 339
+  files, Mypy clean for 292 source files, Alembic drift and generated-contract checks passed, backend
+  765 passed / 5 optional live-provider tests skipped, frontend 240/240 passed, and the production build
+  succeeded.

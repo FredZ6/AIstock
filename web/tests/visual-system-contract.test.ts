@@ -73,7 +73,7 @@ describe('visual system contract', () => {
   it('uses restrained Apple Finance surfaces instead of terminal rules', () => {
     expect(css).toContain('--radius-section: 1.25rem;')
     expect(css).toContain('--radius-control: 0.75rem;')
-    expect(css).toContain('--font-caption: 0.75rem;')
+    expect(css).toContain('--font-caption: 0.8125rem;')
     expect(css).toContain('--font-data: 0.875rem;')
 
     expect(css).toMatch(

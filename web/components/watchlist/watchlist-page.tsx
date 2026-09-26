@@ -127,7 +127,7 @@ export function WatchlistPage({ snapshot }: { snapshot: WatchlistSnapshot }) {
         <div className="section-heading"><div><p className="section-kicker">Research universe</p><h2 id="watchlist-count">{symbols.length} of {snapshot.limit} symbols</h2></div><span className="muted-copy">Long-only US technology equities</span></div>
         <section aria-label="Watchlist configuration" className="watchlist-mutation-region">
         <div className="watchlist-controls watchlist-primary-action">
-          <div><h3>Add a symbol</h3><p>Add a symbol to this frozen session.</p></div>
+          <div><h3>Add a symbol</h3><p>Add a symbol to this frozen session. Row controls are a session-only configuration draft.</p></div>
           <form onSubmit={addSymbol}>
             <label className="sr-only" htmlFor="add-symbol">Add symbol</label>
             <input id="add-symbol" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={10} autoCapitalize="characters" />
@@ -135,23 +135,20 @@ export function WatchlistPage({ snapshot }: { snapshot: WatchlistSnapshot }) {
           </form>
         </div>
         <ol className="ranked-watchlist" aria-label="Ranked research watchlist">
-          {symbols.map((item, index) => <li key={item.symbol}>
+          {symbols.map((item, index) => <li aria-label={`${item.symbol} watchlist row`} key={item.symbol}>
             <span className="watchlist-rank" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
             <div className="watchlist-identity"><Link href={`/research/${item.symbol}`}>{item.symbol}</Link><span>{companyName(item.symbol)}</span></div>
             <div className="watchlist-trend" aria-label={`${item.symbol} compact trend`} data-direction={item.dailyReturn.startsWith('-') ? 'negative' : 'positive'}><span aria-hidden="true">{item.dailyReturn.startsWith('-') ? '↘' : '↗'}</span> {formatPercent(item.dailyReturn)}</div>
             <div className="watchlist-quote"><strong>{formatMoney(item.price, 'USD')}</strong><Signal tone={item.researchOpinion}>{item.researchOpinion}</Signal></div>
-            <div className="watchlist-provenance"><QualityFacts quality={item.dataQuality} /><time dateTime={item.lastResearchAt}>Persisted {formatDualTime(item.lastResearchAt).newYork}</time></div>
+            <section aria-label={`${item.symbol} settings`} className="watchlist-inline-settings">
+              <label><input aria-label={`${item.symbol} daily research`} type="checkbox" checked={item.dailyResearch} onChange={(event) => updateSymbol(item.symbol, { dailyResearch: event.target.checked })} /><span aria-hidden="true">Daily</span></label>
+              <label><input aria-label={`${item.symbol} intraday monitoring`} type="checkbox" checked={item.intradayMonitoring} onChange={(event) => updateSymbol(item.symbol, { intradayMonitoring: event.target.checked })} /><span aria-hidden="true">Intraday</span></label>
+              <label className="watchlist-threshold"><span aria-hidden="true">Threshold</span><input aria-label={`${item.symbol} alert threshold`} inputMode="decimal" value={item.alertThreshold} onChange={(event) => updateSymbol(item.symbol, { alertThreshold: event.target.value })} /></label>
+              <p><Signal tone={item.portfolioAction}>{item.portfolioAction}</Signal><span>Next earnings: <strong>{item.nextEarningsAt ? <time dateTime={item.nextEarningsAt}>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(parseAwareInstant(item.nextEarningsAt))}</time> : 'Unavailable'}</strong></span></p>
+            </section>
+            <div aria-label={`Research persisted ${formatDualTime(item.lastResearchAt).newYork}`} className="watchlist-provenance"><QualityFacts quality={item.dataQuality} /></div>
           </li>)}
         </ol>
-        <details aria-label="Watchlist settings" className="watchlist-configuration route-secondary-disclosure">
-        <summary>Watchlist configuration · {symbols.length} symbols</summary>
-        <div><h3 id="watchlist-controls-title">Watchlist controls</h3><p>Daily research, intraday monitoring, and thresholds are a session-only configuration draft in Fixture Mode.</p></div>
-        <div className="watchlist-config-list">{symbols.map((item) => <section aria-label={`${item.symbol} settings`} key={item.symbol}><details><summary>{item.symbol} settings · {item.portfolioAction}</summary><div className="watchlist-config-heading"><h4>{item.symbol}</h4><span><Signal tone={item.portfolioAction}>{item.portfolioAction}</Signal></span></div><div className="watchlist-settings">
-                <label><input type="checkbox" checked={item.dailyResearch} onChange={(event) => updateSymbol(item.symbol, { dailyResearch: event.target.checked })} /> <span>{item.symbol} daily research</span></label>
-                <label><input type="checkbox" checked={item.intradayMonitoring} onChange={(event) => updateSymbol(item.symbol, { intradayMonitoring: event.target.checked })} /> <span>{item.symbol} intraday monitoring</span></label>
-                <label><span>{item.symbol} alert threshold</span><input aria-label={`${item.symbol} alert threshold`} inputMode="decimal" value={item.alertThreshold} onChange={(event) => updateSymbol(item.symbol, { alertThreshold: event.target.value })} /></label>
-              </div><p className="watchlist-setting-note">Next earnings: {item.nextEarningsAt ? <time dateTime={item.nextEarningsAt}>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(parseAwareInstant(item.nextEarningsAt))}</time> : 'Not in fixture'}</p></details></section>)}</div>
-        </details>
         </section>
         <details aria-label="External current market chart" className="route-secondary-disclosure">
           <summary>External current market chart</summary>

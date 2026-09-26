@@ -36,6 +36,7 @@ import { ResearchRunControl } from '../research/research-run-control'
 import { StateBoundary } from '../states/state-boundary'
 import { LiveRunTrace } from '../trace/live-run-trace'
 import { PageHeading, Signal } from '../ui/product-ui'
+import { ApiAlertsQueue } from './api-alerts-queue'
 import { LiveDataRefresh } from './live-data-refresh'
 
 function alertEvidence(value: unknown) {
@@ -50,6 +51,7 @@ export function ApiEvalPage({ detail, asOf }: { detail: EvalRunDetail; asOf: str
       <div className="section-heading"><div><p className="section-kicker">Measured evidence</p><h2 id="persisted-eval-title">Persisted evaluation run</h2></div><Signal tone={run.passed ? 'healthy' : 'failure'}>{run.status}</Signal></div>
       <dl className="metric-list"><div><dt>Dataset</dt><dd>{run.datasetVersion}</dd></div><div><dt>Cases</dt><dd>{run.caseCount}</dd></div><div><dt>Data cutoff</dt><dd><time dateTime={run.dataCutoff}>{formatDualTime(run.dataCutoff).newYork}</time></dd></div><div><dt>Gate policy</dt><dd>{run.gatePolicyVersion}</dd></div></dl>
       <section aria-label="Pinned evaluation versions"><h3>Version pins</h3><dl className="pin-list"><div><dt>Model</dt><dd>{run.modelVersion}</dd></div><div><dt>Prompt</dt><dd>{run.promptVersion}</dd></div><div><dt>Research scoring</dt><dd>{run.researchScoringPolicyVersion}</dd></div><div><dt>Risk</dt><dd>{run.riskPolicyVersion}</dd></div><div><dt>Execution</dt><dd>{run.executionPolicyVersion}</dd></div><div><dt>Confidence</dt><dd>{run.confidencePolicyVersion}</dd></div></dl></section>
+      <section className="eval-gate-status" aria-label="Evaluation gate status"><strong>{detail.gates.filter((gate) => gate.passed).length} of {detail.gates.length} gates passed</strong><span>Release remains blocked when any persisted gate fails.</span></section>
       <details aria-label="Complete evaluation metrics and gates" className="route-secondary-disclosure"><summary>Evaluation metrics, regression gates, and artifact hash</summary><div className="route-detail-content"><div className="table-scroll" tabIndex={0}><table aria-label="Persisted evaluation metrics"><thead><tr><th>Metric</th><th>Value</th><th>Cases</th></tr></thead><tbody>{detail.metrics.map((metric) => <tr key={metric.name}><th scope="row">{metric.name}</th><td>{metric.value}</td><td>{metric.caseIds.length}</td></tr>)}</tbody></table></div>
       <div className="table-scroll" tabIndex={0}><table aria-label="Regression gates"><thead><tr><th>Gate</th><th>Observed</th><th>Threshold</th><th>Result</th></tr></thead><tbody>{detail.gates.map((gate) => <tr key={gate.name}><th scope="row">{gate.name}</th><td>{gate.observed ?? 'Unavailable'}</td><td>{gate.comparison} {gate.threshold}</td><td><Signal tone={gate.passed ? 'healthy' : 'failure'}>{gate.passed ? 'PASS' : 'FAIL'}</Signal></td></tr>)}</tbody></table></div>
       <p className="muted-copy">Summary SHA-256 · <code>{run.summaryHash}</code></p></div></details>
@@ -73,42 +75,7 @@ export function ApiAlertsPage({ alerts, asOf }: { alerts: AlertRecord[]; asOf: s
         actionHref: '/watchlist',
         actionLabel: 'Configure alert monitoring',
       } : { kind: 'success' }}>
-        <section className="terminal-section first-section route-critical-summary alert-triage-summary" aria-label="Alert triage summary">
-          <div className="section-heading">
-            <div><p className="section-kicker">Persisted records</p><h2 id="persisted-alerts-title">Alert stream</h2></div>
-            <span className="muted-copy">PIT cutoff · {formatDualTime(asOf).newYork}</span>
-          </div>
-          <ul className="lineage-list" aria-label="Persisted alerts">
-            {alerts.map((alert) => <li key={alert.id} id={`alert-${alert.id}`}>
-              <div className="section-heading">
-                <div>
-                  <Signal tone={alert.severity}>{alert.severity}</Signal>
-                  <h3><Link href={`/research/${alert.symbol}`} aria-label={`${alert.symbol} research`}>{alert.symbol}</Link></h3>
-                </div>
-                <strong>{formatPercent(alert.materiality, { signed: false })}</strong>
-              </div>
-              <p>{alert.ruleId} · {alert.ruleVersion}</p>
-              <details aria-label={`Complete alert evidence for ${alert.symbol}`} className="route-secondary-disclosure alert-evidence-disclosure"><summary>Complete alert evidence</summary><div className="route-detail-content"><dl className="decision-facts">
-                <div><dt>Event time</dt><dd><time dateTime={alert.eventTime}>{formatDualTime(alert.eventTime).newYork}</time></dd></div>
-                <div><dt>Recorded</dt><dd><time dateTime={alert.createdAt}>{formatDualTime(alert.createdAt).newYork}</time></dd></div>
-                <div><dt>Acknowledgement</dt><dd>{alert.acknowledgedAt
-                  ? <><time dateTime={alert.acknowledgedAt}>{formatDualTime(alert.acknowledgedAt).newYork}</time> · {alert.acknowledgedBy}</>
-                  : 'Not acknowledged'}</dd></div>
-                <div><dt>Alert key</dt><dd><code>{alert.alertKey}</code></dd></div>
-              </dl>
-              <div>
-                <h4>Conditions, metrics, and data quality</h4>
-                <div className="decision-facts">
-                  <div><dt>Conditions</dt><dd><pre>{alertEvidence(alert.conditions)}</pre></dd></div>
-                  <div><dt>Metrics</dt><dd><pre>{alertEvidence(alert.metrics)}</pre></dd></div>
-                  <div><dt>Data quality</dt><dd><pre>{alertEvidence(alert.dataQuality)}</pre></dd></div>
-                </div>
-              </div>
-              <p><small>Correlation ID · <code>{alert.correlationId}</code></small></p>
-              <p><Link href="/runs/latest">Open latest run trace</Link></p></div></details>
-            </li>)}
-          </ul>
-        </section>
+        <ApiAlertsQueue alerts={alerts} asOf={asOf} />
       </StateBoundary>
     </AppShell>
   )

@@ -68,11 +68,11 @@ describe('API mode pages', () => {
     }]} />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'Alerts' })).toBeInTheDocument()
-    expect(screen.getByText('HIGH')).toBeInTheDocument()
+    expect(screen.getAllByText('HIGH').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByRole('link', { name: 'NVDA research' })).toHaveAttribute('href', '/research/NVDA')
-    expect(screen.getByText('7.50%')).toBeInTheDocument()
+    expect(screen.getByText(/Materiality 7.50%/)).toBeInTheDocument()
     expect(screen.getByText('price-gap · price-gap-v2')).toBeInTheDocument()
-    expect(screen.getByText('Not acknowledged')).toBeInTheDocument()
+    expect(screen.getAllByText('Not acknowledged').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText(/10000000-0000-0000-0000-000000000099/)).toBeInTheDocument()
     expect(screen.getByText(/"coverage": "IEX"/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open latest run trace' })).toHaveAttribute('href', '/runs/latest')
@@ -80,6 +80,41 @@ describe('API mode pages', () => {
     expect(screen.queryByText(/Fixture Mode/)).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Alert triage summary' })).toHaveClass('route-critical-summary')
     expect(screen.getByRole('group', { name: 'Complete alert evidence for NVDA' })).not.toHaveAttribute('open')
+  })
+
+  it('filters the persisted alert queue by severity and explicit product category', () => {
+    const baseAlert = {
+      acknowledgedAt: null,
+      acknowledgedBy: null,
+      conditions: [],
+      correlationId: '10000000-0000-0000-0000-000000000099',
+      createdAt: '2026-08-29T09:21:00Z',
+      dataQuality: { coverage: 'IEX', freshness: 'PT1M' },
+      eventTime: '2026-08-29T09:20:00Z',
+      materiality: '0.075',
+      metrics: {},
+      ruleVersion: 'v1',
+      severity: 'HIGH' as const,
+    }
+    const alerts = [
+      { ...baseAlert, alertKey: 'NVDA:price-gap', id: '1', ruleId: 'price-gap', symbol: 'NVDA' },
+      { ...baseAlert, alertKey: 'MSFT:volume-spike', id: '2', ruleId: 'volume-spike', severity: 'MEDIUM' as const, symbol: 'MSFT' },
+      { ...baseAlert, alertKey: 'AMD:earnings-window', id: '3', ruleId: 'earnings-window', symbol: 'AMD' },
+      { ...baseAlert, alertKey: 'AAPL:news-shock', id: '4', ruleId: 'news-shock', symbol: 'AAPL' },
+      { ...baseAlert, alertKey: 'META:portfolio-risk', id: '5', ruleId: 'portfolio-risk', symbol: 'META' },
+    ]
+
+    render(<ApiAlertsPage asOf="2026-08-29T09:30:00Z" alerts={alerts} />)
+
+    expect(screen.getByRole('combobox', { name: 'Filter by severity' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Filter by category' })).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Actionable alert queue' })).toHaveTextContent('NVDA')
+    expect(screen.getByRole('group', { name: 'Complete alert queue' })).not.toHaveAttribute('open')
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter by category' }), { target: { value: 'VOLUME' } })
+    const queue = screen.getByRole('list', { name: 'Actionable alert queue' })
+    expect(within(queue).getByText('MSFT')).toBeInTheDocument()
+    expect(within(queue).queryByText('NVDA')).not.toBeInTheDocument()
   })
 
   it('keeps persisted evaluation status and pins visible while deferring metric tables', () => {
@@ -96,6 +131,7 @@ describe('API mode pages', () => {
     }} />)
 
     expect(screen.getByRole('article', { name: 'Evaluation critical summary' })).toHaveClass('route-critical-summary')
+    expect(screen.getByRole('region', { name: 'Evaluation gate status' })).toHaveTextContent('1 of 1 gates passed')
     expect(screen.getByRole('group', { name: 'Complete evaluation metrics and gates' })).not.toHaveAttribute('open')
   })
 

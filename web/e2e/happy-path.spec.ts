@@ -13,13 +13,13 @@ const pages = [
 
 const criticalTargets = [
   ['/', '.today-decision-workspace'],
-  ['/watchlist', '.route-critical-summary'],
+  ['/watchlist', '.watchlist-critical-summary'],
   ['/research/NVDA', '.research-critical-summary'],
   ['/runs/latest', '.run-overview'],
   ['/portfolio', '.portfolio-critical-summary'],
-  ['/alerts', '.alert-cards > li:first-child'],
-  ['/weekly-review', '.outcome-strip'],
-  ['/eval', '.operations-status-grid'],
+  ['/alerts', '.alert-triage-summary'],
+  ['/weekly-review', '.weekly-outcome-summary'],
+  ['/eval', '.operational-evidence'],
 ] as const
 
 async function exposeNavigation(page: import('@playwright/test').Page) {
@@ -94,15 +94,15 @@ test('keyboard focus is visible and the document does not overflow its viewport'
   expect(overflows).toBe(false)
 })
 
-test('the five-symbol watchlist and deferred controls fit the 13-inch desktop fold', async ({ page }) => {
-  await page.setViewportSize({ height: 900, width: 1440 })
+test('the five-symbol watchlist and its critical controls fit the 13-inch desktop fold', async ({ page }) => {
+  await page.setViewportSize({ height: 800, width: 1440 })
   await page.goto('/watchlist')
 
   await expect(page.getByRole('list', { name: 'Ranked research watchlist' }).getByRole('listitem')).toHaveCount(5)
   const marketChart = page.getByRole('group', { name: 'External current market chart' })
   await expect(marketChart).toBeVisible()
   const bottom = await marketChart.evaluate((element) => element.getBoundingClientRect().bottom)
-  expect(bottom).toBeLessThanOrEqual(900)
+  expect(bottom).toBeLessThanOrEqual(800)
 })
 
 test('dense Today links retain a 44px pointer target', async ({ page }) => {
@@ -137,20 +137,32 @@ test('all product routes remain readable across the locked viewport matrix', asy
 })
 
 test('decision-critical content lands inside the MacBook Air first viewport', async ({ page }) => {
-  for (const viewport of [{ width: 1440, height: 800 }, { width: 1280, height: 720 }]) {
-    await page.setViewportSize(viewport)
-    for (const [path, selector] of criticalTargets) {
-      await page.goto(path)
-      const target = page.locator(selector).first()
-      await expect(target, `${path} critical target missing at ${viewport.width}x${viewport.height}`).toBeVisible()
-      const bounds = await target.boundingBox()
-      expect(bounds, `${path} critical target has no bounds`).not.toBeNull()
-      expect(bounds!.y, `${path} critical target begins below the first viewport at ${viewport.width}x${viewport.height}`).toBeLessThan(viewport.height)
-      expect(
-        Math.min(bounds!.y + bounds!.height, viewport.height),
-        `${path} exposes too little critical content at ${viewport.width}x${viewport.height}`,
-      ).toBeGreaterThanOrEqual(bounds!.y + Math.min(88, bounds!.height))
-    }
+  const viewport = { width: 1440, height: 800 }
+  await page.setViewportSize(viewport)
+  for (const [path, selector] of criticalTargets) {
+    await page.goto(path)
+    const target = page.locator(selector).first()
+    await expect(target, `${path} critical target missing at ${viewport.width}x${viewport.height}`).toBeVisible()
+    const bounds = await target.boundingBox()
+    expect(bounds, `${path} critical target has no bounds`).not.toBeNull()
+    expect(
+      bounds!.y + bounds!.height,
+      `${path} critical summary extends below the first viewport at ${viewport.width}x${viewport.height}`,
+    ).toBeLessThanOrEqual(viewport.height)
+
+    const undersizedText = await page.locator('main').evaluate((main) => Array.from(main.querySelectorAll<HTMLElement>('*')).flatMap((element) => {
+      const directText = Array.from(element.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent?.trim() ?? '')
+        .join(' ')
+        .trim()
+      const closedDisclosure = element.closest('details:not([open])')
+      if (closedDisclosure && !element.closest('summary')) return []
+      if (!directText || element.closest('[hidden], .sr-only') || element.getClientRects().length === 0 || getComputedStyle(element).display === 'none') return []
+      const size = Number.parseFloat(getComputedStyle(element).fontSize)
+      return size < 13 ? [`${element.tagName.toLowerCase()}.${element.className || '(no-class)'}=${size}px:${directText.slice(0, 40)}`] : []
+    }))
+    expect(undersizedText, `${path} must keep visible body and data text at or above 13px`).toEqual([])
   }
 })
 
