@@ -335,7 +335,7 @@ tbody th a { min-height: 2.75rem; display: inline-flex; align-items: center; fon
 .portfolio-snapshot dl div, .evidence-counts div { min-width: 0; padding: 1rem; background: var(--surface-interactive); }
 .portfolio-snapshot dt, .evidence-counts dt { color: var(--text-tertiary); font-size: 0.68rem; }
 .portfolio-snapshot dd, .evidence-counts dd { margin: 0.45rem 0 0; font-size: clamp(0.85rem, 1.5vw, 1.1rem); font-weight: 650; font-variant-numeric: tabular-nums; }
-.portfolio-evidence-grid { display: grid; gap: 1.25rem; margin-top: 1.25rem; }
+.portfolio-evidence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-dashboard); margin-top: var(--space-dashboard); }
 .portfolio-evidence-grid > section { padding: clamp(1.15rem, 3vw, 2rem); border: 1px solid var(--line); border-radius: 1.35rem; background: var(--ink-raised); }
 .portfolio-evidence-grid h2 { margin: 0 0 1rem; font-size: 1rem; }
 .run-overview.route-critical-summary { gap: var(--space-dashboard); padding: 1rem 1.25rem; border: 1px solid var(--line); border-radius: var(--radius-section); background: var(--surface-section); box-shadow: var(--shadow-surface); }
@@ -343,17 +343,22 @@ tbody th a { min-height: 2.75rem; display: inline-flex; align-items: center; fon
 .run-overview.route-critical-summary .budget-strip div { min-height: var(--row-compact); padding: 0.55rem 0.75rem; }
 .run-overview.route-critical-summary dt,
 .run-overview.route-critical-summary dd { font-size: 0.8125rem; }
-.portfolio-critical-summary { display: grid; gap: 0.75rem; }
-.portfolio-critical-summary .portfolio-snapshot { margin-top: 0; padding: 1rem 1.25rem; gap: var(--space-dashboard); }
+.portfolio-critical-summary { display: grid; grid-template-columns: minmax(0, 3fr) minmax(15rem, 1fr); gap: var(--space-dashboard); align-items: stretch; }
+.portfolio-critical-summary > .performance-overview { grid-column: 1; grid-row: 1 / span 2; margin: 0; }
+.portfolio-critical-summary .portfolio-snapshot { display: flex; flex-direction: column; margin-top: 0; padding: 1rem; gap: var(--space-dashboard); }
+.portfolio-critical-summary .portfolio-snapshot dl { flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.portfolio-critical-summary .portfolio-snapshot dl .portfolio-snapshot-cash { grid-column: 1 / -1; }
+.portfolio-critical-summary > .benchmark-panel { grid-column: 2; grid-row: 2; margin: 0; padding: 1rem; }
+.portfolio-critical-summary > .benchmark-panel .benchmark-bars { grid-template-columns: 1fr; gap: 0.25rem; margin-top: 0.65rem; }
+.portfolio-critical-summary > .benchmark-panel .benchmark-bars > div { min-height: 1.75rem; }
 .portfolio-evidence-summary { padding: 0.65rem; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--surface-section); }
 .portfolio-evidence-summary .evidence-counts div,
 .portfolio-evidence-summary dl > div { min-height: var(--row-compact); padding: 0.55rem 0.75rem; }
 .portfolio-evidence-summary dt,
 .portfolio-evidence-summary dd { font-size: 0.8125rem; }
-.portfolio-critical-summary + .performance-overview { margin-top: var(--space-dashboard); }
-.portfolio-critical-summary + .performance-overview .performance-head { padding: 0.85rem 1rem; }
-.portfolio-critical-summary + .performance-overview .performance-facts { padding: 0.65rem 1rem; }
-.portfolio-critical-summary + .performance-overview .performance-plot svg { height: clamp(6rem, 10vw, 8rem); }
+.portfolio-critical-summary .performance-head { padding: 0.85rem 1rem; }
+.portfolio-critical-summary .performance-facts { padding: 0.65rem 1rem; }
+.portfolio-critical-summary .performance-plot svg { height: clamp(6rem, 10vw, 8rem); }
 .portfolio-evidence-grid > .route-secondary-disclosure { margin-top: 0; }
 .portfolio-evidence-grid > .route-secondary-disclosure > section { margin: 0; padding: 0.9rem; }
 .api-performance-chart { margin: 1.25rem 0 0; color: var(--signal); }
@@ -780,6 +785,10 @@ small,
   .today-decision-workspace .market-regime-compact { border-top: 1px solid var(--line-soft); border-left: 0; }
   .research-directory-workspace,
   .research-critical-summary { grid-template-columns: 1fr; }
+  .portfolio-critical-summary,
+  .portfolio-evidence-grid { grid-template-columns: 1fr; }
+  .portfolio-critical-summary > .performance-overview,
+  .portfolio-critical-summary > .benchmark-panel { grid-column: auto; grid-row: auto; }
   .research-critical-summary > .research-conclusion,
   .research-critical-summary > .research-run-control,
   .research-critical-summary > .current-market-summary,

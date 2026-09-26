@@ -98,30 +98,28 @@ describe('portfolio and review pages', () => {
     expect(within(cashLedger).getAllByText('USD 74,699.58')).toHaveLength(1)
   })
 
-  it('puts the complete portfolio snapshot before the analytical chart and evidence tables', () => {
+  it('combines performance, cash, and evidence counts without repeating headline metrics', () => {
     render(<PortfolioPage snapshot={fixturePortfolioSnapshot} />)
 
     const critical = screen.getByRole('region', { name: 'Portfolio critical summary' })
     expect(critical).toHaveClass('route-critical-summary')
     const snapshot = within(critical).getByRole('region', { name: 'Portfolio snapshot' })
-    const evidenceSummary = within(critical).getByRole('region', { name: 'Portfolio evidence summary' })
-    expect(evidenceSummary).toHaveTextContent(`Positions${fixturePortfolioSnapshot.positions.length}`)
-    expect(evidenceSummary).toHaveTextContent(`Risk decisions${fixturePortfolioSnapshot.riskDecisions.length}`)
-    expect(evidenceSummary).toHaveTextContent(`Paper fills${fixturePortfolioSnapshot.fills.length}`)
-    expect(evidenceSummary).toHaveTextContent(`Cash ledger${fixturePortfolioSnapshot.cashLedger.length}`)
-    const chart = screen.getByRole('figure', { name: 'Portfolio performance' })
-    expect(snapshot).toHaveTextContent('Net asset value')
-    expect(snapshot).toHaveTextContent('USD 100,425.18')
-    expect(snapshot).toHaveTextContent('Day return')
-    expect(snapshot).toHaveTextContent('+0.42%')
-    expect(snapshot).toHaveTextContent('Current drawdown')
-    expect(snapshot).toHaveTextContent('-1.80%')
+    expect(snapshot).toHaveTextContent(`Positions${fixturePortfolioSnapshot.positions.length}`)
+    expect(snapshot).toHaveTextContent(`Risk decisions${fixturePortfolioSnapshot.riskDecisions.length}`)
+    expect(snapshot).toHaveTextContent(`Paper fills${fixturePortfolioSnapshot.fills.length}`)
+    expect(snapshot).toHaveTextContent(`Cash ledger${fixturePortfolioSnapshot.cashLedger.length}`)
     expect(snapshot).toHaveTextContent('Available cash')
     expect(snapshot).toHaveTextContent('USD 74,699.58')
     expect(snapshot.querySelector('time')).toHaveAttribute('datetime', fixturePortfolioSnapshot.asOf)
-    expectBefore(snapshot, chart)
+    const chart = within(critical).getByRole('figure', { name: 'Portfolio performance' })
+    expect(within(critical).getByRole('figure', { name: /Benchmark comparison/ })).toBeInTheDocument()
+    expect(screen.getAllByText('USD 100,425.18')).toHaveLength(1)
+    expect(screen.getAllByText('+0.42%')).toHaveLength(1)
+    expect(screen.getAllByText('-1.80%')).toHaveLength(1)
+    expectBefore(chart, snapshot)
+    const evidence = screen.getByRole('region', { name: 'Paper trading evidence' })
     for (const name of ['Positions', 'Risk decisions', 'Paper fills', 'Cash ledger']) {
-      expect(screen.getByRole('region', { name })).toBeInTheDocument()
+      expect(within(evidence).getByRole('region', { name })).toBeInTheDocument()
     }
     for (const name of ['Complete positions', 'Complete risk decisions', 'Complete paper fills', 'Complete cash ledger']) {
       expect(screen.getByRole('group', { name })).not.toHaveAttribute('open')
