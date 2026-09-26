@@ -94,6 +94,17 @@ test('keyboard focus is visible and the document does not overflow its viewport'
   expect(overflows).toBe(false)
 })
 
+test('the five-symbol watchlist and deferred controls fit the 13-inch desktop fold', async ({ page }) => {
+  await page.setViewportSize({ height: 900, width: 1440 })
+  await page.goto('/watchlist')
+
+  await expect(page.getByRole('list', { name: 'Ranked research watchlist' }).getByRole('listitem')).toHaveCount(5)
+  const marketChart = page.getByRole('group', { name: 'External current market chart' })
+  await expect(marketChart).toBeVisible()
+  const bottom = await marketChart.evaluate((element) => element.getBoundingClientRect().bottom)
+  expect(bottom).toBeLessThanOrEqual(900)
+})
+
 test('all product routes remain readable across the locked viewport matrix', async ({ page }) => {
   for (const width of [320, 393, 768, 1120, 1440]) {
     await page.setViewportSize({ height: 900, width })
