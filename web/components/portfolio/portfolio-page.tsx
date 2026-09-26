@@ -11,7 +11,7 @@ export function PortfolioPage({ snapshot }: { snapshot: PortfolioSnapshot }) {
     <AppShell currentPath="/portfolio">
       <PageHeading asOf={snapshot.asOf} eyebrow="Simulate" title="AI Portfolio" summary="Deterministic risk and execution around immutable research decisions. Paper Trading only." />
       <FixtureNotice />
-      <section aria-label="Portfolio critical summary" className="route-critical-summary portfolio-critical-summary">
+      <section aria-label="Portfolio critical summary" className="route-critical-summary portfolio-critical-summary fixture-portfolio-critical-summary">
         <PerformanceChart snapshot={snapshot} />
         <section className="portfolio-snapshot" aria-label="Portfolio snapshot">
           <div><p className="section-kicker">Paper portfolio snapshot</p><h2>Current position</h2><time dateTime={snapshot.asOf}>{formatDualTime(snapshot.asOf).newYork}</time></div>

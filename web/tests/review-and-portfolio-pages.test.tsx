@@ -103,6 +103,7 @@ describe('portfolio and review pages', () => {
 
     const critical = screen.getByRole('region', { name: 'Portfolio critical summary' })
     expect(critical).toHaveClass('route-critical-summary')
+    expect(critical).toHaveClass('fixture-portfolio-critical-summary')
     const snapshot = within(critical).getByRole('region', { name: 'Portfolio snapshot' })
     expect(snapshot).toHaveTextContent(`Positions${fixturePortfolioSnapshot.positions.length}`)
     expect(snapshot).toHaveTextContent(`Risk decisions${fixturePortfolioSnapshot.riskDecisions.length}`)

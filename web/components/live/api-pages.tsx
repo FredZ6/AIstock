@@ -464,7 +464,7 @@ export function ApiPortfolioPage({ asOf, portfolio }: { asOf: string; portfolio:
           <input name="idempotency_key" type="hidden" value={`portfolio-init:${asOf}`} />
           <button className="state-retry" type="submit">Initialize USD 100,000 paper portfolio</button>
         </form> : <>
-          <section aria-label="Portfolio critical summary" className="route-critical-summary portfolio-critical-summary">
+          <section aria-label="Portfolio critical summary" className="route-critical-summary portfolio-critical-summary api-portfolio-critical-summary">
             <section className="portfolio-snapshot" aria-label="Portfolio snapshot">
               <div><p className="section-kicker">Paper portfolio</p><h2>Persisted snapshot</h2><p>As of <time dateTime={asOf}>{formatDualTime(asOf).newYork}</time></p></div>
               <dl><div><dt>Net asset value</dt><dd>{portfolio.latestNav ? formatMoney(portfolio.latestNav.nav, 'USD') : <span className="unavailable-value">Unavailable</span>}</dd></div><div><dt>Day return</dt><dd className={dayReturn ? undefined : 'unavailable-value'}>{dayReturn ? formatPercent(dayReturn) : 'Unavailable'}</dd></div><div><dt>Current drawdown</dt><dd className={drawdown ? undefined : 'unavailable-value'}>{drawdown ? formatPercent(drawdown) : 'Unavailable'}</dd></div><div><dt>Available cash</dt><dd>{portfolio.cash ? formatMoney(portfolio.cash.balance, portfolio.cash.currency) : <span className="unavailable-value">Unavailable</span>}</dd></div></dl>

@@ -129,7 +129,7 @@ export function WatchlistPage({ snapshot }: { snapshot: WatchlistSnapshot }) {
         <div className="watchlist-controls watchlist-primary-action">
           <div><h3>Add a symbol</h3><p>Add a symbol to this frozen session.</p></div>
           <form onSubmit={addSymbol}>
-            <label htmlFor="add-symbol">Add symbol</label>
+            <label className="sr-only" htmlFor="add-symbol">Add symbol</label>
             <input id="add-symbol" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={10} autoCapitalize="characters" />
             <button type="submit">Add to watchlist</button>
           </form>

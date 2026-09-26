@@ -32,6 +32,7 @@ describe('research workflow pages', () => {
     expect(summary).toHaveClass('route-critical-summary')
     expect(within(summary).getByRole('list', { name: 'Ranked research watchlist' })).toBeInTheDocument()
     expect(within(summary).getByRole('textbox', { name: 'Add symbol' })).toBeInTheDocument()
+    expect(within(summary).getByText('Add symbol')).toHaveClass('sr-only')
     expect(screen.getByRole('group', { name: 'Watchlist settings' })).not.toHaveAttribute('open')
     expect(screen.getByRole('heading', { name: 'Watchlist controls' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'NVDA daily research' })).toBeChecked()

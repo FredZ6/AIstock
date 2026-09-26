@@ -395,6 +395,7 @@ describe('API mode pages', () => {
 
     const critical = screen.getByRole('region', { name: 'Portfolio critical summary' })
     expect(critical).toHaveClass('route-critical-summary')
+    expect(critical).toHaveClass('api-portfolio-critical-summary')
     const summary = within(critical).getByRole('region', { name: 'Portfolio snapshot' })
     expect(within(summary).getByText('Net asset value').parentElement).toHaveTextContent('Unavailable')
     expect(within(summary).getByText('Available cash').parentElement).toHaveTextContent('USD 100,000.00')

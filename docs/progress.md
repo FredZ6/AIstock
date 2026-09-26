@@ -4148,3 +4148,9 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   `make verify` exited 0: Ruff format/check clean for 339 files, Mypy clean for 292 source files,
   Alembic drift and generated-contract checks passed, backend 765 passed / 5 optional live-provider
   tests skipped, frontend 35 files and 239/239 tests passed, and the Next.js production build succeeded.
+- Merge review found the compact Portfolio selector was shared by different Fixture and API DOM
+  structures. A RED regression proved both modes lacked explicit layout variants; GREEN now scopes the
+  chart/benchmark composition to Fixture and gives API its own persisted snapshot grid. The same review
+  removed a duplicate visually-hidden rule by reusing `.sr-only` on the Watchlist label. The focused
+  regression passed 38/38, followed by the complete frontend 239/239 suite, TypeScript, ESLint, and the
+  production build.
