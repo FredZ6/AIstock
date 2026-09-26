@@ -433,6 +433,9 @@ button:disabled { cursor: not-allowed; opacity: 0.48; }
 .operations-status-grid span { color: var(--text-tertiary); font-size: 0.68rem; }
 .operations-status-grid strong { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 .operations-status-grid p { margin: 0.45rem 0 0; color: var(--text-secondary); font-size: 0.7rem; }
+.eval-report-summary .metric-list { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 0.75rem; }
+.eval-report-summary .metric-list div { padding: 0.65rem; }
+.eval-report-summary .eval-metrics-disclosure { margin-top: 0.75rem; }
 .missing-fixture-state { display: grid; gap: 1.25rem; margin-top: clamp(2rem, 5vw, 4rem); }
 .missing-fixture-state > a { width: fit-content; min-height: 2.75rem; padding: 0.7rem 0; color: var(--signal); font-size: 0.8rem; font-weight: 700; }
 
@@ -873,6 +876,7 @@ small,
   .decision-facts, .budget-strip { grid-template-columns: 1fr; }
   .run-progress-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .portfolio-snapshot dl, .evidence-counts, .operations-status-grid { grid-template-columns: 1fr; }
+  .eval-report-summary .metric-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 0.5rem; }
   .portfolio-hero, .review-grid, .lesson-panel { grid-template-columns: 1fr; }
   .benchmark-bars > div { grid-template-columns: 5.5rem 1fr 3.5rem; }

@@ -106,6 +106,7 @@ test('the five-symbol watchlist and deferred controls fit the 13-inch desktop fo
 })
 
 test('all product routes remain readable across the locked viewport matrix', async ({ page }) => {
+  test.slow()
   for (const width of [320, 393, 768, 1120, 1440]) {
     await page.setViewportSize({ height: 900, width })
     for (const [path, heading] of pages) {

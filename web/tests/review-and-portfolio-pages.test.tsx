@@ -240,4 +240,26 @@ describe('portfolio and review pages', () => {
     expect(screen.getByRole('region', { name: 'Operational evidence' })).toHaveClass('route-critical-summary')
     expect(screen.getByRole('group', { name: 'Complete policy administration' })).not.toHaveAttribute('open')
   })
+
+  it('keeps the measured evaluation summary visible while deferring the complete metric artifact', () => {
+    render(<EvalAdminPage snapshot={{
+      ...fixtureEvalAdminSnapshot,
+      evaluation: {
+        artifactPath: 'evals/reports/latest/summary.json',
+        caseCount: 200,
+        datasetVersion: 'eval-v0.2.0',
+        metrics: [{ label: 'Citation precision', value: '0.99' }],
+        mode: 'fixture',
+        passed: true,
+        policyVersion: 'eval-policy-v1',
+      },
+    }} />)
+
+    expect(screen.getByText('eval-v0.2.0')).toBeInTheDocument()
+    expect(screen.getByText('200 cases')).toBeInTheDocument()
+    const metrics = screen.getByRole('group', { name: 'Complete measured evaluation metrics' })
+    expect(metrics).not.toHaveAttribute('open')
+    expect(within(metrics).getByRole('table', { name: 'Measured evaluation metrics' })).toBeInTheDocument()
+    expect(within(metrics).getByText('evals/reports/latest/summary.json')).toBeInTheDocument()
+  })
 })
