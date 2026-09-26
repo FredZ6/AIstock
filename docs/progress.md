@@ -4137,6 +4137,10 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   passed on desktop and mobile after `make evaluate` regenerated the declared ignored artifact. The
   5-width by 8-route containment matrix was also marked slow rather than weakening its 40 navigations;
   its isolated rerun passed 2/2 after a full-suite load timeout.
+- The remaining dense Today links measured only 25.19 px high. A browser RED regression captured the
+  undersized NVDA/MSFT and active-run targets; GREEN provides a real 44 px clickable box through a
+  compact link treatment with negative visual margins. The pointer-target, first-viewport and
+  no-overlap browser group passed 6/6, and a 1440x800 visual review confirmed no new gaps or collisions.
 - Verification evidence: focused Portfolio/Watchlist/Eval unit suites passed 27/27 and then 14/14;
   the locked Watchlist fold regression passed 2/2; the Eval first-viewport regression passed 2/2;
   and the complete Fixture UI matrix passed 38/38 across desktop/mobile, Axe serious/critical scans,
