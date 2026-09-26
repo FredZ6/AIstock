@@ -28,9 +28,9 @@ test('the ten-minute fixture demo exposes every interview acceptance artifact', 
   await expect(page.getByRole('heading', { name: 'Relative volume and return z-score crossed the frozen deterministic rule.' })).toBeVisible()
 
   await page.goto('/portfolio')
-  const portfolioSnapshot = page.getByRole('region', { name: 'Portfolio snapshot' })
-  await expect(portfolioSnapshot.getByText('USD 100,425.18', { exact: true })).toBeVisible()
-  await expect(portfolioSnapshot.getByText('-1.80%', { exact: true })).toBeVisible()
+  const portfolioPerformance = page.getByRole('figure', { name: 'Portfolio performance' })
+  await expect(portfolioPerformance.getByText('USD 100,425.18', { exact: true })).toBeVisible()
+  await expect(portfolioPerformance.getByText('-1.80%', { exact: true })).toBeVisible()
   await page.getByRole('group', { name: 'Complete risk decisions' }).locator('summary').click()
   await expect(page.getByRole('rowheader', { name: 'risk-decision-001' })).toBeVisible()
   await expect(page.getByText('REJECTED', { exact: true })).toBeVisible()
