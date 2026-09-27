@@ -35,6 +35,8 @@ import { TradingViewTickerList } from '../market/tradingview-ticker-list'
 import { FinancialFactsDisclosure, SecFilingsDisclosure } from '../research/research-evidence-browser'
 import { ResearchRunControl } from '../research/research-run-control'
 import { StateBoundary } from '../states/state-boundary'
+import { TodayDashboard, TodayDashboardHeader } from '../today/today-dashboard'
+import type { TodayDashboardModel } from '../today/today-dashboard-model'
 import { LiveRunTrace } from '../trace/live-run-trace'
 import { PageHeading, Signal } from '../ui/product-ui'
 import { ApiAlertsQueue } from './api-alerts-queue'
@@ -164,6 +166,7 @@ export function ApiRunMetadataPage({ run, report }: { run: ResearchRun; report?:
 }
 
 export function ApiTodayPage({
+  activeRun = null,
   alerts = [],
   asOf,
   health,
@@ -172,6 +175,7 @@ export function ApiTodayPage({
   research = [],
   availabilityFacts = [],
 }: {
+  activeRun?: ResearchRun | null
   alerts?: AlertRecord[]
   asOf: string
   health: ProviderHealth | null
@@ -196,10 +200,61 @@ export function ApiTodayPage({
     { label: 'Market Data', items: facts.filter((item) => item.key.startsWith('market:')) },
     { label: 'Decision Domain', items: facts.filter((item) => !item.key.startsWith('provider:') && !item.key.startsWith('market:')) },
   ].filter((group) => group.items.length)
+  const latestResearchBySymbol = new Map(research.map((record) => [record.symbol, record]))
+  const dashboard: TodayDashboardModel = {
+    mode: 'api',
+    asOf,
+    heading: {
+      eyebrow: 'Decision workspace · API Mode',
+      title: 'Today',
+      summary: 'Current persisted facts, with unavailable domains left explicit.',
+      notice: { label: 'API Mode', description: 'Persisted backend facts · no Fixture substitution' },
+    },
+    portfolio: portfolio?.latestNav ? { kind: 'available', value: <div className="api-portfolio-overview">
+      <div className="section-heading"><div><p className="section-kicker">Paper portfolio</p><h2>Overview</h2></div><Link className="compact-hit-link" href="/portfolio">Open portfolio</Link></div>
+      <dl className="performance-facts">
+        <div><dt>Net asset value</dt><dd>{formatMoney(portfolio.latestNav.nav, 'USD')}</dd></div>
+        <div><dt>Cash</dt><dd>{portfolio.cash ? formatMoney(portfolio.cash.balance, portfolio.cash.currency) : 'Unavailable'}</dd></div>
+        <div><dt>Positions</dt><dd>{portfolio.positions.length}</dd></div>
+      </dl>
+      <p className="performance-fixture">Persisted at <time dateTime={portfolio.latestNav.eventTime}>{formatDualTime(portfolio.latestNav.eventTime).newYork}</time></p>
+    </div> } : { kind: 'empty', message: 'No persisted NAV is available.' },
+    marketRegime: { kind: 'unavailable', message: 'No persisted market regime is available.' },
+    watchlist: quotes.length ? { kind: 'available', value: {
+      kicker: 'Discover',
+      title: 'Watchlist signals',
+      action: <Link className="compact-hit-link" href="/watchlist">Manage watchlist</Link>,
+      content: <>
+        <p className="muted-copy"><span>Current market context · not decision-time evidence</span><small>TradingView data is external current-market context · Not decision-time evidence</small></p>
+        <ul aria-label="Watchlist signals" className="market-list persisted-market-list watchlist-heatmap">
+          {quotes.map((quote) => {
+            const decision = latestResearchBySymbol.get(quote.symbol)
+            return <li key={quote.symbol}>
+              <div className="heatmap-primary"><Link className="compact-hit-link" href={`/research/${quote.symbol}`}>{quote.symbol}</Link><strong>{formatMoney(quote.close, 'USD')}</strong></div>
+              {decision ? <div className="heatmap-decisions"><Signal tone={decision.opinion ?? 'neutral'}>{decision.opinion ?? 'OPINION UNAVAILABLE'}</Signal><span>{formatPercent(decision.confidence, { signed: false })} confidence</span></div> : <span className="unavailable-value">Research decision unavailable</span>}
+              {decision ? <p>{decision.summary}</p> : null}
+              <div className="quality-line"><span>{quote.provider} · {quote.coverage}</span><time dateTime={quote.availableAt}>Available {formatDualTime(quote.availableAt).newYork}</time></div>
+            </li>
+          })}
+        </ul>
+      </>,
+    } } : { kind: 'empty', message: 'No point-in-time eligible watchlist quotes are available.' },
+    alerts: alerts.length ? { kind: 'available', value: {
+      kicker: 'Decide', title: 'Actionable alerts', action: <Link className="compact-hit-link" href="/alerts">View all</Link>,
+      content: <ul className="alert-list">{alerts.slice(0, 3).map((alert) => <li key={alert.id}>
+        <div className="alert-meta"><Signal tone={alert.severity}>{alert.severity}</Signal><Link className="compact-hit-link" href={`/research/${alert.symbol}`}>{alert.symbol}</Link><time dateTime={alert.eventTime}>{formatDualTime(alert.eventTime).newYork}</time></div>
+        <p>{alert.ruleId} · {alert.ruleVersion}</p><strong>Materiality {formatPercent(alert.materiality, { signed: false })}</strong>
+      </li>)}</ul>,
+    } } : { kind: 'empty', message: 'No persisted actionable alert is available.' },
+    activeRun: activeRun ? { kind: 'available', value: {
+      kicker: 'Run progress', title: 'Research execution',
+      content: <div className="run-progress"><div><Link className="compact-hit-link" href={`/runs/${activeRun.runId}`}>{activeRun.symbol ? `${activeRun.runType === 'RESEARCH' ? 'Research' : 'Portfolio'} · ${activeRun.symbol}` : 'Portfolio research'}</Link><Signal tone={activeRun.status}>{activeRun.status}</Signal></div><p>Decision time <time dateTime={activeRun.decisionTime}>{formatDualTime(activeRun.decisionTime).newYork}</time></p></div>,
+    } } : { kind: 'empty', message: 'No persisted research run is available.' },
+  }
   return (
     <AppShell currentPath="/">
       <LiveDataRefresh />
-      <PageHeading asOf={asOf} eyebrow="Decision workspace · API Mode" title="Today" summary="Current persisted facts, with unavailable domains left explicit." />
+      <div className="today-page"><TodayDashboardHeader model={dashboard} /></div>
       <StateBoundary compact state={groups.length ? {
         kind: 'degraded' as const,
         title: 'Some decision facts are unavailable',
@@ -208,44 +263,7 @@ export function ApiTodayPage({
         actionLabel: 'Review watchlist',
         groups,
       } : { kind: 'success' as const }}>
-        <section aria-label="Today decision workspace" className="today-decision-workspace">
-          <section aria-label="Portfolio overview" className="terminal-section first-section portfolio-overview">
-            <p className="section-kicker">Paper only</p><h2 id="paper-portfolio-title">Paper portfolio</h2>
-            {portfolio?.latestNav
-              ? <p><strong>{formatMoney(portfolio.latestNav.nav, 'USD')}</strong> at <time dateTime={portfolio.latestNav.eventTime}>{formatDualTime(portfolio.latestNav.eventTime).newYork}</time></p>
-              : <p className="unavailable-value">No persisted NAV is available.</p>}
-          </section>
-
-          <section className="terminal-section first-section today-watchlist" aria-labelledby="live-market-title">
-            <div className="section-heading">
-              <div><p className="section-kicker">External current market</p><h2 id="live-market-title">Market watchlist</h2></div>
-              <span className="muted-copy"><span>Current market context · not decision-time evidence</span><small>TradingView data is external current-market context · Not decision-time evidence</small></span>
-            </div>
-            <ul aria-label="Market watchlist" className="market-list persisted-market-list">
-              {quotes.map((quote) => <li key={quote.symbol}>
-                <Link href={`/research/${quote.symbol}`}>{quote.symbol}</Link>
-                <strong>{formatMoney(quote.close, 'USD')}</strong>
-                <span>{quote.provider} · {quote.coverage}</span>
-                <time dateTime={quote.availableAt}>Available {formatDualTime(quote.availableAt).newYork}</time>
-              </li>)}
-            </ul>
-          </section>
-
-          <section aria-label="Decision activity" className="decision-activity">
-            <section className="terminal-section" aria-labelledby="today-research-title">
-              <div className="section-heading"><div><p className="section-kicker">Latest persisted conclusions</p><h2 id="today-research-title">Research decisions</h2></div>{research.length ? <Link href={`/research/${research[0].symbol}`}>Open research</Link> : <Link href="/research">Open research</Link>}</div>
-              {research.length
-                ? <ul className="lineage-list">{research.slice(0, 3).map((record) => <li key={record.id}><div className="section-heading"><strong>{record.symbol}</strong>{record.opinion ? <Signal tone={record.opinion}>{record.opinion}</Signal> : null}</div><p>{record.summary}</p><small>Confidence {formatPercent(record.confidence, { signed: false })} · cutoff <time dateTime={record.asOf}>{formatDualTime(record.asOf).newYork}</time></small></li>)}</ul>
-                : <p className="unavailable-value">No persisted research decision is available.</p>}
-            </section>
-            <section className="terminal-section" aria-labelledby="today-alerts-title">
-              <div className="section-heading"><div><p className="section-kicker">Actionable persisted events</p><h2 id="today-alerts-title">Alerts</h2></div><Link href="/alerts">View all</Link></div>
-              {alerts.length
-                ? <ul className="lineage-list">{alerts.slice(0, 3).map((alert) => <li key={alert.id}><div className="section-heading"><strong>{alert.symbol}</strong><Signal tone={alert.severity}>{alert.severity}</Signal></div><p>{alert.ruleId} · {alert.ruleVersion}</p><small>Materiality {formatPercent(alert.materiality, { signed: false })} · <time dateTime={alert.eventTime}>{formatDualTime(alert.eventTime).newYork}</time></small></li>)}</ul>
-                : <p className="unavailable-value">No persisted actionable alert is available.</p>}
-            </section>
-          </section>
-        </section>
+        <TodayDashboard model={dashboard} />
 
         {health ? <details aria-label="Provider diagnostics" className="provider-diagnostics">
           <summary>Provider diagnostics</summary>

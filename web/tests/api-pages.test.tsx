@@ -183,7 +183,7 @@ describe('API mode pages', () => {
     expect(screen.getByLabelText('Live data refresh')).toHaveTextContent(
       'Persisted data refreshes every 60 seconds while this page is visible.',
     )
-    expect(within(screen.getByRole('list', { name: 'Market watchlist' })).getByText('USD 217.55')).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: 'Watchlist signals' })).getByText('USD 217.55')).toBeInTheDocument()
     expect(screen.getAllByText(/ALPACA · IEX/).length).toBeGreaterThanOrEqual(2)
     expect(screen.getByRole('region', { name: 'Current market reference' })).toBeInTheDocument()
     expect(screen.queryByRole('list', { name: 'Latest persisted quotes' })).not.toBeInTheDocument()
