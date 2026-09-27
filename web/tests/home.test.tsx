@@ -209,6 +209,10 @@ describe('home page', () => {
           sec: { configured: true, mode: 'read_only' },
         },
       })),
+      getLatestResearchRun: vi.fn(async () => ({
+        dataCutoff: '2026-09-09T14:00:00Z', decisionTime: '2026-09-09T14:00:00Z',
+        runId: 'run-live-1', runType: 'RESEARCH', status: 'RUNNING', symbol: 'NVDA',
+      })),
       getStockResearch: vi.fn(async () => ({ financialFacts: [], secFilings: [], records: [{
         asOf: '2026-09-09T14:00:00Z', confidence: '0.82', direction: 'UP', horizon: '12M', id: 'r1',
         opinion: 'BULLISH', summary: 'Demand remains durable.', symbol: 'NVDA',
@@ -225,5 +229,7 @@ describe('home page', () => {
     expect(screen.getByText('SEC · READ ONLY · AVAILABLE')).toBeInTheDocument()
     expect(screen.getByText(/100,425\.18/)).toBeInTheDocument()
     expect(screen.getByText('Sep 9, 2026, 10:30 AM')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Research execution' })).toHaveTextContent('NVDA')
+    expect(screen.getByRole('region', { name: 'Research execution' })).toHaveTextContent('RUNNING')
   })
 })

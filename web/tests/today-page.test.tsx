@@ -141,6 +141,9 @@ describe('TodayPage', () => {
     expect(within(workspace).getByRole('region', { name: 'Decision activity' })).toHaveClass(
       'decision-activity',
     )
+    expect(within(workspace).getByRole('region', { name: 'Market and portfolio summary' })).toBeInTheDocument()
+    expect(within(workspace).getByRole('region', { name: 'Watchlist signals' })).toBeInTheDocument()
+    expect(within(workspace).getByRole('region', { name: 'Research execution' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Provider diagnostics' })).not.toHaveAttribute('open')
   })
 

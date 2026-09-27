@@ -168,7 +168,16 @@ describe('API mode pages', () => {
   })
 
   it('shows real Today facts and explicit degraded domains without a Fixture notice', () => {
-    render(<ApiTodayPage asOf="2026-08-29T09:30:00Z" health={health} portfolio={emptyPortfolio} quotes={[quote]} />)
+    render(<ApiTodayPage
+      activeRun={{
+        dataCutoff: '2026-08-29T09:00:00Z', decisionTime: '2026-08-29T09:00:00Z',
+        runId: 'run-live-1', runType: 'RESEARCH', status: 'RUNNING', symbol: 'NVDA',
+      }}
+      asOf="2026-08-29T09:30:00Z"
+      health={health}
+      portfolio={emptyPortfolio}
+      quotes={[quote]}
+    />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument()
     expect(screen.getByLabelText('Live data refresh')).toHaveTextContent(
@@ -187,12 +196,33 @@ describe('API mode pages', () => {
 
     const workspace = screen.getByRole('region', { name: 'Today decision workspace' })
     expect(workspace).toHaveClass('today-decision-workspace')
+    expect(within(workspace).getByRole('region', { name: 'Market and portfolio summary' })).toBeInTheDocument()
     expect(within(workspace).getByRole('region', { name: 'Portfolio overview' })).toBeInTheDocument()
-    expect(within(workspace).getByRole('list', { name: 'Market watchlist' })).toHaveClass('market-list')
+    expect(within(workspace).getByRole('region', { name: 'Watchlist signals' })).toBeInTheDocument()
+    expect(within(workspace).getByRole('list', { name: 'Watchlist signals' })).toHaveClass('market-list')
     expect(within(workspace).getByRole('region', { name: 'Decision activity' })).toBeInTheDocument()
+    expect(within(workspace).getByRole('region', { name: 'Research execution' })).toHaveTextContent('NVDA')
+    expect(within(workspace).getByRole('region', { name: 'Research execution' })).toHaveTextContent('RUNNING')
     expect(screen.getByRole('group', { name: 'Provider diagnostics' })).not.toHaveAttribute('open')
     expect(screen.getByRole('group', { name: 'Complete market lineage' })).not.toHaveAttribute('open')
     expect(screen.getByText('Current market context · not decision-time evidence')).toBeInTheDocument()
+  })
+
+  it('keeps unavailable API dashboard slots explicit without borrowing Fixture facts', () => {
+    render(<ApiTodayPage
+      activeRun={null}
+      asOf="2026-08-29T09:30:00Z"
+      health={health}
+      portfolio={emptyPortfolio}
+      quotes={[]}
+    />)
+
+    const workspace = screen.getByRole('region', { name: 'Today decision workspace' })
+    expect(within(workspace).getByRole('region', { name: 'Portfolio overview' })).toHaveTextContent('No persisted NAV is available')
+    expect(within(workspace).getByRole('region', { name: 'Market regime' })).toHaveTextContent('No persisted market regime is available')
+    expect(within(workspace).getByRole('region', { name: 'Research execution' })).toHaveTextContent('No persisted research run is available')
+    expect(screen.queryByText('market-regime-v1')).not.toBeInTheDocument()
+    expect(screen.queryByText('Fixture Mode')).not.toBeInTheDocument()
   })
 
   it('collapses repeated unavailable-domain causes while retaining every affected label', () => {
