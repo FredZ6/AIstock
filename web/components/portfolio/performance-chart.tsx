@@ -11,10 +11,10 @@ import { parseAwareInstant } from '../../lib/time'
 type Metric = 'dailyReturn' | 'drawdown' | 'nav'
 type Range = 7 | 30 | 90 | 'all'
 
-const metrics: Array<{ key: Metric; label: string }> = [
+const metrics: Array<{ compactLabel?: string; key: Metric; label: string }> = [
   { key: 'nav', label: 'Net asset value' },
   { key: 'dailyReturn', label: 'Day return' },
-  { key: 'drawdown', label: 'Current drawdown' },
+  { compactLabel: 'Current drawdown', key: 'drawdown', label: 'Drawdown' },
 ]
 
 function shortDate(value: string) {
@@ -63,7 +63,10 @@ export function PerformanceChart({
   }))
   const line = coordinates.map((point, index) => `${index ? 'L' : 'M'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
   const area = coordinates.length ? `${line} L 1000 240 L 0 240 Z` : ''
-  const selectedLabel = metrics.find((item) => item.key === metric)?.label ?? 'Performance'
+  const selectedMetric = metrics.find((item) => item.key === metric)
+  const selectedLabel = compact
+    ? selectedMetric?.compactLabel ?? selectedMetric?.label ?? 'Performance'
+    : selectedMetric?.label ?? 'Performance'
   const first = usable.at(0)?.point
   const last = usable.at(-1)?.point
 
@@ -112,7 +115,7 @@ export function PerformanceChart({
             role="tab"
             tabIndex={metric === item.key ? 0 : -1}
             type="button"
-          >{item.label}</button>
+          >{compact ? item.compactLabel ?? item.label : item.label}</button>
         ))}
       </div>
 
