@@ -1,10 +1,10 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { TodayPage } from '../components/today-page'
 import { parseTodaySnapshot } from '../lib/api'
 
-const snapshot = parseTodaySnapshot({
+const parsedSnapshot = parseTodaySnapshot({
   asOf: '2026-08-21T20:00:00Z',
   mode: 'fixture',
   marketRegime: {
@@ -67,6 +67,18 @@ const snapshot = parseTodaySnapshot({
   },
 })
 
+const fixtureDailyReturns = ['-0.0083', '-0.0023', '0.0042']
+const snapshot = {
+  ...parsedSnapshot,
+  portfolio: {
+    ...parsedSnapshot.portfolio,
+    performanceHistory: parsedSnapshot.portfolio.performanceHistory.map((point, index) => ({
+      ...point,
+      dailyReturn: fixtureDailyReturns[index],
+    })),
+  },
+}
+
 describe('TodayPage', () => {
   it('leads with point-in-time market context, portfolio facts, and all four benchmarks', () => {
     render(<TodayPage snapshot={snapshot} />)
@@ -94,6 +106,55 @@ describe('TodayPage', () => {
       '/portfolio',
     )
     expect(within(portfolio).getByText('Frozen synthetic history')).toBeInTheDocument()
+  })
+
+  it('switches the compact portfolio chart between one persisted metric at a time', () => {
+    render(<TodayPage snapshot={snapshot} />)
+
+    const portfolio = screen.getByRole('figure', { name: 'Paper portfolio performance' })
+    const tabs = within(portfolio).getByRole('tablist', { name: 'Performance metric' })
+    const nav = within(tabs).getByRole('tab', { name: 'Net asset value' })
+    const dayReturn = within(tabs).getByRole('tab', { name: 'Day return' })
+    const drawdown = within(tabs).getByRole('tab', { name: 'Current drawdown' })
+
+    expect(nav).toHaveAttribute('aria-selected', 'true')
+    expect(dayReturn).toHaveAttribute('aria-selected', 'false')
+    expect(drawdown).toHaveAttribute('aria-selected', 'false')
+    expect(within(portfolio).getByRole('img', { name: 'Net asset value history' }))
+      .toHaveProperty('parentElement.dataset.metric', 'nav')
+    expect(within(portfolio).getAllByRole('img')).toHaveLength(1)
+
+    fireEvent.click(dayReturn)
+    expect(within(portfolio).getByRole('img', { name: 'Day return history' }))
+      .toHaveProperty('parentElement.dataset.metric', 'dailyReturn')
+
+    fireEvent.keyDown(dayReturn, { key: 'ArrowRight' })
+    expect(drawdown).toHaveFocus()
+    expect(drawdown).toHaveAttribute('aria-selected', 'true')
+    expect(within(portfolio).getByRole('img', { name: 'Current drawdown history' }))
+      .toHaveProperty('parentElement.dataset.metric', 'drawdown')
+    expect(within(portfolio).queryByRole('tab', { name: 'Cumulative return' })).not.toBeInTheDocument()
+  })
+
+  it('does not fabricate a line when a selected metric has insufficient persisted history', () => {
+    const sparseSnapshot = {
+      ...snapshot,
+      portfolio: {
+        ...snapshot.portfolio,
+        performanceHistory: snapshot.portfolio.performanceHistory.map((point, index) => ({
+          ...point,
+          dailyReturn: index === 0 ? null : undefined,
+        })),
+      },
+    }
+    render(<TodayPage snapshot={sparseSnapshot} />)
+
+    const portfolio = screen.getByRole('figure', { name: 'Paper portfolio performance' })
+    fireEvent.click(within(portfolio).getByRole('tab', { name: 'Day return' }))
+
+    expect(within(portfolio).getByText('Not enough persisted history for this metric.')).toBeInTheDocument()
+    expect(within(portfolio).queryByRole('img', { name: 'Day return history' })).not.toBeInTheDocument()
+    expect(portfolio.querySelector('.chart-line')).not.toBeInTheDocument()
   })
 
   it('groups market metadata inside the rounded summary surface', () => {
