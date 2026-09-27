@@ -4222,3 +4222,30 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   11-symbol Watchlist quote read returned `SUCCESS` with `missing_symbols=[]`. Every returned bar
   carried IEX coverage, PIT timestamps, a content hash and its MinIO raw-object key. Alpha Vantage
   remained explicitly unconfigured.
+
+## 2026-09-27 — Shared Today dashboard final closure
+
+- Replaced the divergent Fixture/API Today compositions with one presentation-safe dashboard model.
+  Fixture and persisted API adapters now feed the same portfolio, market-regime, watchlist, alerts and
+  latest-run slots; API gaps remain explicit and no Fixture fact is imported as a fallback. The Home
+  route loads the latest persisted research run in parallel and isolates a failed run request to the
+  execution slot instead of failing the rest of Today.
+- Restored the approved compact MacBook Air composition for both modes: Market/Portfolio stays on the
+  left, Watchlist above Decision activity on the right, and Provider diagnostics remains collapsed
+  below the workspace. A browser RED run passed 16/17 and exposed the final 1280x720 diagnostics
+  boundary; the corrected isolated boundary regression passed, as did the focused split-workspace,
+  label and compact-layout checks. Mobile preserves deliberate summary, Watchlist and activity order,
+  while the 320px Watchlist row no longer overflows.
+- Focused frontend closure passed 35 files and 243/243 tests, TypeScript, ESLint and the Next.js
+  production build. The managed Paper runtime was then started from this exact worktree: Provider
+  Health returned HTTP 200 in `paper` mode, API Today returned HTTP 200, and the desktop/mobile live
+  provider browser acceptance passed 2/2. It verified API Mode, no Fixture substitution, explicit
+  unavailable provider facts, persisted SEC provenance and no horizontal overflow.
+- External gaps remain truthful: SEC is configured read-only; Alpaca is configured read-only with IEX
+  coverage and was `DEGRADED` with its latest ingestion job still `QUEUED` at acceptance time; Alpha
+  Vantage remains unconfigured. No SIP entitlement, Market Regime fact or missing provider result was
+  synthesized.
+- After the managed runtime and all writers were stopped, the final fresh `make verify` exited 0:
+  Ruff format/check clean for 339 files, Mypy clean for 292 source files, Alembic drift checks passed,
+  backend 767 passed / 5 optional live-provider tests skipped, frontend 35 files and 243/243 tests
+  passed, and the Next.js production build succeeded.
