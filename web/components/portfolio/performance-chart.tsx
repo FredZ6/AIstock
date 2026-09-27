@@ -6,7 +6,7 @@ import Link from 'next/link'
 import type { PortfolioSnapshot } from '../../lib/product-types'
 import { normalizeDecimalSeries } from '../../lib/decimal'
 import { formatMoney, formatPercent } from '../../lib/format'
-import { parseAwareInstant } from '../../lib/time'
+import { formatDualTime, parseAwareInstant } from '../../lib/time'
 
 type Metric = 'cumulativeReturn' | 'dailyReturn' | 'drawdown' | 'nav'
 type Range = 7 | 30 | 90 | 'all'
@@ -35,8 +35,10 @@ function shortDate(value: string) {
 
 type PerformanceSnapshot = Pick<
   PortfolioSnapshot,
-  'asOf' | 'currency' | 'dayReturn' | 'drawdown' | 'nav'
+  'asOf' | 'currency' | 'nav'
 > & {
+  dayReturn: string | null
+  drawdown: string | null
   performanceHistory: Array<Pick<
     PortfolioSnapshot['performanceHistory'][number],
     'drawdown' | 'nav' | 'time'
@@ -45,9 +47,11 @@ type PerformanceSnapshot = Pick<
 
 export function PerformanceChart({
   compact = false,
+  historySource,
   snapshot,
 }: {
   compact?: boolean
+  historySource?: { label: string; time: string }
   snapshot: PerformanceSnapshot
 }) {
   const metrics = compact ? compactMetrics : fullMetrics
@@ -97,8 +101,8 @@ export function PerformanceChart({
 
       <dl className="performance-facts">
         <div><dt>Net asset value</dt><dd>{formatMoney(snapshot.nav, snapshot.currency)}</dd></div>
-        <div><dt>Day return</dt><dd>{formatPercent(snapshot.dayReturn)}</dd></div>
-        <div><dt>Current drawdown</dt><dd>{formatPercent(snapshot.drawdown)}</dd></div>
+        <div><dt>Day return</dt><dd>{snapshot.dayReturn === null ? 'Unavailable' : formatPercent(snapshot.dayReturn)}</dd></div>
+        <div><dt>Current drawdown</dt><dd>{snapshot.drawdown === null ? 'Unavailable' : formatPercent(snapshot.drawdown)}</dd></div>
       </dl>
 
       <div aria-label="Performance metric" className="metric-tabs" role="tablist">
@@ -137,7 +141,9 @@ export function PerformanceChart({
           <div className="chart-dates"><time dateTime={first?.time}>{first ? shortDate(first.time) : '—'}</time><time dateTime={last?.time}>{last ? shortDate(last.time) : '—'}</time></div>
         </> : <p className="performance-history-empty">Not enough persisted history for this metric.</p>}
       </div>
-      <p className="performance-fixture">{compact ? 'Frozen synthetic history' : 'Frozen synthetic performance history · not a real return record'}</p>
+      <p className="performance-fixture">{historySource ? <>
+        <span>{historySource.label}</span> · persisted <time dateTime={historySource.time}>{formatDualTime(historySource.time).newYork}</time>
+      </> : compact ? 'Frozen synthetic history' : 'Frozen synthetic performance history · not a real return record'}</p>
     </figure>
   )
 }

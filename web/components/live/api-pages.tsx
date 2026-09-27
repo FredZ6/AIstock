@@ -32,6 +32,8 @@ import { formatDualTime } from '../../lib/time'
 import { AppShell } from '../layout/app-shell'
 import { TradingViewWidget } from '../market/tradingview-widget'
 import { TradingViewTickerList } from '../market/tradingview-ticker-list'
+import { PerformanceChart } from '../portfolio/performance-chart'
+import { toPerformanceSeries } from '../portfolio/performance-series'
 import { FinancialFactsDisclosure, SecFilingsDisclosure } from '../research/research-evidence-browser'
 import { ResearchRunControl } from '../research/research-run-control'
 import { StateBoundary } from '../states/state-boundary'
@@ -201,6 +203,11 @@ export function ApiTodayPage({
     { label: 'Decision Domain', items: facts.filter((item) => !item.key.startsWith('provider:') && !item.key.startsWith('market:')) },
   ].filter((group) => group.items.length)
   const latestResearchBySymbol = new Map(research.map((record) => [record.symbol, record]))
+  const performanceSeries = toPerformanceSeries((portfolio?.performanceHistory ?? []).map((point) => ({
+    availableAt: point.availableAt,
+    nav: point.nav,
+  })))
+  const latestPerformance = performanceSeries.at(-1)
   const dashboard: TodayDashboardModel = {
     mode: 'api',
     asOf,
@@ -210,15 +217,21 @@ export function ApiTodayPage({
       summary: 'Current persisted facts, with unavailable domains left explicit.',
       notice: { label: 'API Mode', description: 'Persisted backend facts · no Fixture substitution' },
     },
-    portfolio: portfolio?.latestNav ? { kind: 'available', value: <div className="api-portfolio-overview">
-      <div className="section-heading"><div><p className="section-kicker">Paper portfolio</p><h2>Overview</h2></div><Link className="compact-hit-link" href="/portfolio">Open portfolio</Link></div>
-      <dl className="performance-facts">
-        <div><dt>Net asset value</dt><dd>{formatMoney(portfolio.latestNav.nav, 'USD')}</dd></div>
-        <div><dt>Cash</dt><dd>{portfolio.cash ? formatMoney(portfolio.cash.balance, portfolio.cash.currency) : 'Unavailable'}</dd></div>
-        <div><dt>Positions</dt><dd>{portfolio.positions.length}</dd></div>
-      </dl>
-      <p className="performance-fixture">Persisted at <time dateTime={portfolio.latestNav.eventTime}>{formatDualTime(portfolio.latestNav.eventTime).newYork}</time></p>
-    </div> } : { kind: 'empty', message: 'No persisted NAV is available.' },
+    portfolio: portfolio?.latestNav ? { kind: 'available', value: <PerformanceChart
+      compact
+      historySource={{
+        label: 'Persisted paper NAV history',
+        time: latestPerformance?.time ?? portfolio.latestNav.availableAt ?? portfolio.latestNav.eventTime,
+      }}
+      snapshot={{
+        asOf,
+        currency: portfolio.configuration?.currency ?? portfolio.cash?.currency ?? 'USD',
+        dayReturn: latestPerformance?.dailyReturn ?? null,
+        drawdown: latestPerformance?.drawdown ?? null,
+        nav: portfolio.latestNav.nav,
+        performanceHistory: performanceSeries,
+      }}
+    /> } : { kind: 'empty', message: 'No persisted NAV is available.' },
     marketRegime: { kind: 'unavailable', message: 'No persisted market regime is available.' },
     watchlist: quotes.length ? { kind: 'available', value: {
       kicker: 'Discover',

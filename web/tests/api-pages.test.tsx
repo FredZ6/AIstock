@@ -252,6 +252,67 @@ describe('API mode pages', () => {
     expect(screen.getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true')
   })
 
+  it('charts persisted API NAV history and derives the latest return and drawdown', () => {
+    render(<ApiTodayPage
+      activeRun={null}
+      asOf="2026-08-29T09:30:00Z"
+      health={health}
+      portfolio={{
+        ...emptyPortfolio,
+        latestNav: { availableAt: '2026-08-29T09:21:00Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-3', nav: '99.00', portfolioId: 'portfolio-1' },
+        performanceHistory: [
+          { availableAt: '2026-08-27T09:01:00Z', eventTime: '2026-08-27T09:00:00Z', id: 'nav-1', nav: '100.00', portfolioId: 'portfolio-1' },
+          { availableAt: '2026-08-28T09:11:00Z', eventTime: '2026-08-28T09:10:00Z', id: 'nav-2', nav: '110.00', portfolioId: 'portfolio-1' },
+          { availableAt: '2026-08-29T09:21:00Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-3', nav: '99.00', portfolioId: 'portfolio-1' },
+        ],
+        status: 'SUCCESS',
+      }}
+      quotes={[]}
+    />)
+
+    const chart = screen.getByRole('figure', { name: 'Paper portfolio performance' })
+    expect(within(chart).getByRole('tablist', { name: 'Performance metric' })).toBeInTheDocument()
+    expect(within(chart).getAllByRole('tab')).toHaveLength(3)
+    expect(within(chart).getByRole('tab', { name: 'Net asset value' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(chart).getByRole('img', { name: 'Net asset value history' })).toBeInTheDocument()
+    expect(within(chart).getByText('Persisted paper NAV history')).toBeInTheDocument()
+    expect(within(chart).getByText('Persisted paper NAV history').parentElement?.querySelector('time')).toHaveAttribute('dateTime', '2026-08-29T09:21:00Z')
+    expect(within(chart).getAllByText('-10.00%')).toHaveLength(2)
+
+    fireEvent.click(within(chart).getByRole('tab', { name: 'Day return' }))
+    expect(within(chart).getByRole('img', { name: 'Day return history' })).toBeInTheDocument()
+    expect(within(chart).getByRole('tabpanel')).toHaveAttribute('data-metric', 'dailyReturn')
+
+    fireEvent.click(within(chart).getByRole('tab', { name: 'Current drawdown' }))
+    expect(within(chart).getByRole('img', { name: 'Current drawdown history' })).toBeInTheDocument()
+    expect(within(chart).getByRole('tabpanel')).toHaveAttribute('data-metric', 'drawdown')
+  })
+
+  it('does not fabricate a Day return line from one persisted NAV record', () => {
+    render(<ApiTodayPage
+      activeRun={null}
+      asOf="2026-08-29T09:30:00Z"
+      health={health}
+      portfolio={{
+        ...emptyPortfolio,
+        latestNav: { availableAt: '2026-08-29T09:21:00Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-1', nav: '100000', portfolioId: 'portfolio-1' },
+        performanceHistory: [
+          { availableAt: '2026-08-29T09:21:00Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-1', nav: '100000', portfolioId: 'portfolio-1' },
+        ],
+        status: 'SUCCESS',
+      }}
+      quotes={[]}
+    />)
+
+    const chart = screen.getByRole('figure', { name: 'Paper portfolio performance' })
+    fireEvent.click(within(chart).getByRole('tab', { name: 'Day return' }))
+
+    expect(within(chart).getByText('Not enough persisted history for this metric.')).toBeInTheDocument()
+    expect(within(chart).queryByRole('img')).not.toBeInTheDocument()
+    expect(within(chart).getByText('Unavailable')).toBeInTheDocument()
+    expect(within(chart).queryByText(/Frozen synthetic/)).not.toBeInTheDocument()
+  })
+
   it('keeps unavailable API dashboard slots explicit without borrowing Fixture facts', () => {
     render(<ApiTodayPage
       activeRun={null}
