@@ -19,8 +19,8 @@ const validSnapshot = {
     dayReturn: '0.0042',
     drawdown: '-0.0180',
     performanceHistory: [
-      { time: '2026-08-20T20:00:00Z', nav: '100005.16', cumulativeReturn: '0.0000516', drawdown: '-0.0221' },
-      { time: '2026-08-21T20:00:00Z', nav: '100425.18', cumulativeReturn: '0.0042518', drawdown: '-0.0180' },
+      { time: '2026-08-20T20:00:00Z', nav: '100005.16', dailyReturn: '-0.0023', cumulativeReturn: '0.0000516', drawdown: '-0.0221' },
+      { time: '2026-08-21T20:00:00Z', nav: '100425.18', dailyReturn: '0.0042', cumulativeReturn: '0.0042518', drawdown: '-0.0180' },
     ],
     benchmarks: {
       cash: '0.0000',
@@ -75,6 +75,7 @@ describe('parseTodaySnapshot', () => {
 
     expect(snapshot.portfolio.nav).toBe('100425.18')
     expect(snapshot.portfolio.performanceHistory.at(-1)?.nav).toBe('100425.18')
+    expect(snapshot.portfolio.performanceHistory.at(-1)?.dailyReturn).toBe('0.0042')
     expect(snapshot.watchlist[0]?.dataQuality).toEqual({
       freshness: 'FRESH',
       coverage: '0.94',
@@ -123,6 +124,18 @@ describe('parseTodaySnapshot', () => {
         },
       }),
     ).toThrow('portfolio.performanceHistory[0].nav must be a Decimal string')
+
+    expect(() =>
+      parseTodaySnapshot({
+        ...validSnapshot,
+        portfolio: {
+          ...validSnapshot.portfolio,
+          performanceHistory: [
+            { ...validSnapshot.portfolio.performanceHistory[0], dailyReturn: -0.0023 },
+          ],
+        },
+      }),
+    ).toThrow('portfolio.performanceHistory[0].dailyReturn must be a Decimal string')
   })
 
   it('keeps ResearchOpinion and PortfolioAction as independent enums', () => {

@@ -2,82 +2,10 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { TodayPage } from '../components/today-page'
-import { parseTodaySnapshot } from '../lib/api'
+import { PerformanceChart } from '../components/portfolio/performance-chart'
+import { fixtureTodaySnapshot } from '../lib/api'
 
-const parsedSnapshot = parseTodaySnapshot({
-  asOf: '2026-08-21T20:00:00Z',
-  mode: 'fixture',
-  marketRegime: {
-    label: 'RISK_ON',
-    qqqTrend: '0.052',
-    qqqVolatility: '0.181',
-    soxxRelativeStrength: '0.024',
-    vix: '18.2',
-    algorithmVersion: 'market-regime-v1',
-  },
-  portfolio: {
-    nav: '100425.18',
-    currency: 'USD',
-    dayReturn: '0.0042',
-    drawdown: '-0.0180',
-    performanceHistory: [
-      { time: '2026-08-15T20:00:00Z', nav: '100780.00', cumulativeReturn: '0.0078', drawdown: '-0.0145' },
-      { time: '2026-08-20T20:00:00Z', nav: '100005.16', cumulativeReturn: '0.0000516', drawdown: '-0.0221' },
-      { time: '2026-08-21T20:00:00Z', nav: '100425.18', cumulativeReturn: '0.0042518', drawdown: '-0.0180' },
-    ],
-    benchmarks: { cash: '0', qqq: '0.0038', equalWeight: '0.0031', momentum: '0.0045' },
-  },
-  watchlist: [
-    {
-      symbol: 'NVDA',
-      price: '129.84',
-      dailyReturn: '0.0214',
-      researchOpinion: 'BULLISH',
-      portfolioAction: 'HOLD',
-      dataQuality: {
-        freshness: 'FRESH',
-        coverage: '0.94',
-        provider: 'fixture-market',
-        delaySeconds: '0',
-        conflict: false,
-      },
-    },
-  ],
-  alerts: [
-    {
-      id: 'a1000000-0000-4000-8000-000000000001',
-      symbol: 'NVDA',
-      severity: 'HIGH',
-      materiality: '0.82',
-      summary: 'Volume breakout crossed the active thesis review threshold.',
-      reviewAction: 'Review thesis invalidation conditions',
-      eventTime: '2026-08-21T19:45:00Z',
-    },
-  ],
-  providers: [
-    { id: 'sec', label: 'SEC', status: 'HEALTHY', mode: 'fixture' },
-    { id: 'options', label: 'Options', status: 'DEGRADED', mode: 'fixture' },
-  ],
-  activeRun: {
-    id: 'b1000000-0000-4000-8000-000000000001',
-    label: 'Daily research · NVDA',
-    status: 'RUNNING',
-    completedSteps: 6,
-    totalSteps: 11,
-  },
-})
-
-const fixtureDailyReturns = ['-0.0083', '-0.0023', '0.0042']
-const snapshot = {
-  ...parsedSnapshot,
-  portfolio: {
-    ...parsedSnapshot.portfolio,
-    performanceHistory: parsedSnapshot.portfolio.performanceHistory.map((point, index) => ({
-      ...point,
-      dailyReturn: fixtureDailyReturns[index],
-    })),
-  },
-}
+const snapshot = fixtureTodaySnapshot
 
 describe('TodayPage', () => {
   it('leads with point-in-time market context, portfolio facts, and all four benchmarks', () => {
@@ -137,17 +65,19 @@ describe('TodayPage', () => {
   })
 
   it('does not fabricate a line when a selected metric has insufficient persisted history', () => {
-    const sparseSnapshot = {
-      ...snapshot,
-      portfolio: {
-        ...snapshot.portfolio,
-        performanceHistory: snapshot.portfolio.performanceHistory.map((point, index) => ({
-          ...point,
-          dailyReturn: index === 0 ? null : undefined,
-        })),
-      },
-    }
-    render(<TodayPage snapshot={sparseSnapshot} />)
+    render(<PerformanceChart compact snapshot={{
+      asOf: snapshot.asOf,
+      currency: snapshot.portfolio.currency,
+      dayReturn: snapshot.portfolio.dayReturn,
+      drawdown: snapshot.portfolio.drawdown,
+      nav: snapshot.portfolio.nav,
+      performanceHistory: [{
+        dailyReturn: null,
+        drawdown: snapshot.portfolio.drawdown,
+        nav: snapshot.portfolio.nav,
+        time: snapshot.asOf,
+      }],
+    }} />)
 
     const portfolio = screen.getByRole('figure', { name: 'Paper portfolio performance' })
     fireEvent.click(within(portfolio).getByRole('tab', { name: 'Day return' }))
@@ -217,8 +147,8 @@ describe('TodayPage', () => {
     expect(within(heatmap).getByText('BULLISH')).toBeInTheDocument()
     expect(within(heatmap).getByText('HOLD')).toBeInTheDocument()
     expect(within(heatmap).getByText(/94% coverage/)).toBeInTheDocument()
-    expect(within(heatmap).getByText(/fixture-market/)).toBeInTheDocument()
-    expect(within(heatmap).getByText(/0s delay/)).toBeInTheDocument()
+    expect(within(heatmap).getAllByText(/fixture-market/)).toHaveLength(snapshot.watchlist.length)
+    expect(within(heatmap).getByText('0s delay')).toBeInTheDocument()
     expect(within(heatmap).getByText(/No conflict/)).toBeInTheDocument()
   })
 

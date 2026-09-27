@@ -1,3 +1,5 @@
+import { fixturePortfolioSnapshot } from './fixtures'
+
 export type ResearchOpinion = 'BULLISH' | 'NEUTRAL' | 'BEARISH' | 'ABSTAIN'
 export type PortfolioAction = 'ENTER' | 'ADD' | 'HOLD' | 'REDUCE' | 'EXIT' | 'NO_ACTION'
 
@@ -49,6 +51,7 @@ export type TodaySnapshot = {
     nav: string
     performanceHistory: Array<{
       cumulativeReturn: string
+      dailyReturn: string
       drawdown: string
       nav: string
       time: string
@@ -157,6 +160,7 @@ export function parseTodaySnapshot(value: unknown): TodaySnapshot {
     return {
       time: awareDateTime(point.time, `${path}.time`),
       nav: decimal(point.nav, `${path}.nav`),
+      dailyReturn: decimal(point.dailyReturn, `${path}.dailyReturn`),
       cumulativeReturn: decimal(point.cumulativeReturn, `${path}.cumulativeReturn`),
       drawdown: decimal(point.drawdown, `${path}.drawdown`),
     }
@@ -278,15 +282,7 @@ export const fixtureTodaySnapshot = parseTodaySnapshot({
     currency: 'USD',
     dayReturn: '0.0042',
     drawdown: '-0.0180',
-    performanceHistory: [
-      { time: '2026-07-25T20:00:00Z', nav: '102265.97', cumulativeReturn: '0.0226597', drawdown: '0' },
-      { time: '2026-08-01T20:00:00Z', nav: '101360.00', cumulativeReturn: '0.0136', drawdown: '-0.0089' },
-      { time: '2026-08-08T20:00:00Z', nav: '101620.00', cumulativeReturn: '0.0162', drawdown: '-0.0063' },
-      { time: '2026-08-15T20:00:00Z', nav: '100780.00', cumulativeReturn: '0.0078', drawdown: '-0.0145' },
-      { time: '2026-08-18T20:00:00Z', nav: '100240.00', cumulativeReturn: '0.0024', drawdown: '-0.0198' },
-      { time: '2026-08-20T20:00:00Z', nav: '100005.16', cumulativeReturn: '0.0000516', drawdown: '-0.0221' },
-      { time: '2026-08-21T20:00:00Z', nav: '100425.18', cumulativeReturn: '0.0042518', drawdown: '-0.0180' },
-    ],
+    performanceHistory: fixturePortfolioSnapshot.performanceHistory.slice(-7),
     benchmarks: { cash: '0', qqq: '0.0038', equalWeight: '0.0031', momentum: '0.0045' },
   },
   watchlist: [
