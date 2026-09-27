@@ -43,6 +43,20 @@ async function inspectHorizontalOverflow(page: import('@playwright/test').Page) 
   })
 }
 
+async function focusWithKeyboard(
+  page: import('@playwright/test').Page,
+  target: import('@playwright/test').Locator,
+) {
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+  })
+  for (let index = 0; index < 32; index += 1) {
+    await page.keyboard.press('Tab')
+    if (await target.evaluate((element) => document.activeElement === element)) return
+  }
+  throw new Error('Target was not reachable with keyboard Tab navigation')
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route(/tradingview\.com/, (route) => route.abort())
 })
@@ -244,6 +258,104 @@ test('Today uses the approved split workspace without overlapping facts', async 
     await expect(activity.locator('.alert-list > li').last()).toHaveCSS('border-bottom-width', '0px')
     await expect(summary.locator('.performance-overview.is-compact .chart-dates')).toHaveCSS('border-top-width', '0px')
   }
+})
+
+test('Today watchlist disclosure preserves native keyboard focus across the viewport matrix', async ({ page }) => {
+  for (const viewport of [
+    { width: 1440, height: 800 },
+    { width: 1280, height: 720 },
+    { width: 393, height: 852 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await page.goto('/')
+
+    const workspace = page.getByRole('region', { name: 'Today decision workspace' })
+    const watchlist = workspace.getByRole('region', { name: 'Watchlist signals' })
+    const list = watchlist.getByRole('list', { name: 'Watchlist signals' })
+    const listId = await list.getAttribute('id')
+    const showAll = watchlist.getByRole('button', { name: 'Show all (5)' })
+
+    expect(listId).toBeTruthy()
+    await expect(list.getByRole('listitem')).toHaveCount(2)
+    await expect(showAll).toHaveAttribute('aria-expanded', 'false')
+    await expect(showAll).toHaveAttribute('aria-controls', listId!)
+
+    if (viewport.width >= 1280) {
+      const workspaceBounds = await workspace.boundingBox()
+      expect(workspaceBounds).not.toBeNull()
+      expect(
+        workspaceBounds!.y + workspaceBounds!.height,
+        `collapsed Today workspace exceeded ${viewport.width}x${viewport.height}`,
+      ).toBeLessThanOrEqual(viewport.height)
+    }
+
+    await focusWithKeyboard(page, showAll)
+    await expect(showAll).toBeFocused()
+    await page.keyboard.press('Enter')
+
+    const showLess = watchlist.getByRole('button', { name: 'Show less' })
+    await expect(showLess).toHaveAttribute('aria-expanded', 'true')
+    await expect(showLess).toHaveAttribute('aria-controls', listId!)
+    await expect(showLess).toBeFocused()
+    await expect(list).toHaveAttribute('id', listId!)
+    await expect(list.getByRole('listitem')).toHaveCount(5)
+
+    await page.keyboard.press('Space')
+    await expect(showAll).toHaveAttribute('aria-expanded', 'false')
+    await expect(showAll).toBeFocused()
+    await expect(list).toHaveAttribute('id', listId!)
+    await expect(list.getByRole('listitem')).toHaveCount(2)
+
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  }
+})
+
+test('Today portfolio tabs control one chart and remain readable in both themes', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 800 })
+  await page.goto('/')
+
+  const figure = page.getByRole('figure', { name: 'Paper portfolio performance' })
+  const plot = figure.getByRole('tabpanel')
+  const tabs = figure.getByRole('tablist', { name: 'Performance metric' })
+  const nav = tabs.getByRole('tab', { name: 'Net asset value' })
+  const dayReturn = tabs.getByRole('tab', { name: 'Day return' })
+  const drawdown = tabs.getByRole('tab', { name: 'Current drawdown' })
+
+  await expect(figure.getByRole('img', { name: 'Net asset value history' })).toBeVisible()
+  await expect(plot).toHaveAttribute('data-metric', 'nav')
+  await expect(plot.locator('svg')).toHaveCount(1)
+
+  await focusWithKeyboard(page, nav)
+  await page.keyboard.press('ArrowRight')
+  await expect(dayReturn).toBeFocused()
+  await expect(dayReturn).toHaveAttribute('aria-selected', 'true')
+  await expect(plot).toHaveAttribute('data-metric', 'dailyReturn')
+  await expect(figure.getByRole('img', { name: 'Day return history' })).toBeVisible()
+  await expect(plot.locator('svg')).toHaveCount(1)
+
+  await drawdown.click()
+  await expect(drawdown).toHaveAttribute('aria-selected', 'true')
+  await expect(plot).toHaveAttribute('data-metric', 'drawdown')
+  await expect(figure.getByRole('img', { name: 'Current drawdown history' })).toBeVisible()
+  await expect(plot.locator('svg')).toHaveCount(1)
+
+  for (const theme of ['light', 'dark'] as const) {
+    if (await page.locator('html').getAttribute('data-theme') !== theme) {
+      await page.getByRole('button', { name: `Switch to ${theme} mode` }).click()
+    }
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+    await focusWithKeyboard(page, drawdown)
+    await expect(drawdown).toBeFocused()
+    await expect(drawdown).toHaveCSS('outline-style', 'solid')
+    await expect(figure.getByRole('img', { name: 'Current drawdown history' })).toBeVisible()
+    const colors = await drawdown.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { background: style.backgroundColor, foreground: style.color }
+    })
+    expect(colors.foreground).not.toBe(colors.background)
+  }
+
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
 test('theme and reduced-motion preferences preserve a calm readable surface', async ({ page }) => {

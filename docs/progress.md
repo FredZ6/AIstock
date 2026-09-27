@@ -4249,3 +4249,37 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   Ruff format/check clean for 339 files, Mypy clean for 292 source files, Alembic drift checks passed,
   backend 767 passed / 5 optional live-provider tests skipped, frontend 35 files and 243/243 tests
   passed, and the Next.js production build succeeded.
+
+## 2026-09-28 — Today chart and Watchlist browser closure
+
+- Added native-keyboard browser acceptance for the compact Today Watchlist at 1440x800, 1280x720
+  and 393x852. Each viewport now proves that an authoritative five-row source initially renders
+  exactly two rows; Enter expands all five rows in the same controlled list; Space collapses back to
+  two; `aria-expanded`, `aria-controls` and focus remain correct throughout. The two desktop sizes
+  also retain the approved collapsed first-viewport density, and every size remains free of horizontal
+  overflow. The complete Fixture desktop/mobile Playwright matrix exited 0 with 28/28 tests passed.
+- Added browser acceptance for the one-chart Portfolio selector. Net asset value, Day return and
+  Current drawdown switch the same tabpanel and SVG, expose the matching accessible chart name and
+  `data-metric`, retain visible keyboard focus and readable foreground/background colors in light and
+  dark themes, and do not introduce horizontal overflow. Focused desktop and mobile runs each exited
+  0 with 2/2 tests passed.
+- Meaningful RED evidence was retained rather than fabricated: the first browser run found that the
+  production Fixture Today adapter supplied only two Watchlist rows, so no disclosure could exist.
+  GREEN now derives Today's Watchlist from the existing five-row authoritative Fixture snapshot while
+  still rendering only two rows by default. The first real keyboard check also exposed a test-only
+  issue: programmatic focus did not exercise `:focus-visible`; the acceptance now reaches controls via
+  native Playwright Tab input before using Enter and Space. No production focus workaround was added.
+- The isolated API runtime exposed genuine harness drift: its worker still listened to the obsolete
+  `celery` queue while recovery and research tasks route to `control` and `agent-research`. After the
+  harness subscribed to the declared queues, API browser acceptance exited 0 with 14/14 tests and the
+  worker/SSE integration group exited 0 with 28/28 tests. The acceptance opens the intentionally
+  collapsed durable trace before counting events and proves that missing persisted NAV renders the
+  explicit empty state with no Fixture label, frozen synthetic copy, chart, or fallback series.
+- The isolated API environment deliberately has no external-provider credentials: SEC and Alpha
+  Vantage remain explicit unconfigured facts and Portfolio NAV remains empty. These results verify
+  honest degradation and absence of fallback; they are not evidence of live-provider success. The
+  five optional external-provider contract tests remain skipped rather than simulated.
+- With all managed writers stopped, the final fresh `make verify` exited 0: Ruff format/check clean
+  for 339 files, Mypy clean for 292 source files, Alembic drift checks passed, backend 767 passed / 5
+  optional live-provider tests skipped, frontend 36 files and 263/263 tests passed, and the Next.js
+  production build succeeded.

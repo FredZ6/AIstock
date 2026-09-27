@@ -56,7 +56,7 @@ PYTHONPATH="${repo_root}/backend/src" DATABASE_URL="${database_url}" \
 PYTHONPATH="${repo_root}/backend/src" ENVIRONMENT=test DATABASE_URL="${database_url}" \
   REDIS_URL="${redis_url}" MINIO_ENDPOINT="http://127.0.0.1:59000" \
   .venv/bin/celery -A stock_platform.workers.celery_app:celery_app worker \
-    --pool=solo --concurrency=1 --loglevel=INFO --queues=celery \
+    --pool=solo --concurrency=1 --loglevel=INFO --queues=control,agent-research \
     --hostname="${worker_name}" --pidfile= >"${worker_log}" 2>&1 &
 worker_pid=$!
 

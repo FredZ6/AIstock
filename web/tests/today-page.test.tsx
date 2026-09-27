@@ -154,22 +154,14 @@ describe('TodayPage', () => {
     expect(within(heatmap).getByText('BULLISH')).toBeInTheDocument()
     expect(within(heatmap).getByText('HOLD')).toBeInTheDocument()
     expect(within(heatmap).getByText(/94% coverage/)).toBeInTheDocument()
-    expect(within(heatmap).getAllByText(/fixture-market/)).toHaveLength(snapshot.watchlist.length)
+    expect(within(heatmap).getAllByText(/fixture-market/)).toHaveLength(2)
     expect(within(heatmap).getByText('0s delay')).toBeInTheDocument()
     expect(within(heatmap).getByText(/No conflict/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Show all/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show all (5)' })).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('shows two Watchlist rows until the user expands the same list by keyboard', () => {
-    const fourRowSnapshot = {
-      ...snapshot,
-      watchlist: [
-        ...snapshot.watchlist,
-        { ...snapshot.watchlist[0]!, symbol: 'AMD' },
-        { ...snapshot.watchlist[1]!, symbol: 'AAPL' },
-      ],
-    }
-    render(<TodayPage snapshot={fourRowSnapshot} />)
+    render(<TodayPage snapshot={snapshot} />)
 
     const list = screen.getByRole('list', { name: 'Watchlist signals' })
     expect(within(list).getAllByRole('link')).toHaveLength(2)
@@ -178,14 +170,14 @@ describe('TodayPage', () => {
     expect(within(list).queryByRole('link', { name: 'AMD' })).not.toBeInTheDocument()
     expect(within(list).queryByRole('link', { name: 'AAPL' })).not.toBeInTheDocument()
 
-    const showAll = screen.getByRole('button', { name: 'Show all (4)' })
+    const showAll = screen.getByRole('button', { name: 'Show all (5)' })
     expect(showAll).toHaveAttribute('aria-expanded', 'false')
     expect(showAll).toHaveAttribute('aria-controls', list.id)
 
     activateButtonWithKeyboard(showAll)
 
     expect(screen.getByRole('list', { name: 'Watchlist signals' })).toBe(list)
-    expect(within(list).getAllByRole('link')).toHaveLength(4)
+    expect(within(list).getAllByRole('link')).toHaveLength(5)
     expect(within(list).getByRole('link', { name: 'AMD' })).toBeInTheDocument()
     expect(within(list).getByRole('link', { name: 'AAPL' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true')

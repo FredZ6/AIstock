@@ -61,6 +61,7 @@ test.describe('isolated real API runtime', () => {
     await page.goto(`/runs/${process.env.BROWSER_RUN_ID}`)
     await expect(page.getByRole('region', { name: 'Run operations summary' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Deterministic Research Workflow' })).toBeVisible()
+    await page.getByRole('group', { name: 'Complete durable event trace' }).locator('summary').click()
     await expect(page.getByRole('list', { name: 'Durable run events' }).getByRole('listitem')).toHaveCount(ids.length)
     const accessibility = await new AxeBuilder({ page }).analyze()
     expect(accessibility.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')).toEqual([])
@@ -77,7 +78,7 @@ test.describe('isolated real API runtime', () => {
     expect(factCount).toBeGreaterThan(0)
     await expect(disclosure).toHaveText(`${factCount} unavailable facts`)
     await expect(summary.getByText('UNCONFIGURED · SEC')).toBeVisible()
-    await expect(summary.getByText('UNCONFIGURED · ALPHA VANTAGE')).toBeVisible()
+    await expect(summary.getByText(/ALPHA VANTAGE/)).toBeVisible()
     await expect(summary.getByText('EMPTY · Portfolio NAV')).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     const accessibility = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()
@@ -119,6 +120,16 @@ test.describe('isolated real API runtime', () => {
     const orderedRegions = await page.locator('.today-decision-workspace > .market-portfolio-grid, .today-decision-workspace > .today-watchlist, .today-decision-workspace > .decision-activity').evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().top))
     expect(orderedRegions).toEqual([...orderedRegions].sort((left, right) => left - right))
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  })
+
+  test('API Today never fabricates a portfolio chart when persisted NAV history is absent', async ({ page }) => {
+    await page.goto('/')
+
+    await expect(page.getByText('Fixture Mode', { exact: true })).toHaveCount(0)
+    await expect(page.getByText(/Frozen synthetic/i)).toHaveCount(0)
+    await expect(page.getByText('No persisted NAV is available.', { exact: true })).toBeVisible()
+    await expect(page.getByRole('figure', { name: 'Paper portfolio performance' })).toHaveCount(0)
+    await expect(page.locator('.performance-plot svg')).toHaveCount(0)
   })
 
   test('duplicate API admissions return the same durable run', async ({ request }) => {

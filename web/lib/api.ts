@@ -1,4 +1,4 @@
-import { fixturePortfolioSnapshot } from './fixtures'
+import { fixturePortfolioSnapshot, fixtureWatchlistSnapshot } from './fixtures'
 
 export type ResearchOpinion = 'BULLISH' | 'NEUTRAL' | 'BEARISH' | 'ABSTAIN'
 export type PortfolioAction = 'ENTER' | 'ADD' | 'HOLD' | 'REDUCE' | 'EXIT' | 'NO_ACTION'
@@ -285,36 +285,7 @@ export const fixtureTodaySnapshot = parseTodaySnapshot({
     performanceHistory: fixturePortfolioSnapshot.performanceHistory.slice(-7),
     benchmarks: { cash: '0', qqq: '0.0038', equalWeight: '0.0031', momentum: '0.0045' },
   },
-  watchlist: [
-    {
-      symbol: 'NVDA',
-      price: '129.84',
-      dailyReturn: '0.0214',
-      researchOpinion: 'BULLISH',
-      portfolioAction: 'HOLD',
-      dataQuality: {
-        freshness: 'FRESH',
-        coverage: '0.94',
-        provider: 'fixture-market',
-        delaySeconds: '0',
-        conflict: false,
-      },
-    },
-    {
-      symbol: 'MSFT',
-      price: '507.24',
-      dailyReturn: '-0.0036',
-      researchOpinion: 'NEUTRAL',
-      portfolioAction: 'NO_ACTION',
-      dataQuality: {
-        freshness: 'STALE',
-        coverage: '0.71',
-        provider: 'fixture-market',
-        delaySeconds: '900',
-        conflict: true,
-      },
-    },
-  ],
+  watchlist: fixtureWatchlistSnapshot.symbols.map((item) => ({ ...item })),
   alerts: [
     {
       id: 'a1000000-0000-4000-8000-000000000001',
