@@ -32,6 +32,7 @@ describe('home page', () => {
     }))
     vi.doMock('../lib/server/live-data-api', () => ({
       getAlerts: vi.fn(async () => ({ items: [], nextCursor: null })),
+      getLatestResearchRun: vi.fn(async () => ({ dataCutoff: '2026-08-29T09:00:00Z', decisionTime: '2026-08-29T09:00:00Z', runId: 'run-1', runType: 'RESEARCH', status: 'COMPLETED', symbol: 'NVDA' })),
       getMarketQuotes: vi.fn(async () => ({
         decisionTime: '2026-08-29T09:30:00Z',
         items: [{
@@ -56,7 +57,7 @@ describe('home page', () => {
 
     render(await Home())
 
-    expect(within(screen.getByRole('list', { name: 'Market watchlist' })).getByText('USD 217.55')).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: 'Watchlist signals' })).getByText('USD 217.55')).toBeInTheDocument()
     const degraded = screen.getByRole('status', { name: 'Some decision facts are unavailable' })
     expect(degraded).toHaveTextContent('1 unavailable fact')
     expect(screen.getByText('Decision Domain')).toBeInTheDocument()
@@ -73,6 +74,7 @@ describe('home page', () => {
     }))
     vi.doMock('../lib/server/live-data-api', () => ({
       getAlerts: vi.fn(async () => ({ items: [], nextCursor: null })),
+      getLatestResearchRun: vi.fn(async () => ({ dataCutoff: '2026-08-29T09:00:00Z', decisionTime: '2026-08-29T09:00:00Z', runId: 'run-1', runType: 'RESEARCH', status: 'COMPLETED', symbol: 'NVDA' })),
       getMarketQuotes: vi.fn(async () => ({
         decisionTime: '2026-08-29T09:30:00Z',
         items: [{
@@ -97,7 +99,7 @@ describe('home page', () => {
 
     render(await Home())
 
-    expect(within(screen.getByRole('list', { name: 'Market watchlist' })).getByText('USD 217.55')).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: 'Watchlist signals' })).getByText('USD 217.55')).toBeInTheDocument()
     expect(screen.getByRole('status', { name: 'Some decision facts are unavailable' })).toHaveTextContent(
       'Market quote quality',
     )
@@ -111,6 +113,7 @@ describe('home page', () => {
     }))
     vi.doMock('../lib/server/live-data-api', () => ({
       getAlerts: vi.fn(async () => ({ items: [], nextCursor: null })),
+      getLatestResearchRun: vi.fn(async () => ({ dataCutoff: '2026-08-29T09:00:00Z', decisionTime: '2026-08-29T09:00:00Z', runId: 'run-1', runType: 'RESEARCH', status: 'COMPLETED', symbol: 'NVDA' })),
       getMarketQuotes: vi.fn(async () => ({
         decisionTime: '2026-08-29T09:30:00Z',
         items: [{
@@ -146,6 +149,7 @@ describe('home page', () => {
     }))
     vi.doMock('../lib/server/live-data-api', () => ({
       getAlerts: vi.fn(async () => ({ items: [], nextCursor: null })),
+      getLatestResearchRun: vi.fn(async () => ({ dataCutoff: '2026-08-29T09:00:00Z', decisionTime: '2026-08-29T09:00:00Z', runId: 'run-1', runType: 'RESEARCH', status: 'COMPLETED', symbol: 'NVDA' })),
       getMarketQuotes: vi.fn(async () => ({ decisionTime: '2026-09-09T14:30:00Z', items: [{
         availableAt: '2026-09-09T14:29:00Z', close: '217.55', coverage: 'IEX',
         eventTime: '2026-09-09T14:28:00Z', provider: 'ALPACA', symbol: 'NVDA',
@@ -176,6 +180,31 @@ describe('home page', () => {
     expect(degraded).toHaveTextContent('UNSUPPORTED · NVDA options')
     expect(degraded).toHaveTextContent('No approved read-only producer exists for options.')
     expect(degraded).toHaveTextContent('UNSUPPORTED · NVDA analyst targets')
+  })
+
+  it('keeps Today available when the latest persisted run request fails', async () => {
+    vi.stubEnv('WEB_DATA_MODE', 'api')
+    vi.stubEnv('API_BASE_URL', 'http://api.test')
+    vi.doMock('../lib/server/watchlist-api', () => ({ listWatchlist: vi.fn(async () => []) }))
+    vi.doMock('../lib/server/live-data-api', () => ({
+      getAlerts: vi.fn(async () => ({ items: [], nextCursor: null })),
+      getLatestResearchRun: vi.fn(async () => { throw new Error('run unavailable') }),
+      getMarketQuotes: vi.fn(),
+      getPortfolioSummary: vi.fn(async () => ({
+        cash: { balance: '100000', currency: 'USD' }, cashLedger: [], configuration: null, fills: [], initializedAt: null,
+        latestNav: { availableAt: '2026-09-09T14:25:00Z', eventTime: '2026-09-09T14:25:00Z', id: 'nav-1', nav: '100000', portfolioId: 'p1' },
+        orders: [], performanceHistory: [], positions: [], riskDecisions: [], status: 'SUCCESS', trading: 'paper_only',
+      })),
+      getProviderHealth: vi.fn(async () => ({ mode: 'paper', providers: {} })),
+      getStockResearch: vi.fn(),
+    }))
+    const { default: Home } = await import('../app/page')
+
+    render(await Home())
+
+    expect(screen.getByRole('status', { name: 'Some decision facts are unavailable' })).toHaveTextContent('Research run API')
+    expect(screen.getByRole('region', { name: 'Research execution' })).toHaveTextContent('No persisted research run is available')
+    expect(screen.queryByText('Fixture Mode')).not.toBeInTheDocument()
   })
 
   it('reaches a truthful Success state and renders all available authoritative facts', async () => {

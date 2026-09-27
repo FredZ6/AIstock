@@ -4,6 +4,7 @@ import { readWebDataConfig } from '../lib/server/data-mode'
 import { reportLiveDataFailure } from '../lib/server/live-data-diagnostics'
 import {
   getAlerts,
+  getLatestResearchRun,
   getMarketQuotes,
   getPortfolioSummary,
   getProviderHealth,
@@ -23,16 +24,18 @@ export default async function Home() {
     }
     const decisionTime = new Date().toISOString()
     const options = { baseUrl: config.baseUrl, decisionTime }
-    const [watchlistResult, healthResult, portfolioResult, alertsResult] = await Promise.allSettled([
+    const [watchlistResult, healthResult, portfolioResult, alertsResult, latestRunResult] = await Promise.allSettled([
       listWatchlist({ baseUrl: config.baseUrl }),
       getProviderHealth(options),
       getPortfolioSummary(options),
       getAlerts(options),
+      getLatestResearchRun(options),
     ])
     if (watchlistResult.status === 'rejected') reportLiveDataFailure('/', 'watchlist', watchlistResult.reason)
     if (healthResult.status === 'rejected') reportLiveDataFailure('/', 'provider-health', healthResult.reason)
     if (portfolioResult.status === 'rejected') reportLiveDataFailure('/', 'portfolio', portfolioResult.reason)
     if (alertsResult.status === 'rejected') reportLiveDataFailure('/', 'alerts', alertsResult.reason)
+    if (latestRunResult.status === 'rejected') reportLiveDataFailure('/', 'latest-research-run', latestRunResult.reason)
     const watchlist = watchlistResult.status === 'fulfilled' ? watchlistResult.value : []
     const quotesResult = watchlistResult.status === 'fulfilled' && watchlist.length === 0
       ? { status: 'fulfilled' as const, value: { items: [], missingSymbols: [], status: 'SUCCESS' as const } }
@@ -56,7 +59,7 @@ export default async function Home() {
     const research = researchResults.flatMap((result) =>
       result.status === 'fulfilled' ? result.value.records : [],
     )
-    const availableFacts = [healthResult, portfolioResult, quotesResult, alertsResult]
+    const availableFacts = [healthResult, portfolioResult, quotesResult, alertsResult, latestRunResult]
       .some((result) => result.status === 'fulfilled')
     if (!availableFacts) return <ApiFailurePage currentPath="/" title="Today" />
     const fact = (input: Parameters<typeof availabilityFromDomain>[0]): AvailabilityFact => availabilityFromDomain(input)
@@ -65,6 +68,7 @@ export default async function Home() {
       ...(healthResult.status === 'rejected' ? [fact({ key: 'provider:health', label: 'Provider health', reason: 'The provider health API request failed.', state: 'FAILURE', action: { href: '/eval', label: 'Review runtime' } })] : []),
       ...(portfolioResult.status === 'rejected' ? [fact({ key: 'api:portfolio', label: 'Portfolio API', reason: 'The Paper Portfolio API request failed.', state: 'FAILURE', action: { href: '/portfolio', label: 'Review portfolio' } })] : []),
       ...(alertsResult.status === 'rejected' ? [fact({ key: 'api:alerts', label: 'Alerts API', reason: 'The Alerts API request failed.', state: 'FAILURE', action: { href: '/alerts', label: 'Review alerts' } })] : []),
+      ...(latestRunResult.status === 'rejected' ? [fact({ key: 'api:latest-research-run', label: 'Research run API', reason: 'The latest persisted research run request failed.', state: 'FAILURE', action: { href: '/runs/latest', label: 'Review run trace' } })] : []),
       ...(quotesResult.status === 'rejected' ? [fact({ key: 'market:api', label: 'Market quotes API', reason: 'The market quote API request failed.', state: 'FAILURE', action: { href: '/watchlist', label: 'Review market data' } })] : []),
       ...(quotesResult.status === 'fulfilled' && quotesResult.value.status !== 'SUCCESS' ? [fact({ key: 'market:quality', label: 'Market quote quality', reason: 'Persisted market quote coverage or quality is degraded.', state: 'DEGRADED', action: { href: '/watchlist', label: 'Review quote quality' } })] : []),
       ...(quotesResult.status === 'fulfilled' ? quotesResult.value.missingSymbols.map((symbol) => fact({ key: `market:quote:${symbol}`, label: `${symbol} market quote`, reason: 'No point-in-time eligible market quote was persisted.', state: 'EMPTY', action: { href: '/watchlist', label: 'Review market ingestion' } })) : []),
@@ -82,6 +86,7 @@ export default async function Home() {
       }),
     ]
     return <ApiTodayPage
+      activeRun={latestRunResult.status === 'fulfilled' ? latestRunResult.value : null}
       alerts={alertsResult.status === 'fulfilled' ? alertsResult.value.items : []}
       asOf={decisionTime}
       health={healthResult.status === 'fulfilled' ? healthResult.value : null}
