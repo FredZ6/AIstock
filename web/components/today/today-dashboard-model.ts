@@ -11,6 +11,14 @@ export type TodayDashboardPanel = {
   title: string
 }
 
+export type TodayDashboardWatchlistPanel = {
+  action?: ReactNode
+  context?: ReactNode
+  items: ReactNode[]
+  kicker: string
+  title: string
+}
+
 export type TodayDashboardModel = {
   activeRun: TodaySlot<TodayDashboardPanel>
   alerts: TodaySlot<TodayDashboardPanel>
@@ -24,5 +32,5 @@ export type TodayDashboardModel = {
   marketRegime: TodaySlot<ReactNode>
   mode: 'api' | 'fixture'
   portfolio: TodaySlot<ReactNode>
-  watchlist: TodaySlot<TodayDashboardPanel>
+  watchlist: TodaySlot<TodayDashboardWatchlistPanel>
 }

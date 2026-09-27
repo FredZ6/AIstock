@@ -402,6 +402,7 @@ tbody th a { min-height: 2.75rem; display: inline-flex; align-items: center; fon
 .today-watchlist .watchlist-heatmap .heatmap-decisions { grid-column: 2; align-self: center; margin-top: 0; }
 .today-watchlist .watchlist-heatmap .quality-line { margin-top: 0; line-height: 1.3; }
 .today-watchlist .watchlist-heatmap > li > p { margin: 0; font-size: var(--font-caption); line-height: 1.3; }
+.watchlist-heading-actions { display: flex; align-items: center; gap: 0.75rem; }
 .watchlist-heatmap li[data-direction="negative"] { background: var(--surface-highlight); }
 .heatmap-primary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .heatmap-primary a { font-size: 1.05rem; font-weight: 760; }

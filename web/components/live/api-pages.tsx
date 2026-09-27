@@ -224,10 +224,8 @@ export function ApiTodayPage({
       kicker: 'Discover',
       title: 'Watchlist signals',
       action: <Link className="compact-hit-link" href="/watchlist">Manage watchlist</Link>,
-      content: <>
-        <p className="muted-copy"><span>Current market context · not decision-time evidence</span><small>TradingView data is external current-market context · Not decision-time evidence</small></p>
-        <ul aria-label="Watchlist signals" className="market-list persisted-market-list watchlist-heatmap">
-          {quotes.map((quote) => {
+      context: <p className="muted-copy"><span>Current market context · not decision-time evidence</span><small>TradingView data is external current-market context · Not decision-time evidence</small></p>,
+      items: quotes.map((quote) => {
             const decision = latestResearchBySymbol.get(quote.symbol)
             return <li key={quote.symbol}>
               <div className="heatmap-primary"><Link className="compact-hit-link" href={`/research/${quote.symbol}`}>{quote.symbol}</Link><strong>{formatMoney(quote.close, 'USD')}</strong></div>
@@ -235,9 +233,7 @@ export function ApiTodayPage({
               {decision ? <p>{decision.summary}</p> : null}
               <div className="quality-line"><span>{quote.provider} · {quote.coverage}</span><time dateTime={quote.availableAt}>Available {formatDualTime(quote.availableAt).newYork}</time></div>
             </li>
-          })}
-        </ul>
-      </>,
+          }),
     } } : { kind: 'empty', message: 'No point-in-time eligible watchlist quotes are available.' },
     alerts: alerts.length ? { kind: 'available', value: {
       kicker: 'Decide', title: 'Actionable alerts', action: <Link className="compact-hit-link" href="/alerts">View all</Link>,

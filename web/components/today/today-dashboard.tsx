@@ -1,5 +1,6 @@
 import type { TodayDashboardModel, TodaySlot } from './today-dashboard-model'
 import { formatDualTime } from '../../lib/time'
+import { TodayWatchlistSection } from './today-watchlist-section'
 
 function SlotFallback({ slot }: { slot: Exclude<TodaySlot<unknown>, { kind: 'available' }> }) {
   return <p className="unavailable-value" data-slot-state={slot.kind}>{slot.message}</p>
@@ -41,18 +42,12 @@ export function TodayDashboard({ model }: { model: TodayDashboardModel }) {
       </div>
     </section>
 
-    <section aria-label="Watchlist signals" className="terminal-section today-watchlist">
-      {model.watchlist.kind === 'available' ? <>
-        <div className="section-heading">
-          <div><p className="section-kicker">{model.watchlist.value.kicker}</p><h2>{model.watchlist.value.title}</h2></div>
-          {model.watchlist.value.action}
-        </div>
-        {model.watchlist.value.content}
-      </> : <>
+    {model.watchlist.kind === 'available'
+      ? <TodayWatchlistSection mode={model.mode} panel={model.watchlist.value} />
+      : <section aria-label="Watchlist signals" className="terminal-section today-watchlist">
         <p className="section-kicker">Discover</p><h2>Watchlist signals</h2>
         <SlotFallback slot={model.watchlist} />
-      </>}
-    </section>
+      </section>}
 
     <section aria-label="Decision activity" className="decision-activity">
       <section className="terminal-section" aria-label="Actionable alerts">

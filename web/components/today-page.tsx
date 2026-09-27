@@ -63,14 +63,12 @@ export function TodayPage({ snapshot }: TodayPageProps) {
     </> },
     watchlist: { kind: 'available', value: {
       kicker: 'Discover', title: 'Watchlist signals', action: <Link className="compact-hit-link" href="/watchlist">Manage watchlist</Link>,
-      content: <ul className="watchlist-heatmap market-list" aria-label="Watchlist signals">
-        {snapshot.watchlist.map((item) => <li key={item.symbol} data-direction={item.dailyReturn.startsWith('-') ? 'negative' : 'positive'}>
+      items: snapshot.watchlist.map((item) => <li key={item.symbol} data-direction={item.dailyReturn.startsWith('-') ? 'negative' : 'positive'}>
           <div className="heatmap-primary"><Link className="compact-hit-link" href={`/research/${item.symbol}`}>{item.symbol}</Link><strong>{formatPercent(item.dailyReturn)}</strong></div>
           <span>{formatMoney(item.price, 'USD')}</span>
           <div className="heatmap-decisions"><Signal tone={item.researchOpinion.toLowerCase()}>{item.researchOpinion}</Signal><Signal tone={item.portfolioAction.toLowerCase()}>{item.portfolioAction}</Signal></div>
           <div className="quality-line"><span>{item.dataQuality.freshness}</span><span>{formatPercent(item.dataQuality.coverage, { fractionDigits: 0, signed: false })} coverage</span><span>{item.dataQuality.provider}</span><span>{item.dataQuality.delaySeconds}s delay</span><span>{item.dataQuality.conflict ? 'Conflict detected' : 'No conflict'}</span></div>
-        </li>)}
-      </ul>,
+        </li>),
     } },
     alerts: snapshot.alerts.length ? { kind: 'available', value: {
       kicker: 'Decide', title: 'Actionable alerts', action: <Link className="compact-hit-link" href="/alerts">View all</Link>,
