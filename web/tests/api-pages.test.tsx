@@ -313,6 +313,58 @@ describe('API mode pages', () => {
     expect(within(chart).queryByText(/Frozen synthetic/)).not.toBeInTheDocument()
   })
 
+  it('ends API performance facts on the authoritative latest NAV id', () => {
+    render(<ApiTodayPage
+      activeRun={null}
+      asOf="2026-08-29T09:30:00Z"
+      health={health}
+      portfolio={{
+        ...emptyPortfolio,
+        latestNav: { availableAt: '2026-08-29T09:21:00Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-authoritative', nav: '110.00', portfolioId: 'portfolio-1' },
+        performanceHistory: [
+          { availableAt: '2026-08-28T09:01:00Z', eventTime: '2026-08-28T09:00:00Z', id: 'nav-previous', nav: '100.00', portfolioId: 'portfolio-1' },
+          { availableAt: '2026-08-29T09:20:30Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-competing-before', nav: '80.00', portfolioId: 'portfolio-1' },
+          { availableAt: '2026-08-29T09:21:00Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-authoritative', nav: '110.00', portfolioId: 'portfolio-1' },
+          { availableAt: '2026-08-29T09:22:00Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-competing', nav: '90.00', portfolioId: 'portfolio-1' },
+        ],
+        status: 'SUCCESS',
+      }}
+      quotes={[]}
+    />)
+
+    const chart = screen.getByRole('figure', { name: 'Paper portfolio performance' })
+    expect(within(chart).getByText('USD 110.00')).toBeInTheDocument()
+    expect(within(chart).getByText('+10.00%')).toBeInTheDocument()
+    expect(within(chart).getByText('0.00%')).toBeInTheDocument()
+    expect(within(chart).getByText('Persisted paper NAV history').parentElement?.querySelector('time')).toHaveAttribute('dateTime', '2026-08-29T09:21:00Z')
+  })
+
+  it('keeps derived facts unavailable when latest NAV is absent from history', () => {
+    render(<ApiTodayPage
+      activeRun={null}
+      asOf="2026-08-29T09:30:00Z"
+      health={health}
+      portfolio={{
+        ...emptyPortfolio,
+        latestNav: { availableAt: '2026-08-29T09:21:00Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-authoritative', nav: '110.00', portfolioId: 'portfolio-1' },
+        performanceHistory: [
+          { availableAt: '2026-08-29T09:22:00Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-other', nav: '90.00', portfolioId: 'portfolio-1' },
+        ],
+        status: 'SUCCESS',
+      }}
+      quotes={[]}
+    />)
+
+    const chart = screen.getByRole('figure', { name: 'Paper portfolio performance' })
+    expect(within(chart).getByText('USD 110.00')).toBeInTheDocument()
+    expect(within(chart).getAllByText('Unavailable')).toHaveLength(2)
+    expect(within(chart).getByText('Persisted paper NAV history').parentElement?.querySelector('time')).toHaveAttribute('dateTime', '2026-08-29T09:21:00Z')
+
+    fireEvent.click(within(chart).getByRole('tab', { name: 'Day return' }))
+    expect(within(chart).getByText('Not enough persisted history for this metric.')).toBeInTheDocument()
+    expect(within(chart).queryByRole('img')).not.toBeInTheDocument()
+  })
+
   it('keeps unavailable API dashboard slots explicit without borrowing Fixture facts', () => {
     render(<ApiTodayPage
       activeRun={null}

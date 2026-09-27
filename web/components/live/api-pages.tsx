@@ -28,7 +28,7 @@ import type {
   SecFiling,
   WeeklyReviewDetail,
 } from '../../lib/server/live-data-api'
-import { formatDualTime } from '../../lib/time'
+import { formatDualTime, parseAwareInstant } from '../../lib/time'
 import { AppShell } from '../layout/app-shell'
 import { TradingViewWidget } from '../market/tradingview-widget'
 import { TradingViewTickerList } from '../market/tradingview-ticker-list'
@@ -203,11 +203,27 @@ export function ApiTodayPage({
     { label: 'Decision Domain', items: facts.filter((item) => !item.key.startsWith('provider:') && !item.key.startsWith('market:')) },
   ].filter((group) => group.items.length)
   const latestResearchBySymbol = new Map(research.map((record) => [record.symbol, record]))
-  const performanceSeries = toPerformanceSeries((portfolio?.performanceHistory ?? []).map((point) => ({
-    availableAt: point.availableAt,
-    nav: point.nav,
-  })))
-  const latestPerformance = performanceSeries.at(-1)
+  const latestNav = portfolio?.latestNav ?? null
+  const latestNavHistoryIndex = latestNav
+    ? (portfolio?.performanceHistory ?? []).findIndex((point) => point.id === latestNav.id)
+    : -1
+  const latestNavTime = latestNav ? latestNav.availableAt ?? latestNav.eventTime : null
+  const authoritativeHistory = latestNav && latestNavTime
+    ? latestNavHistoryIndex >= 0
+      ? [
+          ...(portfolio?.performanceHistory ?? [])
+            .slice(0, latestNavHistoryIndex)
+            .filter((point) => parseAwareInstant(point.eventTime).getTime() < parseAwareInstant(latestNav.eventTime).getTime())
+            .map((point) => ({
+              availableAt: point.availableAt,
+              nav: point.nav,
+            })),
+          { availableAt: latestNavTime, nav: latestNav.nav },
+        ]
+      : [{ availableAt: latestNavTime, nav: latestNav.nav }]
+    : []
+  const performanceSeries = toPerformanceSeries(authoritativeHistory)
+  const latestPerformance = latestNavHistoryIndex >= 0 ? performanceSeries.at(-1) : undefined
   const dashboard: TodayDashboardModel = {
     mode: 'api',
     asOf,
@@ -217,18 +233,18 @@ export function ApiTodayPage({
       summary: 'Current persisted facts, with unavailable domains left explicit.',
       notice: { label: 'API Mode', description: 'Persisted backend facts · no Fixture substitution' },
     },
-    portfolio: portfolio?.latestNav ? { kind: 'available', value: <PerformanceChart
+    portfolio: latestNav && latestNavTime ? { kind: 'available', value: <PerformanceChart
       compact
       historySource={{
         label: 'Persisted paper NAV history',
-        time: latestPerformance?.time ?? portfolio.latestNav.availableAt ?? portfolio.latestNav.eventTime,
+        time: latestNavTime,
       }}
       snapshot={{
         asOf,
-        currency: portfolio.configuration?.currency ?? portfolio.cash?.currency ?? 'USD',
+        currency: portfolio?.configuration?.currency ?? portfolio?.cash?.currency ?? 'USD',
         dayReturn: latestPerformance?.dailyReturn ?? null,
         drawdown: latestPerformance?.drawdown ?? null,
-        nav: portfolio.latestNav.nav,
+        nav: latestNav.nav,
         performanceHistory: performanceSeries,
       }}
     /> } : { kind: 'empty', message: 'No persisted NAV is available.' },
