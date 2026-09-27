@@ -82,6 +82,34 @@ describe('toAuthoritativePerformanceSeries', () => {
     expect(result.latest?.dailyReturn).toBe('-0.08333333')
   })
 
+  it('keeps sub-millisecond events distinct and selects the truly latest correction', () => {
+    const preciseLatest = {
+      availableAt: '2026-09-26T20:00:00.124100Z',
+      eventTime: '2026-09-26T20:00:00.124000Z',
+      id: 'nav-latest-precise',
+      nav: '130.00',
+    }
+    const result = toAuthoritativePerformanceSeries([
+      { availableAt: '2026-09-26T20:00:00.123950Z', eventTime: '2026-09-26T20:00:00.123900Z', id: 'nav-second', nav: '125.00' },
+      { availableAt: '2026-09-26T20:00:00.123100Z', eventTime: '2026-09-26T20:00:00.123100Z', id: 'nav-z-early-correction', nav: '100.00' },
+      { availableAt: '2026-09-26T20:00:00.123900Z', eventTime: '2026-09-26T20:00:00.123100Z', id: 'nav-a-late-correction', nav: '120.00' },
+      preciseLatest,
+    ], preciseLatest)
+
+    expect(result.points.map((point) => point.nav)).toEqual(['120.00', '125.00', '130.00'])
+    expect(result.latest?.dailyReturn).toBe('0.04000000')
+  })
+
+  it('canonicalizes equivalent event instants with different offsets into one bucket', () => {
+    const result = toAuthoritativePerformanceSeries([
+      { availableAt: '2026-09-26T16:01:00-04:00', eventTime: '2026-09-26T16:00:00-04:00', id: 'nav-offset', nav: '100.00' },
+      { availableAt: '2026-09-26T20:02:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-utc', nav: '120.00' },
+      latestNav,
+    ], latestNav)
+
+    expect(result.points.map((point) => point.nav)).toEqual(['120.00', '110.00'])
+  })
+
   it('fails closed to one authoritative point when latestNav id is absent', () => {
     expect(toAuthoritativePerformanceSeries([
       { availableAt: '2026-09-26T20:02:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-other', nav: '120.00' },
