@@ -28,12 +28,12 @@ import type {
   SecFiling,
   WeeklyReviewDetail,
 } from '../../lib/server/live-data-api'
-import { formatDualTime, parseAwareInstant } from '../../lib/time'
+import { formatDualTime } from '../../lib/time'
 import { AppShell } from '../layout/app-shell'
 import { TradingViewWidget } from '../market/tradingview-widget'
 import { TradingViewTickerList } from '../market/tradingview-ticker-list'
 import { PerformanceChart } from '../portfolio/performance-chart'
-import { toPerformanceSeries } from '../portfolio/performance-series'
+import { toAuthoritativePerformanceSeries } from '../portfolio/performance-series'
 import { FinancialFactsDisclosure, SecFilingsDisclosure } from '../research/research-evidence-browser'
 import { ResearchRunControl } from '../research/research-run-control'
 import { StateBoundary } from '../states/state-boundary'
@@ -204,26 +204,13 @@ export function ApiTodayPage({
   ].filter((group) => group.items.length)
   const latestResearchBySymbol = new Map(research.map((record) => [record.symbol, record]))
   const latestNav = portfolio?.latestNav ?? null
-  const latestNavHistoryIndex = latestNav
-    ? (portfolio?.performanceHistory ?? []).findIndex((point) => point.id === latestNav.id)
-    : -1
   const latestNavTime = latestNav ? latestNav.availableAt ?? latestNav.eventTime : null
-  const authoritativeHistory = latestNav && latestNavTime
-    ? latestNavHistoryIndex >= 0
-      ? [
-          ...(portfolio?.performanceHistory ?? [])
-            .slice(0, latestNavHistoryIndex)
-            .filter((point) => parseAwareInstant(point.eventTime).getTime() < parseAwareInstant(latestNav.eventTime).getTime())
-            .map((point) => ({
-              availableAt: point.availableAt,
-              nav: point.nav,
-            })),
-          { availableAt: latestNavTime, nav: latestNav.nav },
-        ]
-      : [{ availableAt: latestNavTime, nav: latestNav.nav }]
-    : []
-  const performanceSeries = toPerformanceSeries(authoritativeHistory)
-  const latestPerformance = latestNavHistoryIndex >= 0 ? performanceSeries.at(-1) : undefined
+  const authoritativePerformance = latestNav && latestNavTime
+    ? toAuthoritativePerformanceSeries(portfolio?.performanceHistory ?? [], {
+        ...latestNav,
+        availableAt: latestNavTime,
+      })
+    : { latest: null, points: [] }
   const dashboard: TodayDashboardModel = {
     mode: 'api',
     asOf,
@@ -242,10 +229,10 @@ export function ApiTodayPage({
       snapshot={{
         asOf,
         currency: portfolio?.configuration?.currency ?? portfolio?.cash?.currency ?? 'USD',
-        dayReturn: latestPerformance?.dailyReturn ?? null,
-        drawdown: latestPerformance?.drawdown ?? null,
+        dayReturn: authoritativePerformance.latest?.dailyReturn ?? null,
+        drawdown: authoritativePerformance.latest?.drawdown ?? null,
         nav: latestNav.nav,
-        performanceHistory: performanceSeries,
+        performanceHistory: authoritativePerformance.points,
       }}
     /> } : { kind: 'empty', message: 'No persisted NAV is available.' },
     marketRegime: { kind: 'unavailable', message: 'No persisted market regime is available.' },
