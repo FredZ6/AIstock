@@ -204,7 +204,8 @@ tbody th a { min-height: 2.75rem; display: inline-flex; align-items: center; fon
 .operations-rail { margin-top: clamp(2.5rem, 6vw, 5rem); padding-left: clamp(1.5rem, 3vw, 2.5rem); border-left: 1px solid var(--line); }
 .operations-rail section + section { margin-top: 3rem; }
 .run-progress { margin-top: 1.25rem; }
-.run-progress > div { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.78rem; }
+.run-progress > div { display: flex; min-width: 0; flex-wrap: wrap; justify-content: space-between; gap: 0.25rem 1rem; font-size: 0.78rem; }
+.run-progress > div > span { max-width: 100%; margin-left: auto; }
 .run-progress > div span { color: var(--signal); font-size: 0.68rem; font-weight: 740; }
 .run-progress progress { width: 100%; height: 0.35rem; margin-top: 1rem; border: 0; border-radius: 1rem; overflow: hidden; background: var(--line-soft); }
 .run-progress progress::-webkit-progress-bar { background: var(--line-soft); }
@@ -245,6 +246,8 @@ tbody th a { min-height: 2.75rem; display: inline-flex; align-items: center; fon
 .market-list > li > span, .market-list > li > time { color: var(--text-secondary); font-size: 0.8125rem; }
 .provider-diagnostics, .persisted-quote-evidence { margin-top: var(--space-dashboard); padding: 0.75rem 1rem; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--surface-section); }
 .provider-diagnostics > summary, .persisted-quote-evidence > summary { min-height: var(--row-compact); align-content: center; cursor: pointer; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 680; }
+.today-page .provider-diagnostics { padding-block: 0.25rem; }
+.today-page .provider-diagnostics > summary { min-height: 1.65rem; }
 .provider-diagnostics[open], .persisted-quote-evidence[open] { padding-bottom: 1rem; }
 .today-decision-workspace .performance-overview.is-compact .performance-head { padding-bottom: 0.6rem; }
 .today-decision-workspace .performance-overview.is-compact .performance-facts { padding: 0.65rem 0; }
@@ -390,12 +393,15 @@ tbody th a { min-height: 2.75rem; display: inline-flex; align-items: center; fon
 .terminal-section[aria-label="Paper trading evidence availability"] h3 { margin: 2rem 0 0.75rem; font-size: 0.85rem; }
 .watchlist-heatmap { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 0.65rem; padding: 0; margin: 1.1rem 0 0; list-style: none; }
 .watchlist-heatmap li { min-width: 0; padding: 1rem; border: 1px solid var(--line-soft); border-radius: 1rem; background: var(--surface-highlight); }
-.today-watchlist .watchlist-heatmap { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--today-gap); margin-top: var(--today-gap); }
-.today-watchlist .watchlist-heatmap > li { display: block; min-height: 0; }
-.today-watchlist .watchlist-heatmap > li { padding: 0.5rem; }
-.today-watchlist .watchlist-heatmap > li > span { margin-top: 0.25rem; }
-.today-watchlist .watchlist-heatmap .heatmap-decisions { margin-top: 0.5rem; }
-.today-watchlist .watchlist-heatmap .quality-line { margin-top: 0.4rem; }
+.today-watchlist .watchlist-heatmap { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--today-gap); margin-top: 0; }
+.today-watchlist .watchlist-heatmap > li { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr) auto; gap: 0.25rem 0.5rem; padding: 0.5rem; }
+.today-watchlist .watchlist-heatmap .heatmap-primary,
+.today-watchlist .watchlist-heatmap .quality-line,
+.today-watchlist .watchlist-heatmap > li > p { grid-column: 1 / -1; }
+.today-watchlist .watchlist-heatmap > li > span { grid-column: 1; margin-top: 0; }
+.today-watchlist .watchlist-heatmap .heatmap-decisions { grid-column: 2; align-self: center; margin-top: 0; }
+.today-watchlist .watchlist-heatmap .quality-line { margin-top: 0; line-height: 1.3; }
+.today-watchlist .watchlist-heatmap > li > p { margin: 0; font-size: var(--font-caption); line-height: 1.3; }
 .watchlist-heatmap li[data-direction="negative"] { background: var(--surface-highlight); }
 .heatmap-primary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .heatmap-primary a { font-size: 1.05rem; font-weight: 760; }
@@ -487,7 +493,7 @@ button:disabled { cursor: not-allowed; opacity: 0.48; }
 .state-compact .state-tags li { padding: 0.25rem 0.5rem; font-size: 0.62rem; }
 .today-page .market-portfolio-grid { margin-top: 0.85rem; }
 .today-page .provider-diagnostics { margin-top: var(--today-gap); }
-.today-page .provider-diagnostics:not([open]) { margin-top: 0; padding-block: 0.35rem; }
+.today-page .provider-diagnostics:not([open]) { margin-top: 0; padding-block: 0; }
 .terminal-section,
 .operations-rail,
 .decision-hero,

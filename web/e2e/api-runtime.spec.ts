@@ -89,6 +89,38 @@ test.describe('isolated real API runtime', () => {
     )
   })
 
+  test('API Today preserves the approved compact split workspace', async ({ page }) => {
+    for (const viewport of [{ width: 1440, height: 800 }, { width: 1280, height: 720 }]) {
+      await page.setViewportSize(viewport)
+      await page.goto('/')
+      const summary = page.getByRole('region', { name: 'Market and portfolio summary' })
+      const watchlist = page.getByRole('region', { name: 'Watchlist signals' })
+      const activity = page.getByRole('region', { name: 'Decision activity' })
+      const workspace = page.getByRole('region', { name: 'Today decision workspace' })
+      const [summaryBounds, watchlistBounds, activityBounds, workspaceBounds] = await Promise.all([
+        summary.boundingBox(), watchlist.boundingBox(), activity.boundingBox(), workspace.boundingBox(),
+      ])
+      expect(summaryBounds).not.toBeNull()
+      expect(watchlistBounds).not.toBeNull()
+      expect(activityBounds).not.toBeNull()
+      expect(workspaceBounds).not.toBeNull()
+      expect(summaryBounds!.x).toBeLessThan(watchlistBounds!.x)
+      expect(watchlistBounds!.y).toBeLessThan(activityBounds!.y)
+      expect(Math.abs(summaryBounds!.y + summaryBounds!.height - (activityBounds!.y + activityBounds!.height))).toBeLessThanOrEqual(2)
+      const horizontalGap = watchlistBounds!.x - (summaryBounds!.x + summaryBounds!.width)
+      const verticalGap = activityBounds!.y - (watchlistBounds!.y + watchlistBounds!.height)
+      expect(Math.abs(horizontalGap - verticalGap)).toBeLessThanOrEqual(2)
+      expect(workspaceBounds!.y + workspaceBounds!.height).toBeLessThanOrEqual(viewport.height)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    }
+
+    await page.setViewportSize({ width: 393, height: 852 })
+    await page.goto('/')
+    const orderedRegions = await page.locator('.today-decision-workspace > .market-portfolio-grid, .today-decision-workspace > .today-watchlist, .today-decision-workspace > .decision-activity').evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().top))
+    expect(orderedRegions).toEqual([...orderedRegions].sort((left, right) => left - right))
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  })
+
   test('duplicate API admissions return the same durable run', async ({ request }) => {
     const idempotencyKey = `browser-idempotency-${process.env.BROWSER_RUN_ID}`
     const payload = { symbol: 'NVDA', decision_time: '2026-08-16T00:00:00Z', data_cutoff: '2026-08-16T00:00:00Z' }

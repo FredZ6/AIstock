@@ -57,13 +57,13 @@ export function TodayDashboard({ model }: { model: TodayDashboardModel }) {
     <section aria-label="Decision activity" className="decision-activity">
       <section className="terminal-section" aria-label="Actionable alerts">
         {model.alerts.kind === 'available' ? <>
-          <div className="section-heading"><div><p className="section-kicker">{model.alerts.value.kicker}</p><h2>{model.alerts.value.title}</h2></div>{model.alerts.value.action}</div>
+          <div className="section-heading"><div><p className="section-kicker">{model.alerts.value.kicker}</p><h2 id="alerts-title">{model.alerts.value.title}</h2></div>{model.alerts.value.action}</div>
           {model.alerts.value.content}
         </> : <><p className="section-kicker">Decide</p><h2>Actionable alerts</h2><SlotFallback slot={model.alerts} /></>}
       </section>
       <section aria-label="Research execution" className="operations-rail research-activity" role="region">
         {model.activeRun.kind === 'available' ? <>
-          <div className="section-heading"><div><p className="section-kicker">{model.activeRun.value.kicker}</p><h2>{model.activeRun.value.title}</h2></div>{model.activeRun.value.action}</div>
+          <p className="section-kicker">{model.activeRun.value.kicker}</p><h2 id="run-title">{model.activeRun.value.title}</h2>{model.activeRun.value.action}
           {model.activeRun.value.content}
         </> : <><p className="section-kicker">Run progress</p><h2>Research execution</h2><SlotFallback slot={model.activeRun} /></>}
       </section>

@@ -254,8 +254,9 @@ export function ApiTodayPage({
   return (
     <AppShell currentPath="/">
       <LiveDataRefresh />
-      <div className="today-page"><TodayDashboardHeader model={dashboard} /></div>
-      <StateBoundary compact state={groups.length ? {
+      <div className="today-page">
+        <TodayDashboardHeader model={dashboard} />
+        <StateBoundary compact state={groups.length ? {
         kind: 'degraded' as const,
         title: 'Some decision facts are unavailable',
         message: 'Available backend facts remain visible. No Fixture data was substituted.',
@@ -285,7 +286,8 @@ export function ApiTodayPage({
             </li>)}
           </ul>
         </details>
-      </StateBoundary>
+        </StateBoundary>
+      </div>
     </AppShell>
   )
 }

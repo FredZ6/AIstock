@@ -227,16 +227,18 @@ test('Today uses the approved split workspace without overlapping facts', async 
     ).toBeLessThanOrEqual(regimeBounds!.y + regimeBounds!.height + 1)
 
     const firstCard = watchlist.locator('.watchlist-heatmap > li').first()
-    const verticalFacts = await firstCard.locator(':scope > .heatmap-primary, :scope > span, :scope > .heatmap-decisions, :scope > .quality-line')
+    const factBounds = await firstCard.locator(':scope > .heatmap-primary, :scope > span, :scope > .heatmap-decisions, :scope > .quality-line')
       .evaluateAll((elements) => elements.map((element) => {
         const bounds = element.getBoundingClientRect()
-        return { bottom: bounds.bottom, top: bounds.top }
+        return { bottom: bounds.bottom, left: bounds.left, right: bounds.right, top: bounds.top }
       }))
-    for (let index = 1; index < verticalFacts.length; index += 1) {
-      expect(
-        verticalFacts[index].top,
-        `watchlist facts overlapped at ${viewport.width}x${viewport.height}`,
-      ).toBeGreaterThanOrEqual(verticalFacts[index - 1].bottom - 1)
+    for (let leftIndex = 0; leftIndex < factBounds.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < factBounds.length; rightIndex += 1) {
+        const left = factBounds[leftIndex]
+        const right = factBounds[rightIndex]
+        const separated = left.bottom <= right.top + 1 || right.bottom <= left.top + 1 || left.right <= right.left + 1 || right.right <= left.left + 1
+        expect(separated, `watchlist facts overlapped at ${viewport.width}x${viewport.height}`).toBe(true)
+      }
     }
 
     await expect(activity.locator('.alert-list > li').last()).toHaveCSS('border-bottom-width', '0px')

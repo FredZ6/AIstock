@@ -195,6 +195,7 @@ describe('API mode pages', () => {
     expect(screen.queryByText('Fixture Mode')).not.toBeInTheDocument()
 
     const workspace = screen.getByRole('region', { name: 'Today decision workspace' })
+    expect(screen.getByRole('heading', { level: 1, name: 'Today' }).closest('.today-page')).toContainElement(workspace)
     expect(workspace).toHaveClass('today-decision-workspace')
     expect(within(workspace).getByRole('region', { name: 'Market and portfolio summary' })).toBeInTheDocument()
     expect(within(workspace).getByRole('region', { name: 'Portfolio overview' })).toBeInTheDocument()
