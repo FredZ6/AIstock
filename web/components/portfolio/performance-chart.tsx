@@ -8,13 +8,21 @@ import { normalizeDecimalSeries } from '../../lib/decimal'
 import { formatMoney, formatPercent } from '../../lib/format'
 import { parseAwareInstant } from '../../lib/time'
 
-type Metric = 'dailyReturn' | 'drawdown' | 'nav'
+type Metric = 'cumulativeReturn' | 'dailyReturn' | 'drawdown' | 'nav'
 type Range = 7 | 30 | 90 | 'all'
 
-const metrics: Array<{ compactLabel?: string; key: Metric; label: string }> = [
+type MetricOption = { key: Metric; label: string }
+
+const compactMetrics: MetricOption[] = [
   { key: 'nav', label: 'Net asset value' },
   { key: 'dailyReturn', label: 'Day return' },
-  { compactLabel: 'Current drawdown', key: 'drawdown', label: 'Drawdown' },
+  { key: 'drawdown', label: 'Current drawdown' },
+]
+
+const fullMetrics: MetricOption[] = [
+  { key: 'nav', label: 'Net asset value' },
+  { key: 'cumulativeReturn', label: 'Cumulative return' },
+  { key: 'drawdown', label: 'Drawdown' },
 ]
 
 function shortDate(value: string) {
@@ -32,7 +40,7 @@ type PerformanceSnapshot = Pick<
   performanceHistory: Array<Pick<
     PortfolioSnapshot['performanceHistory'][number],
     'drawdown' | 'nav' | 'time'
-  > & { dailyReturn?: string | null }>
+  > & { cumulativeReturn?: string | null; dailyReturn?: string | null }>
 }
 
 export function PerformanceChart({
@@ -42,6 +50,7 @@ export function PerformanceChart({
   compact?: boolean
   snapshot: PerformanceSnapshot
 }) {
+  const metrics = compact ? compactMetrics : fullMetrics
   const [metric, setMetric] = useState<Metric>('nav')
   const chartId = useId()
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
@@ -64,9 +73,7 @@ export function PerformanceChart({
   const line = coordinates.map((point, index) => `${index ? 'L' : 'M'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
   const area = coordinates.length ? `${line} L 1000 240 L 0 240 Z` : ''
   const selectedMetric = metrics.find((item) => item.key === metric)
-  const selectedLabel = compact
-    ? selectedMetric?.compactLabel ?? selectedMetric?.label ?? 'Performance'
-    : selectedMetric?.label ?? 'Performance'
+  const selectedLabel = selectedMetric?.label ?? 'Performance'
   const first = usable.at(0)?.point
   const last = usable.at(-1)?.point
 
@@ -115,7 +122,7 @@ export function PerformanceChart({
             role="tab"
             tabIndex={metric === item.key ? 0 : -1}
             type="button"
-          >{compact ? item.compactLabel ?? item.label : item.label}</button>
+          >{item.label}</button>
         ))}
       </div>
 

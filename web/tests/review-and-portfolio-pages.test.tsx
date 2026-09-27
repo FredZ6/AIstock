@@ -66,6 +66,8 @@ describe('portfolio and review pages', () => {
     expect(screen.getAllByText('USD 100,425.18').length).toBeGreaterThan(0)
     const performance = screen.getByRole('figure', { name: 'Portfolio performance' })
     expect(within(performance).getByRole('tab', { name: 'Net asset value' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(performance).getByRole('tab', { name: 'Cumulative return' })).toBeInTheDocument()
+    expect(within(performance).queryByRole('tab', { name: 'Day return' })).not.toBeInTheDocument()
     expect(within(performance).getByRole('img', { name: /Net asset value history/i })).toBeInTheDocument()
     expect(within(performance).getByText(/Frozen synthetic performance history/i)).toBeInTheDocument()
     fireEvent.click(within(performance).getByRole('tab', { name: 'Drawdown' }))
