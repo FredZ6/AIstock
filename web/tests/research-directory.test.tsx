@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ResearchDirectoryPage } from '../components/research/research-directory-page'
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}))
+
 const symbols = [
   { lastResearchAt: '2026-09-09T20:00:00Z', opinion: 'NEUTRAL', symbol: 'MSFT' },
   { lastResearchAt: '2026-09-10T20:00:00Z', opinion: 'BULLISH', symbol: 'NVDA' },
@@ -22,6 +26,9 @@ describe('research directory', () => {
       'AAPL', 'MSFT', 'NVDA',
     ])
     expect(screen.queryByText(/Fixture Mode/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Live data refresh')).toHaveTextContent(
+      'Persisted data refreshes every 60 seconds while this page is visible.',
+    )
     expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       expect.stringContaining('NVDA'),
       expect.stringContaining('MSFT'),

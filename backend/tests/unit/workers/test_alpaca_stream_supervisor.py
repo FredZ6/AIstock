@@ -172,6 +172,49 @@ def test_stream_supervisor_reconnects_after_archiving_provider_error(
     assert published[0][1][0] == provider_error
 
 
+def test_stream_supervisor_reconnects_after_invalid_handshake(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from websockets.exceptions import InvalidMessage
+
+    delays: list[float] = []
+    attempts = 0
+
+    class InvalidHandshakeContext:
+        async def __aenter__(self) -> FakeConnection:
+            raise InvalidMessage("did not receive a valid HTTP response")
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    def connect(*_args: object, **_kwargs: object) -> object:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            return InvalidHandshakeContext()
+        return FakeConnectionContext()
+
+    async def record_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr("websockets.asyncio.client.connect", connect)
+    monkeypatch.setattr("stock_platform.workers.alpaca_stream_supervisor.sleep", record_sleep)
+    supervisor = AlpacaStreamSupervisor(
+        data_key="test-key",
+        data_secret="test-secret",
+        coverage=MarketDataCoverage.IEX,
+        symbols=("NVDA",),
+        archive=lambda _key, _raw: None,
+        publish=lambda _task, _args: None,
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(supervisor.run_forever())
+
+    assert attempts == 2
+    assert delays == [1.0]
+
+
 def test_sidecar_survives_raw_archive_failure_and_is_replayable() -> None:
     archived: list[tuple[str, bytes]] = []
     published: list[tuple[str, list[str]]] = []

@@ -10,6 +10,7 @@ test.describe('live provider closure', () => {
     await page.goto('/')
     await expect(page.getByText('DECISION WORKSPACE · API MODE')).toBeVisible()
     await expect(page.getByText(/Fixture Mode/i)).toHaveCount(0)
+    await page.locator('summary', { hasText: /unavailable facts?/ }).click()
     await expect(
       page.getByText('Configure ALPHA_VANTAGE_API_KEY to ingest the earnings calendar.'),
     ).toBeVisible()
@@ -20,7 +21,8 @@ test.describe('live provider closure', () => {
     await page.goto('/research/NVDA')
     await expect(page.getByText('RESEARCH · API MODE')).toBeVisible()
     await expect(page.getByText('No Fixture data was substituted.')).toBeVisible()
-    const unavailable = page.getByRole('region', { name: 'Unavailable research domains' })
+    const unavailable = page.getByRole('group', { name: 'Unavailable research domains' })
+    await unavailable.locator('summary').click()
     await expect(unavailable).toContainText(
       'Unsupported until an authoritative provider, schema, and license are approved.',
     )

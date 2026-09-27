@@ -120,3 +120,23 @@ export function dedupeAvailability(facts: AvailabilityFact[]): AvailabilityFact[
   }
   return [...byKey.values()]
 }
+
+export function coalesceAvailabilityByReason(facts: AvailabilityFact[]): AvailabilityFact[] {
+  const byReason = new Map<string, AvailabilityFact & { labels: string[] }>()
+  for (const fact of dedupeAvailability(facts)) {
+    const existing = byReason.get(fact.reason)
+    if (!existing) {
+      byReason.set(fact.reason, { ...fact, labels: [fact.label] })
+      continue
+    }
+    if (!existing.labels.includes(fact.label)) existing.labels.push(fact.label)
+    if (priority[fact.state] > priority[existing.state]) existing.state = fact.state
+    if (existing.action?.href !== fact.action?.href || existing.action?.label !== fact.action?.label) {
+      existing.action = null
+    }
+  }
+  return [...byReason.values()].map(({ labels, ...fact }) => ({
+    ...fact,
+    label: labels.join(' · '),
+  }))
+}

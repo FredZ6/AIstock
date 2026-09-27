@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -9,6 +9,7 @@ from sqlalchemy import Connection, create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 from stock_platform.api.dependencies import get_connection, get_settings
 from stock_platform.api.main import app
+from stock_platform.api.routes import rest as rest_routes
 from stock_platform.infrastructure.db.models.tables import (
     confidence_policy_version,
     data_quality_observation,
@@ -1264,3 +1265,34 @@ def test_provider_health_rejects_a_stale_pass_without_a_current_job(
 
     assert response.status_code == 200
     assert response.json()["providers"]["alpaca"]["status"] == "FAILURE"
+
+
+def test_provider_health_reports_market_closed_staleness_as_degraded_not_failure(
+    market_client: tuple[TestClient, Connection], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, connection = market_client
+    now = datetime(2026, 9, 26, 16, tzinfo=UTC)  # Saturday
+    observed_at = now - timedelta(minutes=15)
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz: tzinfo | None = None) -> "FrozenDatetime":
+            frozen = cls(2026, 9, 26, 16, tzinfo=UTC)
+            return frozen if tz is not None else frozen.replace(tzinfo=None)
+
+    monkeypatch.setattr(rest_routes, "datetime", FrozenDatetime)
+    _quality_observation(
+        connection,
+        observed_at=observed_at,
+        available_at=observed_at,
+        status="PASS",
+        suffix="market-closed-pass",
+    )
+    _ingestion_job(connection, state="SUCCEEDED", created_at=observed_at)
+
+    response = client.get("/api/v1/providers/health")
+
+    assert response.status_code == 200
+    assert response.json()["providers"]["alpaca"]["latest_job_state"] == "SUCCEEDED"
+    assert response.json()["providers"]["alpaca"]["latest_quality_status"] == "PASS"
+    assert response.json()["providers"]["alpaca"]["status"] == "DEGRADED"

@@ -4,6 +4,7 @@ import { initializePortfolioAction } from '../../app/portfolio/actions'
 import {
   availabilityFromDomain,
   availabilityFromProvider,
+  coalesceAvailabilityByReason,
   dedupeAvailability,
   providerDisplay,
   type AvailabilityFact,
@@ -46,6 +47,7 @@ function alertEvidence(value: unknown) {
 export function ApiEvalPage({ detail, asOf }: { detail: EvalRunDetail; asOf: string }) {
   const { run } = detail
   return <AppShell currentPath="/eval">
+    <LiveDataRefresh />
     <PageHeading asOf={asOf} eyebrow="Govern · API Mode" title="Eval & Admin" summary="Persisted, version-pinned evaluation evidence. No Fixture report was substituted." />
     <article className="terminal-section first-section route-critical-summary" aria-label="Evaluation critical summary">
       <div className="section-heading"><div><p className="section-kicker">Measured evidence</p><h2 id="persisted-eval-title">Persisted evaluation run</h2></div><Signal tone={run.passed ? 'healthy' : 'failure'}>{run.status}</Signal></div>
@@ -62,6 +64,7 @@ export function ApiEvalPage({ detail, asOf }: { detail: EvalRunDetail; asOf: str
 export function ApiAlertsPage({ alerts, asOf }: { alerts: AlertRecord[]; asOf: string }) {
   return (
     <AppShell currentPath="/alerts">
+      <LiveDataRefresh />
       <PageHeading
         asOf={asOf}
         eyebrow="Monitor · API Mode"
@@ -102,6 +105,7 @@ export function ApiCollectionPage({
 }) {
   return (
     <AppShell currentPath={currentPath}>
+      <LiveDataRefresh />
       <PageHeading asOf={asOf} eyebrow="API Mode" title={title} summary="Persisted backend facts only. No Fixture data was substituted." />
       <StateBoundary state={count === 0 ? {
         kind: 'empty',
@@ -179,14 +183,14 @@ export function ApiTodayPage({
   const providerFacts = health
     ? Object.entries(health.providers).flatMap(([name, provider]) => availabilityFromProvider(name, provider) ?? [])
     : []
-  const facts = dedupeAvailability([
+  const facts = coalesceAvailabilityByReason(dedupeAvailability([
     ...availabilityFacts,
     ...providerFacts,
     ...(portfolio && !portfolio.latestNav ? [availabilityFromDomain({
       key: 'portfolio:nav', label: 'Portfolio NAV', reason: 'No persisted Paper Portfolio NAV exists yet.',
       state: 'EMPTY', action: { href: '/portfolio', label: 'Review paper portfolio' },
     })] : []),
-  ])
+  ]))
   const groups = [
     { label: 'Provider', items: facts.filter((item) => item.key.startsWith('provider:')) },
     { label: 'Market Data', items: facts.filter((item) => item.key.startsWith('market:')) },
@@ -413,6 +417,7 @@ export function ApiPortfolioPage({ asOf, portfolio }: { asOf: string; portfolio:
   ]
   return (
     <AppShell currentPath="/portfolio">
+      <LiveDataRefresh />
       <PageHeading asOf={asOf} eyebrow="Simulate · API Mode" title="AI Portfolio" summary="Persisted paper-trading facts only. No live brokerage path exists." />
       <StateBoundary state={portfolio.status === 'EMPTY' ? {
         kind: 'empty',
@@ -468,6 +473,7 @@ export function ApiWeeklyReviewPage({ asOf, detail }: { asOf: string; detail: We
   const partial = !detail.outcomes.length
   return (
     <AppShell currentPath="/weekly-review">
+      <LiveDataRefresh />
       <PageHeading asOf={asOf} eyebrow="Learn · API Mode" title="Weekly Review" summary="Persisted outcomes and controlled-learning facts at the requested point-in-time cutoff." />
       <StateBoundary state={partial ? {
         kind: 'degraded',
@@ -514,6 +520,7 @@ export function ApiFailurePage({ currentPath, title }: { currentPath: string; ti
   const asOf = new Date().toISOString()
   return (
     <AppShell currentPath={currentPath}>
+      <LiveDataRefresh />
       <PageHeading asOf={asOf} eyebrow="API Mode" title={title} summary="The backend response could not be safely rendered." />
       <StateBoundary state={{ kind: 'failure', title: `${title} unavailable`, message: 'The API was unavailable or returned an invalid contract. No Fixture data was substituted.', retry: true }} />
     </AppShell>

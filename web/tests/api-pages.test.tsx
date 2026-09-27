@@ -48,6 +48,10 @@ const emptyPortfolio = {
 }
 
 describe('API mode pages', () => {
+  const expectLiveRefresh = () => expect(screen.getByLabelText('Live data refresh')).toHaveTextContent(
+    'Persisted data refreshes every 60 seconds while this page is visible.',
+  )
+
   it('renders persisted Alerts as actionable point-in-time evidence instead of a count placeholder', () => {
     render(<ApiAlertsPage asOf="2026-08-29T09:30:00Z" alerts={[{
       acknowledgedAt: null,
@@ -80,6 +84,7 @@ describe('API mode pages', () => {
     expect(screen.queryByText(/Fixture Mode/)).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Alert triage summary' })).toHaveClass('route-critical-summary')
     expect(screen.getByRole('group', { name: 'Complete alert evidence for NVDA' })).not.toHaveAttribute('open')
+    expectLiveRefresh()
   })
 
   it('filters the persisted alert queue by severity and explicit product category', () => {
@@ -133,6 +138,7 @@ describe('API mode pages', () => {
     expect(screen.getByRole('article', { name: 'Evaluation critical summary' })).toHaveClass('route-critical-summary')
     expect(screen.getByRole('region', { name: 'Evaluation gate status' })).toHaveTextContent('1 of 1 gates passed')
     expect(screen.getByRole('group', { name: 'Complete evaluation metrics and gates' })).not.toHaveAttribute('open')
+    expectLiveRefresh()
   })
 
   it('renders the closed persisted report with lineage, gaps, pins, and deterministic diff', () => {
@@ -187,6 +193,26 @@ describe('API mode pages', () => {
     expect(screen.getByRole('group', { name: 'Provider diagnostics' })).not.toHaveAttribute('open')
     expect(screen.getByRole('group', { name: 'Complete market lineage' })).not.toHaveAttribute('open')
     expect(screen.getByText('Current market context · not decision-time evidence')).toBeInTheDocument()
+  })
+
+  it('collapses repeated unavailable-domain causes while retaining every affected label', () => {
+    const reason = 'Configure ALPHA_VANTAGE_API_KEY to ingest the earnings calendar.'
+    render(<ApiTodayPage
+      asOf="2026-08-29T09:30:00Z"
+      availabilityFacts={[
+        { action: null, key: 'research:NVDA:EARNINGS', label: 'NVDA earnings', reason, state: 'UNCONFIGURED' },
+        { action: null, key: 'research:MSFT:EARNINGS', label: 'MSFT earnings', reason, state: 'UNCONFIGURED' },
+      ]}
+      health={{ mode: 'paper', providers: { alpha_vantage: { configured: false, mode: 'unavailable', operatorAction: reason } } }}
+      portfolio={emptyPortfolio}
+      quotes={[quote]}
+    />)
+
+    expect(screen.getAllByText(reason)).toHaveLength(1)
+    const availability = screen.getByRole('status', { name: 'Some decision facts are unavailable' })
+    expect(availability).toHaveTextContent('ALPHA VANTAGE')
+    expect(availability).toHaveTextContent('NVDA earnings')
+    expect(availability).toHaveTextContent('MSFT earnings')
   })
 
   it('keeps current quote visible when persisted research is empty', () => {
@@ -409,6 +435,7 @@ describe('API mode pages', () => {
     expect(screen.getByRole('status', { name: 'Paper portfolio not initialized' })).toHaveTextContent('USD 100,000')
     expect(screen.getByRole('button', { name: 'Initialize USD 100,000 paper portfolio' })).toBeInTheDocument()
     expect(screen.queryByText('$100,425.18')).not.toBeInTheDocument()
+    expectLiveRefresh()
   })
 
   it('shows initialized cash as success even before the first NAV snapshot', () => {
@@ -517,6 +544,7 @@ describe('API mode pages', () => {
     expect(outcomes).toHaveTextContent('-1.00%')
     expect(outcomes).toHaveTextContent('3')
     expect(screen.getByRole('region', { name: 'Weekly outcome summary' })).toHaveClass('route-critical-summary')
+    expectLiveRefresh()
     for (const name of ['Complete confidence calibration', 'Complete error attribution', 'Complete point-in-time replays', 'Complete candidate lessons']) {
       expect(screen.getByRole('group', { name })).not.toHaveAttribute('open')
     }

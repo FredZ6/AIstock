@@ -48,6 +48,7 @@ from stock_platform.application.learning.promotion import (
     VersionConflict,
 )
 from stock_platform.application.market_data.policy import (
+    MarketCalendar,
     PolicyOutcome,
     admission_payload,
     paper_market_data_admission,
@@ -383,11 +384,11 @@ def provider_health(
         .limit(1)
     ).scalar_one_or_none()
     alpaca_configured = bool(settings.alpaca_data_key and settings.alpaca_data_secret)
+    now = datetime.now(UTC)
     quality_age = (
-        datetime.now(UTC) - min(row["observed_at"] for row in latest_quality)
-        if latest_quality
-        else None
+        now - min(row["observed_at"] for row in latest_quality) if latest_quality else None
     )
+    regular_market_session = MarketCalendar().session_at(now) is MarketSession.REGULAR
     degraded_after, unavailable_after = _DATA_QUALITY_POLICY.thresholds("ALPACA", "price_bars")
     if not alpaca_configured:
         alpaca_status = "UNAVAILABLE"
@@ -396,8 +397,16 @@ def provider_health(
         "DEAD_LETTER",
     }:
         alpaca_status = "FAILURE"
-    elif quality_age is None or quality_age >= unavailable_after:
+    elif quality_age is None:
         alpaca_status = "FAILURE"
+    elif quality_age >= unavailable_after:
+        alpaca_status = (
+            "DEGRADED"
+            if not regular_market_session
+            and latest_quality_status == "PASS"
+            and latest_job == "SUCCEEDED"
+            else "FAILURE"
+        )
     elif (
         quality_age >= degraded_after
         or latest_quality_status == "DEGRADED"

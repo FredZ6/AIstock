@@ -49,9 +49,10 @@ items solely because the unit/build gate passes.
   integration. Populated research/portfolio/weekly review and 200% zoom are not covered by this run.
 - AUD-010/022: no document overflow observed at 1440x900 or 393x852 in the API matrix; this does
   not close narrow-desktop/zoom and navigation-discoverability concerns.
-- AUD-012 remains: provider health ages observations by wall-clock time, without an exchange
-  session calendar. AUD-009 also remains pending targeted no-session regression; no historical
-  dead letters were changed. Do not suppress stale/failure status without a verified session model.
+- AUD-012 remained at this checkpoint: provider health aged observations by wall-clock time,
+  without an exchange session calendar. It was subsequently closed by the 2026-09-27
+  reconciliation below. AUD-009 remains pending targeted no-session regression; no historical
+  dead letters were changed.
 - Local configuration remains paper/IEX; Alpha key and SEC User-Agent absent. Operator was given
   safe SEC setup instructions and asked to supply their real contact identity, not a fabricated one.
 
@@ -91,7 +92,7 @@ IEX is unchanged, and no SIP subscription was purchased.
 | AUD-009 | P2 | Ingestion classification | Eleven manually invoked weekend bar jobs are append-only `DEAD_LETTER` rows classified as `SCHEMA_DRIFT`, although the interval contained no completed trading session. | Reject or complete no-session windows deterministically before Provider parsing and reserve `SCHEMA_DRIFT` for actual contract changes. Preserve existing audit rows. | Open |
 | AUD-010 | P2 | Responsive UI | Weekly Review content/navigation is visibly clipped at the right edge in the supplied desktop viewport. | Remove horizontal page overflow, keep tables locally scrollable, and verify desktop/mobile/200% zoom. | Open |
 | AUD-011 | P2 | Next.js development | Dev server warns that cross-origin requests from `127.0.0.1` will require explicit `allowedDevOrigins` in a future major version. | Configure the intentionally supported local origins without broad wildcards and add a config regression. | Open |
-| AUD-012 | P2 | Provider status | Market-closed/stale data can make Provider Health read `FAILURE` while the latest ingestion job is `SUCCEEDED` and latest quality observation is `PASS`. | Review session-aware freshness semantics so market closure is not confused with an active Provider outage, without masking genuinely stale data. | Open |
+| AUD-012 | P2 | Provider status | Market-closed/stale data can make Provider Health read `FAILURE` while the latest ingestion job is `SUCCEEDED` and latest quality observation is `PASS`. | Review session-aware freshness semantics so market closure is not confused with an active Provider outage, without masking genuinely stale data. | Fixed locally; full gate passed 2026-09-27 |
 | AUD-013 | P1 | API-mode boundaries | Alerts, Run Trace, and Weekly Review always import Fixture snapshots; Eval merges a local report into Fixture policy/admin data. They therefore display synthetic facts while the product can otherwise say API Mode. | Give every route one explicit data-mode boundary. API Mode must use persisted contracts or honest Loading/Empty/Stale/Degraded/Failure states and must never import Fixture facts. | Fixed locally; full gate pending |
 | AUD-014 | P1 | REST contracts | Alerts, orders, fills, stock research, and weekly reviews return unbounded database rows without pagination; several have no closed response model, and alerts/orders/fills do not accept a PIT cutoff. The contract suite proves only that most routes are callable. | Define strict versioned response schemas, deterministic ordering/cursors and bounded limits; require `available_at <= decision_time` wherever historical facts are exposed; extend OpenAPI closure tests to every locked read. | Fixed locally; full gate pending |
 | AUD-015 | P1 | Portfolio API | The portfolio read exposes only the latest NAV and `paper_only`. It omits the persisted portfolio configuration, cash, positions and P&L, risk decisions/rejections, orders, fills, CashLedger, and performance history required by the UI. | Add a PIT-safe portfolio summary/detail contract built from authoritative paper-only facts, including an explicit Empty state before initialization. | Fixed locally; full gate pending |
@@ -201,6 +202,19 @@ Severity summary: **0 P0, 12 P1, 12 P2, 0 P3**.
    hierarchy and finish responsive, keyboard, theming, and API-mode E2E evidence.
 
 ## Audit continuation
+
+### 2026-09-27 AUD-012 reconciliation
+
+- Provider-health freshness now consults the existing market calendar. An observation older than
+  the unavailable threshold is reported as `DEGRADED`, rather than `FAILURE`, only outside the
+  regular market session and only when the latest Alpaca ingestion job is `SUCCEEDED` and the
+  latest quality observation is `PASS`.
+- Missing quality evidence, failed/dead-letter jobs, non-PASS quality, and active-session staleness
+  retain failure semantics. No historical observation, job, or dead letter was modified.
+- The frozen Saturday RED/GREEN regression passed alongside the existing active-session and failure
+  cases. After the runtime-reconnect regression described in the progress log, the final clean
+  repository gate passed with backend 767 passed / 5 optional live-provider tests skipped and
+  frontend 241/241 passed.
 
 ### 2026-09-04 live SEC verification: open blockers
 

@@ -4180,3 +4180,45 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   files, Mypy clean for 292 source files, Alembic drift and generated-contract checks passed, backend
   765 passed / 5 optional live-provider tests skipped, frontend 240/240 passed, and the production build
   succeeded.
+
+## 2026-09-27 — Real-time frontend and closed-market health closure
+
+- Added the shared API-mode live refresh controller to Alerts, Eval/Admin, empty API collections,
+  Portfolio, Weekly Review, API failure surfaces, and the persisted Research directory. Today,
+  Watchlist and individual Research retain their existing refresh controller; Run Trace continues to
+  use durable SSE rather than polling. Fixture pages remain frozen and do not silently fetch live
+  facts.
+- Repeated unavailable facts with the same exact cause are now coalesced into one diagnostic while
+  retaining every affected label. The live provider browser acceptance exposed both the repeated
+  Alpha reason and its approved progressive-disclosure location; the corrected desktop run passed
+  1/1 and verified API mode, no Fixture substitution, NVDA SEC provenance, persisted timestamps,
+  MinIO object/hash lineage, and no horizontal overflow.
+- Closed AUD-012 with session-aware provider health. Outside the regular market session, an
+  over-threshold Alpaca quality observation becomes `DEGRADED` only when the latest ingestion job is
+  `SUCCEEDED` and the latest quality observation is `PASS`; active-session staleness, failed jobs,
+  missing evidence, and failed quality remain `FAILURE`. The frozen Saturday regression and the
+  existing failure matrix passed 7/7 without mutating historical facts.
+- A full gate run while the managed Paper runtime was intentionally left active caught 38 concurrent
+  append-only `normalized_record` writes during the database-immutability assertion. This was recorded
+  as an environment-concurrency failure, not hidden or addressed by weakening the assertion. After a
+  graceful runtime stop, the unchanged clean `make verify` exited 0: Ruff format/check clean for 339
+  files, Mypy clean for 292 source files, Alembic drift and generated-contract checks passed, backend
+  766 passed / 5 optional live-provider tests skipped, frontend 35 files and 241/241 tests passed, and
+  the Next.js production build succeeded.
+- Runtime inspection used configured paper/IEX and SEC read-only credentials and persisted real
+  NVDA/AVGO evidence. Alpha Vantage remains unconfigured, and Analyst Targets, Options, News and
+  Earnings remain explicit unavailable domains where no approved point-in-time provider fact exists;
+  no missing data or success result was fabricated.
+- The post-gate managed-runtime check exposed one additional operational blocker: an Alpaca
+  WebSocket handshake could raise `InvalidMessage` (an `InvalidHandshake`) outside the supervisor's
+  reconnect boundary, causing the parent runtime to stop every managed process. A focused RED test
+  reproduced the exact stack-trace shape; GREEN broadens only the bounded handshake-retry boundary,
+  preserving archive/publish fail-closed behavior. The supervisor suite passed 8/8, and the final
+  fresh `make verify` exited 0 with backend 767 passed / 5 optional live-provider tests skipped,
+  frontend 241/241 passed, and the production build successful.
+- Final managed-runtime acceptance stayed online across the same reconnect window. Provider Health
+  moved from the truthful transient `RETRY_SCHEDULED/DEGRADED` state to
+  `SUCCEEDED/PASS/SUCCESS`, the frontend and API both returned HTTP 200, and the authoritative
+  11-symbol Watchlist quote read returned `SUCCESS` with `missing_symbols=[]`. Every returned bar
+  carried IEX coverage, PIT timestamps, a content hash and its MinIO raw-object key. Alpha Vantage
+  remained explicitly unconfigured.

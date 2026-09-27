@@ -219,7 +219,7 @@ class AlpacaStreamSupervisor:
 
     async def run_forever(self) -> None:
         from websockets.asyncio.client import connect
-        from websockets.exceptions import ConnectionClosed
+        from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
         delay = 1.0
         while True:
@@ -229,6 +229,6 @@ class AlpacaStreamSupervisor:
                         self.publish_reconnect_recovery(reconnected_at=datetime.now(UTC))
                     await self.consume(connection)  # type: ignore[arg-type]
                     delay = 1.0
-            except (OSError, TimeoutError, ConnectionClosed, ValueError):
+            except (OSError, TimeoutError, ConnectionClosed, InvalidHandshake, ValueError):
                 await sleep(delay)
                 delay = min(delay * 2, 30.0)

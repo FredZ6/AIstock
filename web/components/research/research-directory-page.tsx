@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react'
 
 import { formatDualTime } from '../../lib/time'
 import { AppShell } from '../layout/app-shell'
+import { LiveDataRefresh } from '../live/live-data-refresh'
 
 export type ResearchDirectorySymbol = {
   lastResearchAt: string | null
@@ -30,6 +31,7 @@ export function ResearchDirectoryPage(_props: {
   const [selected, setSelected] = useState(symbols[0]?.symbol ?? '')
 
   return <AppShell currentPath="/research">
+    {_props.mode === 'api' ? <LiveDataRefresh /> : null}
     <section className="page-hero compact-hero">
       <div><p className="eyebrow">Research · {_props.mode === 'api' ? 'API Mode' : 'Fixture Mode'}</p><h1>Stock research</h1><p>Select from the authoritative watchlist universe, then open its evidence-backed research.</p></div>
     </section>
