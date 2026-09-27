@@ -731,8 +731,8 @@ input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--l
 .performance-overview.is-compact .performance-facts { padding: 1rem 0; }
 .performance-overview.is-compact .performance-facts dd { font-size: clamp(1.25rem, 2.2vw, 1.8rem); }
 .performance-overview.is-compact .metric-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; padding: 0; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--line-soft); }
-.performance-overview.is-compact .metric-tabs button { min-height: 2.75rem; border-radius: 0; background: var(--surface); }
-.performance-overview.is-compact .metric-tabs button[aria-selected="true"] { background: var(--signal-soft); color: var(--signal); }
+.performance-overview.is-compact .metric-tabs button { min-height: 2.75rem; border-radius: 0; background: var(--ink-heavy); }
+.performance-overview.is-compact .metric-tabs button[aria-selected="true"] { background: var(--surface-highlight); color: var(--text); }
 .performance-overview.is-compact .performance-plot { padding: 0; }
 .performance-overview.is-compact .performance-plot svg { height: clamp(9rem, 18vw, 12rem); }
 .performance-overview.is-compact .chart-dates { border-top: 0; }
@@ -901,7 +901,7 @@ small,
 :root[data-theme="dark"] button { border-color: #262626; background: #141414; }
 :root[data-theme="dark"] .range-selector button[aria-pressed="true"],
 :root[data-theme="dark"] .metric-tabs button[aria-selected="true"] { background: #ffffff; color: #000000; }
-:root[data-theme="dark"] .performance-overview.is-compact .metric-tabs button[aria-selected="true"] { background: var(--signal-soft); color: var(--signal); }
+:root[data-theme="dark"] .performance-overview.is-compact .metric-tabs button[aria-selected="true"] { background: var(--surface-highlight); color: var(--text); }
 :root[data-theme="dark"] .table-scroll { border-color: #262626; background: #141414; }
 :root[data-theme="dark"] .fixture-notice { border-color: #262626; background: #141414; }
 

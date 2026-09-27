@@ -311,51 +311,99 @@ test('Today watchlist disclosure preserves native keyboard focus across the view
 })
 
 test('Today portfolio tabs control one chart and remain readable in both themes', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 800 })
-  await page.goto('/')
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  for (const viewport of [
+    { width: 1440, height: 800 },
+    { width: 1280, height: 720 },
+    { width: 393, height: 852 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await page.goto('/')
 
-  const figure = page.getByRole('figure', { name: 'Paper portfolio performance' })
-  const plot = figure.getByRole('tabpanel')
-  const tabs = figure.getByRole('tablist', { name: 'Performance metric' })
-  const nav = tabs.getByRole('tab', { name: 'Net asset value' })
-  const dayReturn = tabs.getByRole('tab', { name: 'Day return' })
-  const drawdown = tabs.getByRole('tab', { name: 'Current drawdown' })
+    const figure = page.getByRole('figure', { name: 'Paper portfolio performance' })
+    const plot = figure.getByRole('tabpanel')
+    const tabs = figure.getByRole('tablist', { name: 'Performance metric' })
+    const nav = tabs.getByRole('tab', { name: 'Net asset value' })
+    const dayReturn = tabs.getByRole('tab', { name: 'Day return' })
+    const drawdown = tabs.getByRole('tab', { name: 'Current drawdown' })
 
-  await expect(figure.getByRole('img', { name: 'Net asset value history' })).toBeVisible()
-  await expect(plot).toHaveAttribute('data-metric', 'nav')
-  await expect(plot.locator('svg')).toHaveCount(1)
+    await expect(figure.getByRole('img', { name: 'Net asset value history' })).toBeVisible()
+    await expect(plot).toHaveAttribute('data-metric', 'nav')
+    await expect(plot.locator('svg')).toHaveCount(1)
 
-  await focusWithKeyboard(page, nav)
-  await page.keyboard.press('ArrowRight')
-  await expect(dayReturn).toBeFocused()
-  await expect(dayReturn).toHaveAttribute('aria-selected', 'true')
-  await expect(plot).toHaveAttribute('data-metric', 'dailyReturn')
-  await expect(figure.getByRole('img', { name: 'Day return history' })).toBeVisible()
-  await expect(plot.locator('svg')).toHaveCount(1)
+    for (const theme of ['light', 'dark'] as const) {
+      if (await page.locator('html').getAttribute('data-theme') !== theme) {
+        await page.getByRole('button', { name: `Switch to ${theme} mode` }).click()
+      }
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.evaluate(() => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      }))
 
-  await drawdown.click()
-  await expect(drawdown).toHaveAttribute('aria-selected', 'true')
-  await expect(plot).toHaveAttribute('data-metric', 'drawdown')
-  await expect(figure.getByRole('img', { name: 'Current drawdown history' })).toBeVisible()
-  await expect(plot.locator('svg')).toHaveCount(1)
+      await focusWithKeyboard(page, tabs.locator('[role="tab"][aria-selected="true"]'))
+      await page.keyboard.press('Home')
+      await expect(nav).toBeFocused()
+      await expect(nav).toHaveAttribute('aria-selected', 'true')
+      await expect(plot).toHaveAttribute('data-metric', 'nav')
+      await expect(figure.getByRole('img', { name: 'Net asset value history' })).toBeVisible()
 
-  for (const theme of ['light', 'dark'] as const) {
-    if (await page.locator('html').getAttribute('data-theme') !== theme) {
-      await page.getByRole('button', { name: `Switch to ${theme} mode` }).click()
+      await page.keyboard.press('ArrowRight')
+      await expect(dayReturn).toBeFocused()
+      await expect(dayReturn).toHaveAttribute('aria-selected', 'true')
+      await expect(plot).toHaveAttribute('data-metric', 'dailyReturn')
+      await expect(figure.getByRole('img', { name: 'Day return history' })).toBeVisible()
+
+      await page.keyboard.press('ArrowRight')
+      await expect(drawdown).toBeFocused()
+      await expect(drawdown).toHaveAttribute('aria-selected', 'true')
+      await expect(plot).toHaveAttribute('data-metric', 'drawdown')
+      await expect(figure.getByRole('img', { name: 'Current drawdown history' })).toBeVisible()
+      await expect(plot.locator('svg')).toHaveCount(1)
+      await expect(drawdown).toHaveCSS('outline-style', 'solid')
+
+      const tabContrast = await tabs.getByRole('tab').evaluateAll((elements) => {
+        const rgba = (value: string) => {
+          const canvas = document.createElement('canvas')
+          canvas.width = 1
+          canvas.height = 1
+          const context = canvas.getContext('2d', { willReadFrequently: true })!
+          context.fillStyle = value
+          context.fillRect(0, 0, 1, 1)
+          return [...context.getImageData(0, 0, 1, 1).data]
+        }
+        const luminance = ([red, green, blue]: number[]) => {
+          const linear = [red, green, blue].map((channel) => {
+            const value = channel / 255
+            return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+          })
+          return 0.2126 * linear[0]! + 0.7152 * linear[1]! + 0.0722 * linear[2]!
+        }
+        return elements.map((element) => {
+          const style = getComputedStyle(element)
+          const foreground = rgba(style.color)
+          const background = rgba(style.backgroundColor)
+          const lighter = Math.max(luminance(foreground), luminance(background))
+          const darker = Math.min(luminance(foreground), luminance(background))
+          return {
+            background: style.backgroundColor,
+            backgroundAlpha: background[3],
+            contrastRatio: (lighter + 0.05) / (darker + 0.05),
+            foreground: style.color,
+            label: element.textContent,
+            selected: element.getAttribute('aria-selected') === 'true',
+          }
+        })
+      })
+      expect(tabContrast.some(({ selected }) => selected)).toBe(true)
+      expect(tabContrast.some(({ selected }) => !selected)).toBe(true)
+      for (const result of tabContrast) {
+        expect(result.backgroundAlpha, `${theme} tab background must be opaque at ${viewport.width}x${viewport.height}`).toBe(255)
+        expect(result.contrastRatio, `${theme} tab contrast must meet WCAG AA at ${viewport.width}x${viewport.height}: ${JSON.stringify(result)}`).toBeGreaterThanOrEqual(4.5)
+      }
     }
-    await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
-    await focusWithKeyboard(page, drawdown)
-    await expect(drawdown).toBeFocused()
-    await expect(drawdown).toHaveCSS('outline-style', 'solid')
-    await expect(figure.getByRole('img', { name: 'Current drawdown history' })).toBeVisible()
-    const colors = await drawdown.evaluate((element) => {
-      const style = getComputedStyle(element)
-      return { background: style.backgroundColor, foreground: style.color }
-    })
-    expect(colors.foreground).not.toBe(colors.background)
-  }
 
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  }
 })
 
 test('theme and reduced-motion preferences preserve a calm readable surface', async ({ page }) => {

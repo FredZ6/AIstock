@@ -4260,15 +4260,23 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   overflow. The complete Fixture desktop/mobile Playwright matrix exited 0 with 28/28 tests passed.
 - Added browser acceptance for the one-chart Portfolio selector. Net asset value, Day return and
   Current drawdown switch the same tabpanel and SVG, expose the matching accessible chart name and
-  `data-metric`, retain visible keyboard focus and readable foreground/background colors in light and
-  dark themes, and do not introduce horizontal overflow. Focused desktop and mobile runs each exited
-  0 with 2/2 tests passed.
+  `data-metric`, retain visible keyboard focus and WCAG AA text contrast in light and dark themes, and
+  do not introduce horizontal overflow. The corrected focused desktop/mobile run exited 0 with 2/2
+  project cases; each case exercised all three exact viewports and both themes with native Home and
+  ArrowRight tab input. Selected and unselected tabs both use opaque computed backgrounds and meet a
+  measured contrast ratio of at least 4.5:1.
 - Meaningful RED evidence was retained rather than fabricated: the first browser run found that the
   production Fixture Today adapter supplied only two Watchlist rows, so no disclosure could exist.
   GREEN now derives Today's Watchlist from the existing five-row authoritative Fixture snapshot while
   still rendering only two rows by default. The first real keyboard check also exposed a test-only
   issue: programmatic focus did not exercise `:focus-visible`; the acceptance now reaches controls via
   native Playwright Tab input before using Enter and Space. No production focus workaround was added.
+  A subsequent spec review correctly rejected the initial chart check because it forced 1440x800 even
+  in the mobile project and only compared unequal CSS strings. The replacement regression first failed
+  because all three tab backgrounds were transparent: the compact selector referenced undefined
+  `--surface` and `--signal-soft` variables. After replacing them with the defined opaque
+  `--ink-heavy` and `--surface-highlight` tokens, a real computed contrast check exposed insufficient
+  dark-theme contrast; using the theme's `--text` token for the selected state made the same test GREEN.
 - The isolated API runtime exposed genuine harness drift: its worker still listened to the obsolete
   `celery` queue while recovery and research tasks route to `control` and `agent-research`. After the
   harness subscribed to the declared queues, API browser acceptance exited 0 with 14/14 tests and the
