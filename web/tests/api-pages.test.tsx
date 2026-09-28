@@ -325,7 +325,7 @@ describe('API mode pages', () => {
           { availableAt: '2026-08-28T09:01:00Z', eventTime: '2026-08-28T09:00:00Z', id: 'nav-previous', nav: '100.00', portfolioId: 'portfolio-1' },
           { availableAt: '2026-08-29T09:20:30Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-competing-before', nav: '80.00', portfolioId: 'portfolio-1' },
           { availableAt: '2026-08-29T09:21:00Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-authoritative', nav: '110.00', portfolioId: 'portfolio-1' },
-          { availableAt: '2026-08-29T09:22:00Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-competing', nav: '90.00', portfolioId: 'portfolio-1' },
+          { availableAt: '2026-08-29T09:20:45Z', eventTime: '2026-08-29T09:20:00Z', id: 'nav-competing', nav: '90.00', portfolioId: 'portfolio-1' },
         ],
         status: 'SUCCESS',
       }}

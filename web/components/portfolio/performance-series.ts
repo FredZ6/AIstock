@@ -45,17 +45,38 @@ export function toAuthoritativePerformanceSeries(
   })
   const latestEventTime = awareInstantKey(latestNav.eventTime)
   const latestAvailableTime = awareInstantKey(latestNav.availableAt)
-  const sameIdRecords = history.filter((point) => point.id === latestNav.id)
-  const authoritativeRecordMatches = sameIdRecords.length > 0 && sameIdRecords.every((point) => (
-    point.portfolioId === latestNav.portfolioId
+  const matchesLatest = (point: PersistedNavRecord) => (
+    point.id === latestNav.id
+    && point.portfolioId === latestNav.portfolioId
     && compareDecimals(point.nav, latestNav.nav) === 0
     && awareInstantKey(point.eventTime) === latestEventTime
     && awareInstantKey(point.availableAt) === latestAvailableTime
-  ))
+  )
+  const sameIdRecords = history.filter((point) => point.id === latestNav.id)
+  const authoritativeRecordMatches = sameIdRecords.length > 0 && sameIdRecords.every(matchesLatest)
+  const onePortfolio = history.every((point) => point.portfolioId === latestNav.portfolioId)
   const historyEndsAtLatest = history.every(
     (point) => awareInstantKey(point.eventTime) <= latestEventTime,
   )
-  if (!authoritativeRecordMatches || !historyEndsAtLatest) {
+  const latestEventRecords = history.filter(
+    (point) => awareInstantKey(point.eventTime) === latestEventTime,
+  )
+  const canonicalLatest = latestEventRecords.reduce<PersistedNavRecord | null>((winner, point) => {
+    if (!winner) return point
+    const availableTime = awareInstantKey(point.availableAt)
+    const winnerAvailableTime = awareInstantKey(winner.availableAt)
+    return availableTime > winnerAvailableTime
+      || (availableTime === winnerAvailableTime && point.id > winner.id)
+      ? point
+      : winner
+  }, null)
+  if (
+    !authoritativeRecordMatches
+    || !onePortfolio
+    || !historyEndsAtLatest
+    || canonicalLatest === null
+    || !matchesLatest(canonicalLatest)
+  ) {
     return failClosed()
   }
 

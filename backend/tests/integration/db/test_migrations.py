@@ -134,8 +134,36 @@ def test_head_can_downgrade_to_0024_and_upgrade_again(
     engine = create_engine(migration_database_url)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-            "0040_entitlement_risk_context"
+            "0041_portfolio_nav_read_index"
         )
+    engine.dispose()
+
+
+def test_0041_adds_the_canonical_portfolio_nav_read_index_and_round_trips(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(migration_database_url)
+
+    def index_definition() -> str | None:
+        with engine.connect() as connection:
+            return connection.execute(
+                text(
+                    "SELECT indexdef FROM pg_indexes "
+                    "WHERE schemaname = 'public' AND tablename = 'portfolio_nav' "
+                    "AND indexname = 'portfolio_nav_canonical_read_idx'"
+                )
+            ).scalar_one_or_none()
+
+    assert index_definition() == (
+        "CREATE INDEX portfolio_nav_canonical_read_idx ON public.portfolio_nav "
+        "USING btree (portfolio_id, event_time DESC, available_at DESC, id DESC)"
+    )
+    command.downgrade(config, "0040_entitlement_risk_context")
+    assert index_definition() is None
+    command.upgrade(config, "head")
+    assert index_definition() is not None
     engine.dispose()
 
 

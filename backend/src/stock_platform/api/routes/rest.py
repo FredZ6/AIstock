@@ -1384,45 +1384,22 @@ def get_portfolio(connection: ConnectionDependency, decision_time: datetime) -> 
         ),
         prices=prices,
     )
-    ranked_nav = (
-        select(
-            portfolio_nav.c.id,
-            portfolio_nav.c.event_time,
-            portfolio_nav.c.portfolio_id,
-            portfolio_nav.c.nav,
-            portfolio_nav.c.available_at,
-            func.row_number()
-            .over(
-                partition_by=portfolio_nav.c.event_time,
-                order_by=(portfolio_nav.c.available_at.desc(), portfolio_nav.c.id.desc()),
-            )
-            .label("rank"),
-        )
+    canonical_nav = (
+        select(portfolio_nav)
         .where(
             portfolio_nav.c.portfolio_id == portfolio_id,
             portfolio_nav.c.event_time <= cutoff,
             portfolio_nav.c.available_at <= cutoff,
         )
-        .subquery()
-    )
-    nav_rows = list(
-        reversed(
-            connection.execute(
-                select(
-                    ranked_nav.c.id,
-                    ranked_nav.c.event_time,
-                    ranked_nav.c.portfolio_id,
-                    ranked_nav.c.nav,
-                    ranked_nav.c.available_at,
-                )
-                .where(ranked_nav.c.rank == 1)
-                .order_by(ranked_nav.c.event_time.desc())
-                .limit(365)
-            )
-            .mappings()
-            .all()
+        .distinct(portfolio_nav.c.event_time)
+        .order_by(
+            portfolio_nav.c.event_time.desc(),
+            portfolio_nav.c.available_at.desc(),
+            portfolio_nav.c.id.desc(),
         )
+        .limit(365)
     )
+    nav_rows = list(reversed(connection.execute(canonical_nav).mappings().all()))
     latest_nav = nav_rows[-1] if nav_rows else None
     risk_rows = (
         connection.execute(

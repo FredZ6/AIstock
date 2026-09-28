@@ -1601,6 +1601,13 @@ portfolio_nav = time_series_table(
         name=conv("ck_portfolio_nav_availability"),
     ),
 )
+Index(
+    "portfolio_nav_canonical_read_idx",
+    portfolio_nav.c.portfolio_id,
+    portfolio_nav.c.event_time.desc(),
+    portfolio_nav.c.available_at.desc(),
+    portfolio_nav.c.id.desc(),
+)
 alert_metric = time_series_table(
     "alert_metric",
     Column("alert_id", UUID(as_uuid=True), ForeignKey("alert_event.id")),

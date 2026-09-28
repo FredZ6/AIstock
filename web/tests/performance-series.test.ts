@@ -161,4 +161,35 @@ describe('toAuthoritativePerformanceSeries', () => {
       points: [{ nav: '110.00', dailyReturn: null, drawdown: '0.00000000', time: '2026-09-27T20:01:00Z' }],
     })
   })
+
+  it('fails closed when any earlier history record belongs to another portfolio', () => {
+    const result = toAuthoritativePerformanceSeries([
+      latestNav,
+      { availableAt: '2026-09-26T20:01:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-other-portfolio', nav: '100.00', portfolioId: 'portfolio-other' },
+    ], latestNav)
+
+    expect(result.latest).toBeNull()
+    expect(result.points).toHaveLength(1)
+  })
+
+  it('fails closed when a later-available correction supersedes latestNav at its event time', () => {
+    const result = toAuthoritativePerformanceSeries([
+      latestNav,
+      { ...latestNav, id: 'nav-correction', nav: '120.00', availableAt: '2026-09-27T20:02:00Z' },
+    ], latestNav)
+
+    expect(result.latest).toBeNull()
+    expect(result.points).toHaveLength(1)
+  })
+
+  it('fails closed when a greater id supersedes latestNav on an availability tie', () => {
+    const authoritativeWithLowerId = { ...latestNav, id: 'nav-001' }
+    const result = toAuthoritativePerformanceSeries([
+      authoritativeWithLowerId,
+      { ...authoritativeWithLowerId, id: 'nav-002', nav: '120.00' },
+    ], authoritativeWithLowerId)
+
+    expect(result.latest).toBeNull()
+    expect(result.points).toHaveLength(1)
+  })
 })

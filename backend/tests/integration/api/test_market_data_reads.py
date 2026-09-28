@@ -1076,23 +1076,27 @@ def test_portfolio_nav_read_model_canonicalizes_revisions_before_history_limit(
     connection.execute(portfolio_nav.delete().where(portfolio_nav.c.portfolio_id == portfolio_id))
 
     first_event = initialized_at + timedelta(days=1)
-    corrected_event = initialized_at + timedelta(days=2)
-    latest_event = initialized_at + timedelta(days=3)
-    rows = [
+    canonical_rows = [
         {
-            "id": UUID("00000000-0000-0000-0000-000000000001"),
-            "event_time": first_event,
-            "available_at": first_event + timedelta(minutes=1),
+            "id": UUID(int=event_index + 1),
+            "event_time": first_event + timedelta(minutes=event_index),
+            "available_at": first_event + timedelta(minutes=event_index, seconds=1),
             "portfolio_id": portfolio_id,
-            "nav": Decimal("100.00"),
-        },
+            "nav": Decimal(1000 + event_index),
+        }
+        for event_index in range(370)
+    ]
+    corrected_event = canonical_rows[368]["event_time"]
+    latest_event = canonical_rows[369]["event_time"]
+    rows = [
+        *canonical_rows,
         *[
             {
-                "id": UUID(int=revision + 100),
+                "id": UUID(int=revision + 10_000),
                 "event_time": corrected_event,
                 "available_at": corrected_event + timedelta(seconds=revision + 1),
                 "portfolio_id": portfolio_id,
-                "nav": Decimal(revision),
+                "nav": Decimal(2000 + revision),
             }
             for revision in range(366)
         ],
@@ -1118,11 +1122,14 @@ def test_portfolio_nav_read_model_canonicalizes_revisions_before_history_limit(
 
     assert response.status_code == 200
     payload = response.json()
-    assert [row["nav"] for row in payload["performance_history"]] == [
-        "100.00",
-        "365",
-        "300.00",
-    ]
+    history = payload["performance_history"]
+    assert len(history) == 365
+    assert datetime.fromisoformat(history[0]["event_time"]) == first_event + timedelta(minutes=5)
+    assert [datetime.fromisoformat(row["event_time"]) for row in history] == sorted(
+        datetime.fromisoformat(row["event_time"]) for row in history
+    )
+    assert history[-2]["nav"] == "2365"
+    assert history[-1]["nav"] == "300.00"
     assert payload["latest_nav"] == payload["performance_history"][-1]
     assert payload["latest_nav"]["id"] == "ffffffff-ffff-ffff-ffff-ffffffffffff"
 
