@@ -1,14 +1,10 @@
-import Link from 'next/link'
-
 import { AppShell } from './layout/app-shell'
-import { PerformanceChart } from './portfolio/performance-chart'
 import { StateBoundary } from './states/state-boundary'
 import { TodayDashboard, TodayDashboardHeader } from './today/today-dashboard'
 import type { TodayDashboardModel } from './today/today-dashboard-model'
+import { Signal } from './ui/product-ui'
 import { type TodaySnapshot } from '../lib/api'
 import { formatMoney, formatPercent } from '../lib/format'
-import { formatDualTime } from '../lib/time'
-import { Signal } from './ui/product-ui'
 
 type TodayPageProps = {
   snapshot: TodaySnapshot
@@ -36,50 +32,48 @@ export function TodayPage({ snapshot }: TodayPageProps) {
       summary: 'What changed, what needs attention, and what the system can prove.',
       notice: { label: 'Fixture Mode', description: 'Frozen synthetic fixture · not current market data' },
     },
-    portfolio: { kind: 'available', value: <PerformanceChart compact snapshot={{ ...snapshot.portfolio, asOf: snapshot.asOf }} /> },
-    marketRegime: { kind: 'available', value: <>
-      <p className="section-kicker">Market regime</p>
-      <div className="regime-title" data-testid="regime-metadata">
-        <Signal tone="positive">{snapshot.marketRegime.label}</Signal>
-        <span className="algorithm-version"><small>Model</small><span>{snapshot.marketRegime.algorithmVersion}</span></span>
-      </div>
-      <dl className="metric-list compact">
-        <div><dt>QQQ trend</dt><dd>{formatPercent(snapshot.marketRegime.qqqTrend)}</dd></div>
-        <div><dt>QQQ volatility</dt><dd>{formatPercent(snapshot.marketRegime.qqqVolatility, { signed: false })}</dd></div>
-        <div><dt>SOXX relative strength</dt><dd>{formatPercent(snapshot.marketRegime.soxxRelativeStrength)}</dd></div>
-        <div><dt>VIX</dt><dd>{snapshot.marketRegime.vix}</dd></div>
-      </dl>
-      <section className="benchmark-pulse" aria-labelledby="benchmark-pulse-title">
-        <h3 id="benchmark-pulse-title">Benchmark pulse</h3>
-        <dl aria-label="Portfolio benchmarks">
-          {[
-            ['Cash', snapshot.portfolio.benchmarks.cash],
-            ['QQQ', snapshot.portfolio.benchmarks.qqq],
-            ['Equal weight', snapshot.portfolio.benchmarks.equalWeight],
-            ['Momentum', snapshot.portfolio.benchmarks.momentum],
-          ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{formatPercent(value)}</dd></div>)}
-        </dl>
-      </section>
-    </> },
+    portfolio: { kind: 'available', value: { snapshot: { ...snapshot.portfolio, asOf: snapshot.asOf } } },
+    marketRegime: { kind: 'available', value: {
+      label: snapshot.marketRegime.label,
+      model: snapshot.marketRegime.algorithmVersion,
+      tone: 'positive',
+      metrics: [
+        { label: 'QQQ trend', value: formatPercent(snapshot.marketRegime.qqqTrend) },
+        { label: 'QQQ volatility', value: formatPercent(snapshot.marketRegime.qqqVolatility, { signed: false }) },
+        { label: 'SOXX relative strength', value: formatPercent(snapshot.marketRegime.soxxRelativeStrength) },
+        { label: 'VIX', value: snapshot.marketRegime.vix },
+      ],
+      benchmarks: [
+        { label: 'Cash', value: formatPercent(snapshot.portfolio.benchmarks.cash) },
+        { label: 'QQQ', value: formatPercent(snapshot.portfolio.benchmarks.qqq) },
+        { label: 'Equal weight', value: formatPercent(snapshot.portfolio.benchmarks.equalWeight) },
+        { label: 'Momentum', value: formatPercent(snapshot.portfolio.benchmarks.momentum) },
+      ],
+    } },
     watchlist: { kind: 'available', value: {
-      kicker: 'Discover', title: 'Watchlist signals', action: <Link className="compact-hit-link" href="/watchlist">Manage watchlist</Link>,
-      items: snapshot.watchlist.map((item) => <li key={item.symbol} data-direction={item.dailyReturn.startsWith('-') ? 'negative' : 'positive'}>
-          <div className="heatmap-primary"><Link className="compact-hit-link" href={`/research/${item.symbol}`}>{item.symbol}</Link><strong>{formatPercent(item.dailyReturn)}</strong></div>
-          <span>{formatMoney(item.price, 'USD')}</span>
-          <div className="heatmap-decisions"><Signal tone={item.researchOpinion.toLowerCase()}>{item.researchOpinion}</Signal><Signal tone={item.portfolioAction.toLowerCase()}>{item.portfolioAction}</Signal></div>
-          <div className="quality-line"><span>{item.dataQuality.freshness}</span><span>{formatPercent(item.dataQuality.coverage, { fractionDigits: 0, signed: false })} coverage</span><span>{item.dataQuality.provider}</span><span>{item.dataQuality.delaySeconds}s delay</span><span>{item.dataQuality.conflict ? 'Conflict detected' : 'No conflict'}</span></div>
-        </li>),
+      kicker: 'Discover', title: 'Watchlist signals', action: { href: '/watchlist', label: 'Manage watchlist' },
+      items: snapshot.watchlist.map((item) => ({
+        symbol: item.symbol,
+        direction: item.dailyReturn.startsWith('-') ? 'negative' : 'positive',
+        primaryValue: formatPercent(item.dailyReturn),
+        detail: formatMoney(item.price, 'USD'),
+        decisions: [
+          { label: item.researchOpinion, tone: item.researchOpinion },
+          { label: item.portfolioAction, tone: item.portfolioAction },
+        ],
+        provenance: [item.dataQuality.freshness, `${formatPercent(item.dataQuality.coverage, { fractionDigits: 0, signed: false })} coverage`, item.dataQuality.provider, `${item.dataQuality.delaySeconds}s delay`, item.dataQuality.conflict ? 'Conflict detected' : 'No conflict'],
+      })),
     } },
     alerts: snapshot.alerts.length ? { kind: 'available', value: {
-      kicker: 'Decide', title: 'Actionable alerts', action: <Link className="compact-hit-link" href="/alerts">View all</Link>,
-      content: <ul className="alert-list">{snapshot.alerts.slice(0, 3).map((alert) => <li key={alert.id}>
-        <div className="alert-meta"><Signal tone={alert.severity.toLowerCase()}>{alert.severity}</Signal><Link className="compact-hit-link" href={`/research/${alert.symbol}`}>{alert.symbol}</Link><time dateTime={alert.eventTime}>{formatDualTime(alert.eventTime).newYork}</time></div>
-        <p>{alert.summary}</p><strong>{alert.reviewAction}</strong>
-      </li>)}</ul>,
+      kicker: 'Decide', title: 'Actionable alerts', action: { href: '/alerts', label: 'View all' },
+      items: snapshot.alerts.slice(0, 3).map((alert) => ({ id: alert.id, severity: alert.severity, symbol: alert.symbol, eventTime: alert.eventTime, detail: alert.summary, emphasis: alert.reviewAction })),
     } } : { kind: 'empty', message: 'No actionable alerts.' },
     activeRun: snapshot.activeRun ? { kind: 'available', value: {
-      kicker: 'Run progress', title: 'Research execution',
-      content: <div className="run-progress"><div><Link className="compact-hit-link" href={`/runs/${snapshot.activeRun.id}`}>{snapshot.activeRun.label}</Link><span>{snapshot.activeRun.status}</span></div><progress aria-label={snapshot.activeRun.label} max={snapshot.activeRun.totalSteps} value={snapshot.activeRun.completedSteps} /><p>{snapshot.activeRun.completedSteps} of {snapshot.activeRun.totalSteps} steps</p></div>,
+      href: `/runs/${snapshot.activeRun.id}`,
+      label: snapshot.activeRun.label,
+      status: snapshot.activeRun.status,
+      completedSteps: snapshot.activeRun.completedSteps,
+      totalSteps: snapshot.activeRun.totalSteps,
     } } : { kind: 'empty', message: 'No active run.' },
   }
 

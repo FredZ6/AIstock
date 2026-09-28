@@ -33,7 +33,7 @@ function shortDate(value: string) {
   }).format(parseAwareInstant(value))
 }
 
-type PerformanceSnapshot = Pick<
+export type PerformanceSnapshot = Pick<
   PortfolioSnapshot,
   'asOf' | 'currency' | 'nav'
 > & {

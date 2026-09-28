@@ -21,6 +21,16 @@ const fourQuotes = [
   { ...quote, close: '164.62', symbol: 'AMD' },
   { ...quote, close: '229.31', symbol: 'AAPL' },
 ]
+const watchlistItem = (symbol: string, displayOrder: number) => ({
+  alertThreshold: null,
+  createdAt: '2026-08-01T00:00:00Z',
+  dailyResearch: true,
+  displayOrder,
+  enrichment: { kind: 'unavailable' as const, missing: ['market'] as const },
+  intradayMonitoring: true,
+  symbol,
+  updatedAt: '2026-08-01T00:00:00Z',
+})
 
 function activateButtonWithKeyboard(button: HTMLElement) {
   button.focus()
@@ -250,6 +260,28 @@ describe('API mode pages', () => {
     expect(within(list).getByRole('link', { name: 'AMD' })).toBeInTheDocument()
     expect(within(list).getByRole('link', { name: 'AAPL' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('keeps a missing quote in its authoritative Watchlist rank instead of promoting a later symbol', () => {
+    render(<ApiTodayPage
+      activeRun={null}
+      asOf="2026-08-29T09:30:00Z"
+      health={health}
+      portfolio={emptyPortfolio}
+      quotes={[{ ...quote, symbol: 'MSFT' }, { ...quote, symbol: 'AMD' }]}
+      watchlist={[
+        watchlistItem('NVDA', 1),
+        watchlistItem('MSFT', 2),
+        watchlistItem('AMD', 3),
+      ]}
+    />)
+
+    const list = screen.getByRole('list', { name: 'Watchlist signals' })
+    expect(within(list).getByRole('link', { name: 'NVDA' })).toBeInTheDocument()
+    expect(within(list).getByText('No point-in-time eligible market quote is available.')).toBeInTheDocument()
+    expect(within(list).getByRole('link', { name: 'MSFT' })).toBeInTheDocument()
+    expect(within(list).queryByRole('link', { name: 'AMD' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show all (3)' })).toBeInTheDocument()
   })
 
   it('charts persisted API NAV history and derives the latest return and drawdown', () => {

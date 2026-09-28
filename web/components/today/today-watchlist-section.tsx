@@ -1,8 +1,11 @@
 'use client'
 
 import { useId, useState } from 'react'
+import Link from 'next/link'
 
 import type { TodayDashboardWatchlistPanel } from './today-dashboard-model'
+import { formatDualTime } from '../../lib/time'
+import { Signal } from '../ui/product-ui'
 
 const collapsedItemCount = 2
 
@@ -17,7 +20,7 @@ export function TodayWatchlistSection({ mode, panel }: { mode: 'api' | 'fixture'
     <div className="section-heading">
       <div><p className="section-kicker">{panel.kicker}</p><h2>{panel.title}</h2></div>
       <div className="watchlist-heading-actions">
-        {panel.action}
+        {panel.action ? <Link className="compact-hit-link" href={panel.action.href}>{panel.action.label}</Link> : null}
         {hasDisclosure ? <button
           aria-controls={listId}
           aria-expanded={expanded}
@@ -29,13 +32,19 @@ export function TodayWatchlistSection({ mode, panel }: { mode: 'api' | 'fixture'
         </button> : null}
       </div>
     </div>
-    {panel.context}
+    {panel.context ? <p className="muted-copy"><span>{panel.context.label}</span><small>{panel.context.detail}</small></p> : null}
     <ul
       aria-label="Watchlist signals"
       className={`market-list watchlist-heatmap${mode === 'api' ? ' persisted-market-list' : ''}`}
       id={listId}
     >
-      {visibleItems}
+      {visibleItems.map((item) => <li key={item.symbol} data-direction={item.direction}>
+        <div className="heatmap-primary"><Link className="compact-hit-link" href={`/research/${item.symbol}`}>{item.symbol}</Link><strong>{item.primaryValue}</strong></div>
+        {item.decisions.length ? <div className="heatmap-decisions">{item.decisions.map((decision) => <Signal key={`${decision.tone}:${decision.label}`} tone={decision.tone}>{decision.label}</Signal>)}</div> : null}
+        {item.detail ? <span className="unavailable-value">{item.detail}</span> : null}
+        {item.summary ? <p>{item.summary}</p> : null}
+        <div className="quality-line">{item.provenance.map((value) => <span key={value}>{value}</span>)}{item.availableAt ? <time dateTime={item.availableAt}>Available {formatDualTime(item.availableAt).newYork}</time> : null}</div>
+      </li>)}
     </ul>
   </section>
 }

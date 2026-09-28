@@ -93,6 +93,7 @@ export default async function Home() {
       portfolio={portfolioResult.status === 'fulfilled' ? portfolioResult.value : null}
       quotes={quotesResult.status === 'fulfilled' ? quotesResult.value.items : []}
       research={research}
+      watchlist={watchlistResult.status === 'fulfilled' ? watchlistResult.value : undefined}
       availabilityFacts={availabilityFacts}
     />
   } catch (error) {

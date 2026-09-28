@@ -29,10 +29,10 @@ import type {
   WeeklyReviewDetail,
 } from '../../lib/server/live-data-api'
 import { formatDualTime } from '../../lib/time'
+import type { ApiWatchlistItem } from '../../lib/product-types'
 import { AppShell } from '../layout/app-shell'
 import { TradingViewWidget } from '../market/tradingview-widget'
 import { TradingViewTickerList } from '../market/tradingview-ticker-list'
-import { PerformanceChart } from '../portfolio/performance-chart'
 import { toAuthoritativePerformanceSeries } from '../portfolio/performance-series'
 import { FinancialFactsDisclosure, SecFilingsDisclosure } from '../research/research-evidence-browser'
 import { ResearchRunControl } from '../research/research-run-control'
@@ -175,6 +175,7 @@ export function ApiTodayPage({
   portfolio,
   quotes,
   research = [],
+  watchlist,
   availabilityFacts = [],
 }: {
   activeRun?: ResearchRun | null
@@ -184,6 +185,7 @@ export function ApiTodayPage({
   portfolio: PortfolioSummary | null
   quotes: MarketQuote[]
   research?: ResearchRecord[]
+  watchlist?: ApiWatchlistItem[]
   availabilityFacts?: AvailabilityFact[]
 }) {
   const providerFacts = health
@@ -203,6 +205,11 @@ export function ApiTodayPage({
     { label: 'Decision Domain', items: facts.filter((item) => !item.key.startsWith('provider:') && !item.key.startsWith('market:')) },
   ].filter((group) => group.items.length)
   const latestResearchBySymbol = new Map(research.map((record) => [record.symbol, record]))
+  const quoteBySymbol = new Map(quotes.map((quote) => [quote.symbol, quote]))
+  const authoritativeWatchlist = watchlist ?? quotes.map((quote, index) => ({
+    symbol: quote.symbol,
+    displayOrder: index + 1,
+  } as ApiWatchlistItem))
   const latestNav = portfolio?.latestNav ?? null
   const latestNavTime = latestNav ? latestNav.availableAt ?? latestNav.eventTime : null
   const authoritativePerformance = latestNav && latestNavTime
@@ -220,47 +227,52 @@ export function ApiTodayPage({
       summary: 'Current persisted facts, with unavailable domains left explicit.',
       notice: { label: 'API Mode', description: 'Persisted backend facts · no Fixture substitution' },
     },
-    portfolio: latestNav && latestNavTime ? { kind: 'available', value: <PerformanceChart
-      compact
-      historySource={{
+    portfolio: latestNav && latestNavTime ? { kind: 'available', value: {
+      historySource: {
         label: 'Persisted paper NAV history',
         time: latestNavTime,
-      }}
-      snapshot={{
+      },
+      snapshot: {
         asOf,
         currency: portfolio?.configuration?.currency ?? portfolio?.cash?.currency ?? 'USD',
         dayReturn: authoritativePerformance.latest?.dailyReturn ?? null,
         drawdown: authoritativePerformance.latest?.drawdown ?? null,
         nav: latestNav.nav,
         performanceHistory: authoritativePerformance.points,
-      }}
-    /> } : { kind: 'empty', message: 'No persisted NAV is available.' },
+      },
+    } } : { kind: 'empty', message: 'No persisted NAV is available.' },
     marketRegime: { kind: 'unavailable', message: 'No persisted market regime is available.' },
-    watchlist: quotes.length ? { kind: 'available', value: {
+    watchlist: authoritativeWatchlist.length ? { kind: 'available', value: {
       kicker: 'Discover',
       title: 'Watchlist signals',
-      action: <Link className="compact-hit-link" href="/watchlist">Manage watchlist</Link>,
-      context: <p className="muted-copy"><span>Current market context · not decision-time evidence</span><small>TradingView data is external current-market context · Not decision-time evidence</small></p>,
-      items: quotes.map((quote) => {
-            const decision = latestResearchBySymbol.get(quote.symbol)
-            return <li key={quote.symbol}>
-              <div className="heatmap-primary"><Link className="compact-hit-link" href={`/research/${quote.symbol}`}>{quote.symbol}</Link><strong>{formatMoney(quote.close, 'USD')}</strong></div>
-              {decision ? <div className="heatmap-decisions"><Signal tone={decision.opinion ?? 'neutral'}>{decision.opinion ?? 'OPINION UNAVAILABLE'}</Signal><span>{formatPercent(decision.confidence, { signed: false })} confidence</span></div> : <span className="unavailable-value">Research decision unavailable</span>}
-              {decision ? <p>{decision.summary}</p> : null}
-              <div className="quality-line"><span>{quote.provider} · {quote.coverage}</span><time dateTime={quote.availableAt}>Available {formatDualTime(quote.availableAt).newYork}</time></div>
-            </li>
-          }),
+      action: { href: '/watchlist', label: 'Manage watchlist' },
+      context: { label: 'Current market context · not decision-time evidence', detail: 'TradingView data is external current-market context · Not decision-time evidence' },
+      items: authoritativeWatchlist.map((item) => {
+        const quote = quoteBySymbol.get(item.symbol)
+        const decision = latestResearchBySymbol.get(item.symbol)
+        return {
+          symbol: item.symbol,
+          primaryValue: quote ? formatMoney(quote.close, 'USD') : 'Unavailable',
+          decisions: decision ? [
+            { label: decision.opinion ?? 'OPINION UNAVAILABLE', tone: decision.opinion ?? 'neutral' },
+            { label: `${formatPercent(decision.confidence, { signed: false })} confidence`, tone: 'neutral' },
+          ] : [],
+          detail: quote ? decision ? undefined : 'Research decision unavailable' : 'No point-in-time eligible market quote is available.',
+          summary: decision?.summary,
+          provenance: quote ? [`${quote.provider} · ${quote.coverage}`] : ['Persisted quote unavailable'],
+          availableAt: quote?.availableAt,
+        }
+      }),
     } } : { kind: 'empty', message: 'No point-in-time eligible watchlist quotes are available.' },
     alerts: alerts.length ? { kind: 'available', value: {
-      kicker: 'Decide', title: 'Actionable alerts', action: <Link className="compact-hit-link" href="/alerts">View all</Link>,
-      content: <ul className="alert-list">{alerts.slice(0, 3).map((alert) => <li key={alert.id}>
-        <div className="alert-meta"><Signal tone={alert.severity}>{alert.severity}</Signal><Link className="compact-hit-link" href={`/research/${alert.symbol}`}>{alert.symbol}</Link><time dateTime={alert.eventTime}>{formatDualTime(alert.eventTime).newYork}</time></div>
-        <p>{alert.ruleId} · {alert.ruleVersion}</p><strong>Materiality {formatPercent(alert.materiality, { signed: false })}</strong>
-      </li>)}</ul>,
+      kicker: 'Decide', title: 'Actionable alerts', action: { href: '/alerts', label: 'View all' },
+      items: alerts.slice(0, 3).map((alert) => ({ id: alert.id, severity: alert.severity, symbol: alert.symbol, eventTime: alert.eventTime, detail: `${alert.ruleId} · ${alert.ruleVersion}`, emphasis: `Materiality ${formatPercent(alert.materiality, { signed: false })}` })),
     } } : { kind: 'empty', message: 'No persisted actionable alert is available.' },
     activeRun: activeRun ? { kind: 'available', value: {
-      kicker: 'Run progress', title: 'Research execution',
-      content: <div className="run-progress"><div><Link className="compact-hit-link" href={`/runs/${activeRun.runId}`}>{activeRun.symbol ? `${activeRun.runType === 'RESEARCH' ? 'Research' : 'Portfolio'} · ${activeRun.symbol}` : 'Portfolio research'}</Link><Signal tone={activeRun.status}>{activeRun.status}</Signal></div><p>Decision time <time dateTime={activeRun.decisionTime}>{formatDualTime(activeRun.decisionTime).newYork}</time></p></div>,
+      href: `/runs/${activeRun.runId}`,
+      label: activeRun.symbol ? `${activeRun.runType === 'RESEARCH' ? 'Research' : 'Portfolio'} · ${activeRun.symbol}` : 'Portfolio research',
+      status: activeRun.status,
+      decisionTime: activeRun.decisionTime,
     } } : { kind: 'empty', message: 'No persisted research run is available.' },
   }
   return (
