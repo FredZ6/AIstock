@@ -78,7 +78,12 @@ test.describe('isolated real API runtime', () => {
     expect(factCount).toBeGreaterThan(0)
     await expect(disclosure).toHaveText(`${factCount} unavailable facts`)
     await expect(summary.getByText('UNCONFIGURED · SEC')).toBeVisible()
-    await expect(summary.getByText(/ALPHA VANTAGE/)).toBeVisible()
+    const alphaVantage = summary.locator('.state-fact').filter({ hasText: 'ALPHA VANTAGE' })
+    await expect(alphaVantage).toHaveAttribute('data-availability-state', 'UNCONFIGURED')
+    await expect(alphaVantage.locator('.state-fact-label')).toHaveText(/ALPHA VANTAGE$/)
+    await expect(alphaVantage.locator('.state-fact-reason')).toHaveText(
+      'Configure ALPHA_VANTAGE_API_KEY to ingest the earnings calendar.',
+    )
     await expect(summary.getByText('EMPTY · Portfolio NAV')).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     const accessibility = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()

@@ -103,3 +103,23 @@ def test_ingestion_release_gate_is_recorded_first_and_opt_in_live() -> None:
     assert "RUN_SEC_LIVE_SMOKE" in script
     assert "RUN_ALPHA_LIVE_SMOKE" in script
     assert "SKIP" in script
+
+
+def test_agent_runtime_gate_owns_its_redis_namespace_and_waits_for_exact_task() -> None:
+    script = (ROOT / "scripts" / "verify-agent-runtime.sh").read_text()
+    celery_config = (ROOT / "scripts" / "agent_runtime_celery.py").read_text()
+
+    assert "AGENT_RUNTIME_REDIS_KEY_PREFIX" in script
+    assert "AGENT_RUNTIME_CONTROL_QUEUE" in script
+    assert "AGENT_RUNTIME_RESEARCH_QUEUE" in script
+    assert '"MAX_ACTIVE_AGENT_RUNS=1"' in script
+    assert "cleanup_redis_keys" in script
+    assert "global_keyprefix" in celery_config
+    assert "runtime_control_queue" in celery_config
+    assert "runtime_research_queue" in celery_config
+    assert "replay_task_id" in script
+    assert "run_research[${run_id}] received" in script
+    assert "[${replay_task_id}] succeeded" in script
+    assert 'test "${checkpoint_count}" =' in script
+    assert 'test "${received_count}" = "3"' in script
+    assert "llen celery" not in script.lower()

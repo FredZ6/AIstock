@@ -4283,11 +4283,28 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   worker/SSE integration group exited 0 with 28/28 tests. The acceptance opens the intentionally
   collapsed durable trace before counting events and proves that missing persisted NAV renders the
   explicit empty state with no Fixture label, frozen synthetic copy, chart, or fallback series.
+- Spec review then found that merely selecting the declared queue names still shared Redis DB 15 with
+  prior runs, so stale production-named queue keys could be consumed by a later acceptance. Each
+  harness invocation now owns a unique control queue, research queue and Redis global key prefix;
+  setup proves the prefix is empty and cleanup unlinks only those owned keys, never flushing the shared
+  developer database. `MAX_ACTIVE_AGENT_RUNS=1` also keeps the isolated recovery probe from admitting
+  unrelated catch-up work. Two consecutive complete harness runs each reported exactly three received
+  and three succeeded tasks: one recovery control task, one research execution and one idempotent
+  research replay. Each run independently passed API Playwright 14/14 and worker/SSE integration
+  28/28.
+- The same review rejected queue emptiness as duplicate-delivery evidence. The first corrected attempt
+  produced a real RED because Celery 5.6's `celery call` command does not accept `--id`; the harness now
+  submits through the Celery Python client with an explicit UUID, waits for that exact UUID's
+  `received` and `succeeded` worker-log records, then proves the original event, tool-call and decision
+  counts are unchanged. A second real RED showed that Alpha Vantage is intentionally coalesced into the
+  earnings gap instead of a standalone fact. The browser check now scopes that exact `.state-fact`,
+  asserts `data-availability-state="UNCONFIGURED"`, verifies the Alpha Vantage label suffix and checks
+  the exact configuration reason separately.
 - The isolated API environment deliberately has no external-provider credentials: SEC and Alpha
   Vantage remain explicit unconfigured facts and Portfolio NAV remains empty. These results verify
   honest degradation and absence of fallback; they are not evidence of live-provider success. The
   five optional external-provider contract tests remain skipped rather than simulated.
 - With all managed writers stopped, the final fresh `make verify` exited 0: Ruff format/check clean
-  for 339 files, Mypy clean for 292 source files, Alembic drift checks passed, backend 767 passed / 5
+  for 340 files, Mypy clean for 292 source files, Alembic drift checks passed, backend 768 passed / 5
   optional live-provider tests skipped, frontend 36 files and 263/263 tests passed, and the Next.js
   production build succeeded.
