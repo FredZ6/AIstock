@@ -716,7 +716,7 @@ def test_0033_preserves_legacy_action_currency_and_uses_exact_generated_lineage(
     engine.dispose()
 
 
-def test_0042_backfills_authoritative_watchlist_order_and_appends_new_symbols(
+def test_0042_preserves_alphabetical_watchlist_order_and_appends_new_symbols(
     migration_database_url: str,
 ) -> None:
     config = _alembic_config(migration_database_url)
@@ -724,7 +724,7 @@ def test_0042_backfills_authoritative_watchlist_order_and_appends_new_symbols(
     engine = create_engine(migration_database_url)
     existing = [
         ("10000000-0000-0000-0000-000000000042", "AVGO"),
-        ("20000000-0000-0000-0000-000000000042", "NVDA"),
+        ("20000000-0000-0000-0000-000000000042", "AAAQ"),
     ]
     with engine.begin() as connection:
         for security_id, symbol in existing:
@@ -754,7 +754,7 @@ def test_0042_backfills_authoritative_watchlist_order_and_appends_new_symbols(
                 text("SELECT symbol, display_order FROM watchlist_item ORDER BY display_order")
             ).all()
         ]
-        assert ranked == [("NVDA", 1), ("AVGO", 2)]
+        assert ranked == [("AAAQ", 1), ("AVGO", 2)]
 
         appended_security_id = "30000000-0000-0000-0000-000000000042"
         connection.execute(

@@ -1,4 +1,4 @@
-"""Persist the authoritative Watchlist display order."""
+"""Persist the stable Watchlist display order."""
 
 from collections.abc import Sequence
 
@@ -22,23 +22,7 @@ def upgrade() -> None:
         WITH ranked AS (
             SELECT security_id,
                    row_number() OVER (
-                       ORDER BY CASE symbol
-                           WHEN 'NVDA' THEN 1
-                           WHEN 'AVGO' THEN 2
-                           WHEN 'TSM' THEN 3
-                           WHEN 'SKHY' THEN 4
-                           WHEN 'WDC' THEN 5
-                           WHEN 'SNDK' THEN 6
-                           WHEN 'MU' THEN 7
-                           WHEN 'NBIS' THEN 8
-                           WHEN 'MRVL' THEN 9
-                           WHEN 'BE' THEN 10
-                           WHEN 'INTC' THEN 11
-                           ELSE 12
-                       END,
-                       created_at,
-                       symbol,
-                       security_id
+                       ORDER BY symbol, security_id
                    ) AS display_order
             FROM watchlist_item
         )
