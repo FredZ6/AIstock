@@ -32,7 +32,7 @@ export function TodayWatchlistSection({ mode, panel }: { mode: 'api' | 'fixture'
         </button> : null}
       </div>
     </div>
-    {panel.context ? <p className="muted-copy"><span>{panel.context.label}</span><small>{panel.context.detail}</small></p> : null}
+    {panel.context ? <p className="muted-copy"><span>{panel.context.label}</span>{expanded || !hasDisclosure ? <small>{panel.context.detail}</small> : null}</p> : null}
     <ul
       aria-label="Watchlist signals"
       className={`market-list watchlist-heatmap${mode === 'api' ? ' persisted-market-list' : ''}`}
@@ -42,8 +42,8 @@ export function TodayWatchlistSection({ mode, panel }: { mode: 'api' | 'fixture'
         <div className="heatmap-primary"><Link className="compact-hit-link" href={`/research/${item.symbol}`}>{item.symbol}</Link><strong>{item.primaryValue}</strong></div>
         {item.decisions.length ? <div className="heatmap-decisions">{item.decisions.map((decision) => <Signal key={`${decision.tone}:${decision.label}`} tone={decision.tone}>{decision.label}</Signal>)}</div> : null}
         {item.detail ? <span className="unavailable-value">{item.detail}</span> : null}
-        {item.summary ? <p>{item.summary}</p> : null}
-        <div className="quality-line">{item.provenance.map((value) => <span key={value}>{value}</span>)}{item.availableAt ? <time dateTime={item.availableAt}>Available {formatDualTime(item.availableAt).newYork}</time> : null}</div>
+        {item.summary && (expanded || !hasDisclosure) ? <p>{item.summary}</p> : null}
+        {expanded || !hasDisclosure ? <div className="quality-line">{item.provenance.map((value) => <span key={value}>{value}</span>)}{item.availableAt ? <time dateTime={item.availableAt}>Available {formatDualTime(item.availableAt).newYork}</time> : null}</div> : null}
       </li>)}
     </ul>
   </section>

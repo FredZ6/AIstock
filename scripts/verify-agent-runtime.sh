@@ -172,6 +172,9 @@ echo "runtime task evidence: received=${received_count} succeeded=${succeeded_co
 stop_process "${worker_pid}"
 worker_pid=""
 
+PYTHONPATH="${repo_root}/backend/src" .venv/bin/python scripts/seed_browser_today.py \
+  --database-url "${database_url}"
+
 event_ids="$(sql "SELECT string_agg(id::text, ',' ORDER BY sequence) FROM agent_event WHERE run_id = '${run_id}'")"
 RUN_API_BROWSER=1 WEB_DATA_MODE=api API_BASE_URL="http://127.0.0.1:${api_port}" \
   PLAYWRIGHT_WEB_PORT="${web_port}" DATABASE_URL="${database_url}" \

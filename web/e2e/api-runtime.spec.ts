@@ -84,7 +84,7 @@ test.describe('isolated real API runtime', () => {
     await expect(alphaVantage.locator('.state-fact-reason')).toHaveText(
       'Configure ALPHA_VANTAGE_API_KEY to ingest the earnings calendar.',
     )
-    await expect(summary.getByText('EMPTY · Portfolio NAV')).toBeVisible()
+    await expect(summary.getByText('EMPTY · Portfolio NAV')).toHaveCount(0)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     const accessibility = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()
     expect(accessibility.violations.filter(({ impact }) => impact === 'serious' || impact === 'critical')).toEqual([])
@@ -127,14 +127,34 @@ test.describe('isolated real API runtime', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   })
 
-  test('API Today never fabricates a portfolio chart when persisted NAV history is absent', async ({ page }) => {
+  test('API Today renders persisted Portfolio history, ranked Watchlist disclosure, and latest run', async ({ page, request }) => {
     await page.goto('/')
 
     await expect(page.getByText('Fixture Mode', { exact: true })).toHaveCount(0)
     await expect(page.getByText(/Frozen synthetic/i)).toHaveCount(0)
-    await expect(page.getByText('No persisted NAV is available.', { exact: true })).toBeVisible()
-    await expect(page.getByRole('figure', { name: 'Paper portfolio performance' })).toHaveCount(0)
-    await expect(page.locator('.performance-plot svg')).toHaveCount(0)
+    const portfolio = page.getByRole('figure', { name: 'Paper portfolio performance' })
+    await expect(portfolio.getByRole('img', { name: 'Net asset value history' })).toBeVisible()
+    await portfolio.getByRole('tab', { name: 'Day return' }).click()
+    await expect(portfolio.getByRole('img', { name: 'Day return history' })).toBeVisible()
+    await portfolio.getByRole('tab', { name: 'Current drawdown' }).click()
+    await expect(portfolio.getByRole('img', { name: 'Current drawdown history' })).toBeVisible()
+    await expect(portfolio.getByText('Persisted paper NAV history')).toBeVisible()
+
+    const watchlist = page.getByRole('list', { name: 'Watchlist signals' })
+    await expect(watchlist.getByRole('listitem')).toHaveCount(2)
+    await expect(watchlist.getByRole('link', { name: 'NVDA', exact: true })).toBeVisible()
+    await expect(watchlist.getByRole('link', { name: 'AVGO', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Show all (11)' }).click()
+    await expect(watchlist.getByRole('listitem')).toHaveCount(11)
+    await expect(watchlist.getByRole('link', { name: 'INTC', exact: true })).toBeVisible()
+
+    const decisionTime = new Date(Date.now() + 1000).toISOString()
+    const latestResponse = await request.get(`${base}/api/v1/research-runs/latest?decision_time=${encodeURIComponent(decisionTime)}`)
+    expect(latestResponse.status()).toBe(200)
+    const latest = await latestResponse.json() as { run_id: string; status: string }
+    const run = page.getByRole('region', { name: 'Research execution' })
+    await expect(run.getByRole('link', { name: 'Research · NVDA' })).toHaveAttribute('href', `/runs/${latest.run_id}`)
+    await expect(run).toContainText(latest.status)
   })
 
   test('duplicate API admissions return the same durable run', async ({ request }) => {

@@ -172,8 +172,8 @@ export function PerformanceChart({
             <path className="chart-line" d={line} />
           </svg>
           <div className="chart-dates"><time dateTime={first?.point.time}>{first ? shortDate(first.point.time) : '—'}</time><time dateTime={last?.point.time}>{last ? shortDate(last.point.time) : '—'}</time></div>
-          <p className="performance-chart-summary" id={`${chartId}-summary`}>{metricSummary}</p>
-        </> : <p className="performance-history-empty performance-chart-summary" id={`${chartId}-summary`}>{metricSummary}</p>}
+          <p className={`performance-chart-summary${compact ? ' sr-only' : ''}`} id={`${chartId}-summary`}>{metricSummary}</p>
+        </> : <p className={`performance-history-empty performance-chart-summary${compact ? ' sr-only' : ''}`} id={`${chartId}-summary`}>{metricSummary}</p>}
       </div>
       <p className="performance-fixture">{historySource ? <>
         <span>{historySource.label}</span> · persisted <time dateTime={historySource.time}>{formatDualTime(historySource.time).newYork}</time>

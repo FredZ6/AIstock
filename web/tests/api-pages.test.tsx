@@ -252,6 +252,8 @@ describe('API mode pages', () => {
     const showAll = screen.getByRole('button', { name: 'Show all (4)' })
     expect(showAll).toHaveAttribute('aria-expanded', 'false')
     expect(showAll).toHaveAttribute('aria-controls', list.id)
+    expect(screen.queryByText('TradingView data is external current-market context · Not decision-time evidence')).not.toBeInTheDocument()
+    expect(within(list).queryByText('ALPACA · IEX')).not.toBeInTheDocument()
 
     activateButtonWithKeyboard(showAll)
 
@@ -260,6 +262,8 @@ describe('API mode pages', () => {
     expect(within(list).getByRole('link', { name: 'AMD' })).toBeInTheDocument()
     expect(within(list).getByRole('link', { name: 'AAPL' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('TradingView data is external current-market context · Not decision-time evidence')).toBeInTheDocument()
+    expect(within(list).getAllByText('ALPACA · IEX')).toHaveLength(4)
   })
 
   it('keeps a missing quote in its authoritative Watchlist rank instead of promoting a later symbol', () => {

@@ -167,11 +167,14 @@ describe('TodayPage', () => {
     expect(within(heatmap).getByText('+2.14%')).toBeInTheDocument()
     expect(within(heatmap).getByText('BULLISH')).toBeInTheDocument()
     expect(within(heatmap).getByText('HOLD')).toBeInTheDocument()
+    const showAll = screen.getByRole('button', { name: 'Show all (5)' })
+    expect(showAll).toHaveAttribute('aria-expanded', 'false')
+    expect(within(heatmap).queryByText(/fixture-market/)).not.toBeInTheDocument()
+    activateButtonWithKeyboard(showAll)
     expect(within(heatmap).getByText(/94% coverage/)).toBeInTheDocument()
-    expect(within(heatmap).getAllByText(/fixture-market/)).toHaveLength(2)
-    expect(within(heatmap).getByText('0s delay')).toBeInTheDocument()
-    expect(within(heatmap).getByText(/No conflict/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Show all (5)' })).toHaveAttribute('aria-expanded', 'false')
+    expect(within(heatmap).getAllByText(/fixture-market/)).toHaveLength(4)
+    expect(within(heatmap).getAllByText('0s delay')).toHaveLength(4)
+    expect(within(heatmap).getAllByText(/No conflict/).length).toBeGreaterThan(0)
   })
 
   it('shows two Watchlist rows until the user expands the same list by keyboard', () => {
