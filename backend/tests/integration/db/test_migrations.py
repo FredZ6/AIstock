@@ -714,3 +714,62 @@ def test_0033_preserves_legacy_action_currency_and_uses_exact_generated_lineage(
             {"id": action_id},
         ).one() == ("EUR", f"legacy:{raw_id}")
     engine.dispose()
+
+
+def test_0042_backfills_authoritative_watchlist_order_and_appends_new_symbols(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "0041_portfolio_nav_read_index")
+    engine = create_engine(migration_database_url)
+    existing = [
+        ("10000000-0000-0000-0000-000000000042", "AVGO"),
+        ("20000000-0000-0000-0000-000000000042", "NVDA"),
+    ]
+    with engine.begin() as connection:
+        for security_id, symbol in existing:
+            connection.execute(
+                text(
+                    "INSERT INTO security (id, instrument_type) "
+                    "VALUES (:security_id, 'COMMON_STOCK')"
+                ),
+                {"security_id": security_id},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO watchlist_item (security_id, symbol) "
+                    "VALUES (:security_id, :symbol)"
+                ),
+                {"security_id": security_id, "symbol": symbol},
+            )
+    engine.dispose()
+
+    command.upgrade(config, "head")
+
+    engine = create_engine(migration_database_url)
+    with engine.begin() as connection:
+        ranked = [
+            tuple(row)
+            for row in connection.execute(
+                text("SELECT symbol, display_order FROM watchlist_item ORDER BY display_order")
+            ).all()
+        ]
+        assert ranked == [("NVDA", 1), ("AVGO", 2)]
+
+        appended_security_id = "30000000-0000-0000-0000-000000000042"
+        connection.execute(
+            text(
+                "INSERT INTO security (id, instrument_type) VALUES (:security_id, 'COMMON_STOCK')"
+            ),
+            {"security_id": appended_security_id},
+        )
+        appended_order = connection.execute(
+            text(
+                "INSERT INTO watchlist_item (security_id, symbol) "
+                "VALUES (:security_id, 'AAA') RETURNING display_order"
+            ),
+            {"security_id": appended_security_id},
+        ).scalar_one()
+
+    assert appended_order == 3
+    engine.dispose()

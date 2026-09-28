@@ -38,6 +38,7 @@ export type ApiWatchlistItem = {
   alertThreshold: string | null
   createdAt: string
   dailyResearch: boolean
+  displayOrder: number
   enrichment: WatchlistEnrichment
   intradayMonitoring: boolean
   symbol: string

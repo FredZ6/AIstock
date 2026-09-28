@@ -690,11 +690,19 @@ watchlist_item = Table(
     metadata,
     Column("security_id", UUID(as_uuid=True), ForeignKey("security.id"), primary_key=True),
     Column("symbol", Text, nullable=False, unique=True),
+    Column(
+        "display_order",
+        Integer,
+        nullable=False,
+        unique=True,
+        server_default=text("nextval('watchlist_display_order_seq')"),
+    ),
     Column("daily_research", Boolean, nullable=False, server_default=text("true")),
     Column("intraday_monitoring", Boolean, nullable=False, server_default=text("true")),
     Column("thresholds", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
     created_at(),
+    CheckConstraint("display_order > 0", name=conv("ck_watchlist_item_display_order_positive")),
 )
 risk_decision = Table(
     "risk_decision",

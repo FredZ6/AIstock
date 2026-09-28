@@ -334,6 +334,16 @@ class WatchlistRequest(StrictModel):
         return str(Symbol(value))
 
 
+class WatchlistItem(StrictModel):
+    symbol: str
+    display_order: int = Field(ge=1)
+    daily_research: bool
+    intraday_monitoring: bool
+    thresholds: dict[str, Any]
+    updated_at: datetime
+    created_at: datetime
+
+
 class WatchlistPatch(StrictModel):
     daily_research: bool | None = None
     intraday_monitoring: bool | None = None

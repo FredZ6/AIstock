@@ -34,6 +34,7 @@ from stock_platform.api.schemas.rest import (
     ResearchRunReportResponse,
     ResearchRunRequest,
     RunResponse,
+    WatchlistItem,
     WatchlistPatch,
     WatchlistRequest,
     WeeklyReviewDetail,
@@ -241,6 +242,7 @@ def _read_status(items: list[dict[str, Any]]) -> Literal["SUCCESS", "DEGRADED", 
 
 _WATCHLIST_PUBLIC_COLUMNS = (
     watchlist_item.c.symbol,
+    watchlist_item.c.display_order,
     watchlist_item.c.daily_research,
     watchlist_item.c.intraday_monitoring,
     watchlist_item.c.thresholds,
@@ -578,15 +580,18 @@ def list_data_quality(
     return {"status": status, "decision_time": cutoff, "items": items}
 
 
-@router.get("/watchlist")
+@router.get("/watchlist", response_model=list[WatchlistItem])
 def list_watchlist(connection: ConnectionDependency) -> list[dict[str, Any]]:
     rows = connection.execute(
-        select(*_WATCHLIST_PUBLIC_COLUMNS).order_by(watchlist_item.c.symbol)
+        select(*_WATCHLIST_PUBLIC_COLUMNS).order_by(
+            watchlist_item.c.display_order,
+            watchlist_item.c.symbol,
+        )
     ).mappings()
     return [_row(row) for row in rows]
 
 
-@router.post("/watchlist", status_code=201)
+@router.post("/watchlist", response_model=WatchlistItem, status_code=201)
 def add_watchlist(request: WatchlistRequest, connection: ConnectionDependency) -> dict[str, Any]:
     values = request.model_dump()
     values["security_id"] = _security_id_for_symbol(connection, request.symbol)
@@ -611,7 +616,7 @@ def add_watchlist(request: WatchlistRequest, connection: ConnectionDependency) -
     return _row(row)
 
 
-@router.patch("/watchlist/{symbol}")
+@router.patch("/watchlist/{symbol}", response_model=WatchlistItem)
 def patch_watchlist(
     symbol: str, request: WatchlistPatch, connection: ConnectionDependency
 ) -> dict[str, Any]:

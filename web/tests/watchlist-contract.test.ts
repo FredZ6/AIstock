@@ -4,6 +4,7 @@ import { parseWatchlistRows } from '../lib/watchlist-contract'
 
 const validRow = {
   symbol: 'NVDA',
+  display_order: 7,
   daily_research: true,
   intraday_monitoring: false,
   thresholds: { return_5m: '0.025' },
@@ -16,6 +17,7 @@ describe('watchlist API contract', () => {
     expect(parseWatchlistRows([validRow])).toEqual([
       {
         symbol: 'NVDA',
+        displayOrder: 7,
         dailyResearch: true,
         intradayMonitoring: false,
         alertThreshold: '0.025',
@@ -39,6 +41,10 @@ describe('watchlist API contract', () => {
     ['a naive updated timestamp', { ...validRow, updated_at: '2026-08-23T00:05:00' }],
     ['a non-boolean daily research flag', { ...validRow, daily_research: 'true' }],
     ['a non-boolean intraday flag', { ...validRow, intraday_monitoring: 1 }],
+    ['a missing display order', { ...validRow, display_order: undefined }],
+    ['a zero display order', { ...validRow, display_order: 0 }],
+    ['a fractional display order', { ...validRow, display_order: 1.5 }],
+    ['a string display order', { ...validRow, display_order: '7' }],
     ['non-object thresholds', { ...validRow, thresholds: [] }],
     ['a non-string threshold', { ...validRow, thresholds: { return_5m: 0.025 } }],
     ['a non-decimal threshold', { ...validRow, thresholds: { return_5m: 'two percent' } }],

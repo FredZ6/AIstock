@@ -155,6 +155,24 @@ def test_live_read_endpoints_publish_closed_response_schemas() -> None:
         assert component.get("additionalProperties") is False, path
 
 
+def test_watchlist_read_and_mutation_responses_share_one_closed_ranked_schema() -> None:
+    document = app.openapi()
+    path = document["paths"]["/api/v1/watchlist"]
+    list_schema = path["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    create_schema = path["post"]["responses"]["201"]["content"]["application/json"]["schema"]
+    patch_schema = document["paths"]["/api/v1/watchlist/{symbol}"]["patch"]["responses"]["200"][
+        "content"
+    ]["application/json"]["schema"]
+
+    assert list_schema["type"] == "array"
+    assert list_schema["items"]["$ref"].endswith("/WatchlistItem")
+    assert create_schema["$ref"].endswith("/WatchlistItem")
+    assert patch_schema["$ref"].endswith("/WatchlistItem")
+    component = document["components"]["schemas"]["WatchlistItem"]
+    assert component["additionalProperties"] is False
+    assert "display_order" in component["required"]
+
+
 def test_provider_health_inventory_matches_implemented_adapters(client: TestClient) -> None:
     app.dependency_overrides[get_settings] = lambda: Settings(  # type: ignore[call-arg]
         environment="test",
@@ -737,6 +755,7 @@ def test_watchlist_crud_normalizes_and_persists_symbol(client: TestClient) -> No
     assert created.json()["symbol"] == "NVDA"
     assert set(created.json()) == {
         "symbol",
+        "display_order",
         "daily_research",
         "intraday_monitoring",
         "thresholds",
@@ -748,6 +767,34 @@ def test_watchlist_crud_normalizes_and_persists_symbol(client: TestClient) -> No
     nvda = next(item for item in listed.json() if item["symbol"] == "NVDA")
     assert nvda["thresholds"] == {"return_5m": "0.03"}
     assert deleted.status_code == 204
+
+
+def test_watchlist_list_uses_persisted_append_order_and_patch_preserves_it(
+    client: TestClient,
+) -> None:
+    first = client.post("/api/v1/watchlist", json={"symbol": "ZZZQ"})
+    second = client.post("/api/v1/watchlist", json={"symbol": "AAAQ"})
+
+    assert first.status_code == second.status_code == 201
+    assert first.json()["display_order"] < second.json()["display_order"]
+
+    listed = client.get("/api/v1/watchlist")
+    listed_symbols = [item["symbol"] for item in listed.json()]
+    assert listed_symbols.index("ZZZQ") < listed_symbols.index("AAAQ")
+
+    patched = client.patch("/api/v1/watchlist/ZZZQ", json={"daily_research": False})
+    assert patched.status_code == 200
+    assert patched.json()["display_order"] == first.json()["display_order"]
+
+    create_reorder = client.post(
+        "/api/v1/watchlist",
+        json={"symbol": "NVDA", "display_order": 1},
+    )
+    patch_reorder = client.patch(
+        "/api/v1/watchlist/ZZZQ",
+        json={"display_order": second.json()["display_order"]},
+    )
+    assert create_reorder.status_code == patch_reorder.status_code == 422
 
 
 def test_portfolio_run_uses_the_shared_durable_idempotency_path(client: TestClient) -> None:

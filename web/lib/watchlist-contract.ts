@@ -24,6 +24,13 @@ function boolean(value: unknown, path: string): boolean {
   return value
 }
 
+function positiveInteger(value: unknown, path: string): number {
+  if (!Number.isInteger(value) || Number(value) < 1) {
+    throw new TypeError(`${path} must be a positive integer`)
+  }
+  return Number(value)
+}
+
 function awareDateTime(value: unknown, path: string): string {
   if (typeof value !== 'string') {
     throw new TypeError(`${path} must be a string`)
@@ -60,6 +67,7 @@ export function parseWatchlistRow(value: unknown, path = 'watchlist item'): ApiW
   return {
     symbol: symbol(source.symbol, `${path}.symbol`),
     dailyResearch: boolean(source.daily_research, `${path}.daily_research`),
+    displayOrder: positiveInteger(source.display_order, `${path}.display_order`),
     intradayMonitoring: boolean(source.intraday_monitoring, `${path}.intraday_monitoring`),
     alertThreshold: alertThreshold(thresholds, `${path}.thresholds`),
     createdAt: awareDateTime(source.created_at, `${path}.created_at`),

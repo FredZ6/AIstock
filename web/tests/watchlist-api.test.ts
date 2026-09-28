@@ -11,6 +11,7 @@ import {
 
 const validRow = {
   symbol: 'NVDA',
+  display_order: 1,
   daily_research: true,
   intraday_monitoring: false,
   thresholds: { return_5m: '0.025' },
@@ -79,7 +80,7 @@ describe('watchlist API read client', () => {
 
     const result = await listWatchlist({ baseUrl: 'http://api.test', fetchImpl })
 
-    expect(result[0]).toMatchObject({ symbol: 'NVDA', alertThreshold: '0.025' })
+    expect(result[0]).toMatchObject({ symbol: 'NVDA', displayOrder: 1, alertThreshold: '0.025' })
     expect(fetchImpl).toHaveBeenCalledOnce()
     expect(fetchImpl).toHaveBeenCalledWith(
       'http://api.test/api/v1/watchlist',
@@ -158,7 +159,7 @@ describe('watchlist API mutations', () => {
       },
     )
 
-    expect(result.symbol).toBe('NVDA')
+    expect(result).toMatchObject({ displayOrder: 1, symbol: 'NVDA' })
     expect(fetchImpl).toHaveBeenCalledWith(
       'http://api.test/api/v1/watchlist',
       expect.objectContaining({
@@ -187,7 +188,7 @@ describe('watchlist API mutations', () => {
       { dailyResearch: false, thresholds: { return_5m: '0.03' } },
     )
 
-    expect(result).toMatchObject({ dailyResearch: false, alertThreshold: '0.03' })
+    expect(result).toMatchObject({ dailyResearch: false, displayOrder: 1, alertThreshold: '0.03' })
     expect(fetchImpl).toHaveBeenCalledWith(
       'http://api.test/api/v1/watchlist/NVDA',
       expect.objectContaining({

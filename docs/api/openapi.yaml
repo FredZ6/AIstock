@@ -2977,6 +2977,54 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "WatchlistItem": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "daily_research": {
+            "title": "Daily Research",
+            "type": "boolean"
+          },
+          "display_order": {
+            "minimum": 1.0,
+            "title": "Display Order",
+            "type": "integer"
+          },
+          "intraday_monitoring": {
+            "title": "Intraday Monitoring",
+            "type": "boolean"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "thresholds": {
+            "additionalProperties": true,
+            "title": "Thresholds",
+            "type": "object"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "display_order",
+          "daily_research",
+          "intraday_monitoring",
+          "thresholds",
+          "updated_at",
+          "created_at"
+        ],
+        "title": "WatchlistItem",
+        "type": "object"
+      },
       "WatchlistPatch": {
         "additionalProperties": false,
         "properties": {
@@ -4956,8 +5004,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/WatchlistItem"
                   },
                   "title": "Response List Watchlist Api V1 Watchlist Get",
                   "type": "array"
@@ -4986,9 +5033,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Add Watchlist Api V1 Watchlist Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WatchlistItem"
                 }
               }
             },
@@ -5067,9 +5112,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Patch Watchlist Api V1 Watchlist  Symbol  Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WatchlistItem"
                 }
               }
             },

@@ -11,6 +11,7 @@ const apiRow = {
   alertThreshold: '0.025',
   createdAt: '2026-08-23T00:00:00+00:00',
   dailyResearch: true,
+  displayOrder: 1,
   enrichment: {
     kind: 'unavailable' as const,
     missing: ['market', 'research', 'earnings', 'data-quality'],
