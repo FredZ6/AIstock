@@ -24,6 +24,7 @@ from stock_platform.infrastructure.db.models.tables import (
     news_article,
     normalized_record,
     option_snapshot,
+    portfolio_nav,
     raw_data_object,
     research_opinion,
     research_scoring_policy_version,
@@ -1058,6 +1059,72 @@ def test_portfolio_nav_has_availability_and_enforces_decision_time(
     assert response.status_code == 200
     assert response.json()["latest_nav"]["nav"] == "100000.00"
     assert datetime.fromisoformat(response.json()["latest_nav"]["available_at"]) == past_available
+
+
+def test_portfolio_nav_read_model_canonicalizes_revisions_before_history_limit(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    portfolio_id = connection.execute(text("SELECT id FROM paper_portfolio_config")).scalar_one()
+    initialized_at = datetime.now(UTC) - timedelta(days=5)
+    initialized = client.post(
+        "/api/v1/portfolio/initialize",
+        headers={"Idempotency-Key": f"portfolio-canonical-{uuid4()}"},
+        json={"effective_at": initialized_at.isoformat()},
+    )
+    assert initialized.status_code == 200
+    connection.execute(portfolio_nav.delete().where(portfolio_nav.c.portfolio_id == portfolio_id))
+
+    first_event = initialized_at + timedelta(days=1)
+    corrected_event = initialized_at + timedelta(days=2)
+    latest_event = initialized_at + timedelta(days=3)
+    rows = [
+        {
+            "id": UUID("00000000-0000-0000-0000-000000000001"),
+            "event_time": first_event,
+            "available_at": first_event + timedelta(minutes=1),
+            "portfolio_id": portfolio_id,
+            "nav": Decimal("100.00"),
+        },
+        *[
+            {
+                "id": UUID(int=revision + 100),
+                "event_time": corrected_event,
+                "available_at": corrected_event + timedelta(seconds=revision + 1),
+                "portfolio_id": portfolio_id,
+                "nav": Decimal(revision),
+            }
+            for revision in range(366)
+        ],
+        {
+            "id": UUID("ffffffff-ffff-ffff-ffff-fffffffffff0"),
+            "event_time": latest_event,
+            "available_at": latest_event + timedelta(minutes=1),
+            "portfolio_id": portfolio_id,
+            "nav": Decimal("299.00"),
+        },
+        {
+            "id": UUID("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+            "event_time": latest_event,
+            "available_at": latest_event + timedelta(minutes=1),
+            "portfolio_id": portfolio_id,
+            "nav": Decimal("300.00"),
+        },
+    ]
+    connection.execute(portfolio_nav.insert(), rows)
+    cutoff = datetime.now(UTC) + timedelta(minutes=1)
+
+    response = client.get("/api/v1/portfolio", params={"decision_time": cutoff.isoformat()})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [row["nav"] for row in payload["performance_history"]] == [
+        "100.00",
+        "365",
+        "300.00",
+    ]
+    assert payload["latest_nav"] == payload["performance_history"][-1]
+    assert payload["latest_nav"]["id"] == "ffffffff-ffff-ffff-ffff-ffffffffffff"
 
 
 def test_data_quality_uses_latest_dimension_state_and_raw_availability(

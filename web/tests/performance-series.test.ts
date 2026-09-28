@@ -48,18 +48,20 @@ describe('toPerformanceSeries', () => {
 })
 
 describe('toAuthoritativePerformanceSeries', () => {
+  const portfolioId = 'portfolio-paper'
   const latestNav = {
     availableAt: '2026-09-27T20:01:00Z',
     eventTime: '2026-09-27T20:00:00Z',
     id: 'nav-latest',
     nav: '110.00',
+    portfolioId,
   }
 
   it('uses the availability-latest record at each earlier event time', () => {
     expect(toAuthoritativePerformanceSeries([
-      { availableAt: '2026-09-26T20:01:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-earlier', nav: '200.00' },
-      { availableAt: '2026-09-25T20:01:00Z', eventTime: '2026-09-25T20:00:00Z', id: 'nav-peak', nav: '130.00' },
-      { availableAt: '2026-09-26T20:02:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-corrected', nav: '120.00' },
+      { availableAt: '2026-09-26T20:01:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-earlier', nav: '200.00', portfolioId },
+      { availableAt: '2026-09-25T20:01:00Z', eventTime: '2026-09-25T20:00:00Z', id: 'nav-peak', nav: '130.00', portfolioId },
+      { availableAt: '2026-09-26T20:02:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-corrected', nav: '120.00', portfolioId },
       latestNav,
     ], latestNav)).toEqual({
       latest: { nav: '110.00', dailyReturn: '-0.08333333', drawdown: '-0.15384615', time: '2026-09-27T20:01:00Z' },
@@ -73,8 +75,8 @@ describe('toAuthoritativePerformanceSeries', () => {
 
   it('uses the lexicographically greatest id when availability ties', () => {
     const result = toAuthoritativePerformanceSeries([
-      { availableAt: '2026-09-26T20:02:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-001', nav: '100.00' },
-      { availableAt: '2026-09-26T20:02:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-002', nav: '120.00' },
+      { availableAt: '2026-09-26T20:02:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-001', nav: '100.00', portfolioId },
+      { availableAt: '2026-09-26T20:02:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-002', nav: '120.00', portfolioId },
       latestNav,
     ], latestNav)
 
@@ -88,11 +90,12 @@ describe('toAuthoritativePerformanceSeries', () => {
       eventTime: '2026-09-26T20:00:00.124000Z',
       id: 'nav-latest-precise',
       nav: '130.00',
+      portfolioId,
     }
     const result = toAuthoritativePerformanceSeries([
-      { availableAt: '2026-09-26T20:00:00.123950Z', eventTime: '2026-09-26T20:00:00.123900Z', id: 'nav-second', nav: '125.00' },
-      { availableAt: '2026-09-26T20:00:00.123100Z', eventTime: '2026-09-26T20:00:00.123100Z', id: 'nav-z-early-correction', nav: '100.00' },
-      { availableAt: '2026-09-26T20:00:00.123900Z', eventTime: '2026-09-26T20:00:00.123100Z', id: 'nav-a-late-correction', nav: '120.00' },
+      { availableAt: '2026-09-26T20:00:00.123950Z', eventTime: '2026-09-26T20:00:00.123900Z', id: 'nav-second', nav: '125.00', portfolioId },
+      { availableAt: '2026-09-26T20:00:00.123100Z', eventTime: '2026-09-26T20:00:00.123100Z', id: 'nav-z-early-correction', nav: '100.00', portfolioId },
+      { availableAt: '2026-09-26T20:00:00.123900Z', eventTime: '2026-09-26T20:00:00.123100Z', id: 'nav-a-late-correction', nav: '120.00', portfolioId },
       preciseLatest,
     ], preciseLatest)
 
@@ -102,8 +105,8 @@ describe('toAuthoritativePerformanceSeries', () => {
 
   it('canonicalizes equivalent event instants with different offsets into one bucket', () => {
     const result = toAuthoritativePerformanceSeries([
-      { availableAt: '2026-09-26T16:01:00-04:00', eventTime: '2026-09-26T16:00:00-04:00', id: 'nav-offset', nav: '100.00' },
-      { availableAt: '2026-09-26T20:02:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-utc', nav: '120.00' },
+      { availableAt: '2026-09-26T16:01:00-04:00', eventTime: '2026-09-26T16:00:00-04:00', id: 'nav-offset', nav: '100.00', portfolioId },
+      { availableAt: '2026-09-26T20:02:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-utc', nav: '120.00', portfolioId },
       latestNav,
     ], latestNav)
 
@@ -112,12 +115,50 @@ describe('toAuthoritativePerformanceSeries', () => {
 
   it('fails closed to one authoritative point when latestNav id is absent', () => {
     expect(toAuthoritativePerformanceSeries([
-      { availableAt: '2026-09-26T20:02:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-other', nav: '120.00' },
+      { availableAt: '2026-09-26T20:02:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-other', nav: '120.00', portfolioId },
     ], latestNav)).toEqual({
       latest: null,
       points: [
         { nav: '110.00', dailyReturn: null, drawdown: '0.00000000', time: '2026-09-27T20:01:00Z' },
       ],
+    })
+  })
+
+  it.each([
+    ['portfolioId', { portfolioId: 'portfolio-other' }],
+    ['nav', { nav: '999.00' }],
+    ['eventTime', { eventTime: '2026-09-27T20:00:00.000001Z' }],
+    ['availableAt', { availableAt: '2026-09-27T20:01:00.000001Z' }],
+  ])('fails closed when the same id has a conflicting %s', (_field, conflict) => {
+    const result = toAuthoritativePerformanceSeries([
+      { ...latestNav, ...conflict },
+      { availableAt: '2026-09-26T20:01:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-earlier', nav: '100.00', portfolioId },
+    ], latestNav)
+
+    expect(result).toEqual({
+      latest: null,
+      points: [{ nav: '110.00', dailyReturn: null, drawdown: '0.00000000', time: '2026-09-27T20:01:00Z' }],
+    })
+  })
+
+  it('accepts equivalent offset timestamps for the authoritative record', () => {
+    const result = toAuthoritativePerformanceSeries([
+      { ...latestNav, eventTime: '2026-09-27T16:00:00-04:00', availableAt: '2026-09-27T16:01:00-04:00' },
+      { availableAt: '2026-09-26T20:01:00Z', eventTime: '2026-09-26T20:00:00Z', id: 'nav-earlier', nav: '100.00', portfolioId },
+    ], latestNav)
+
+    expect(result.latest?.dailyReturn).toBe('0.10000000')
+  })
+
+  it('fails closed when history contains a record later than latestNav', () => {
+    const result = toAuthoritativePerformanceSeries([
+      latestNav,
+      { availableAt: '2026-09-28T20:01:00Z', eventTime: '2026-09-28T20:00:00Z', id: 'nav-future', nav: '120.00', portfolioId },
+    ], latestNav)
+
+    expect(result).toEqual({
+      latest: null,
+      points: [{ nav: '110.00', dailyReturn: null, drawdown: '0.00000000', time: '2026-09-27T20:01:00Z' }],
     })
   })
 })

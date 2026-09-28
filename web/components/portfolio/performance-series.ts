@@ -9,6 +9,7 @@ type PersistedNavPoint = {
 type PersistedNavRecord = PersistedNavPoint & {
   eventTime: string
   id: string
+  portfolioId: string
 }
 
 export type PerformancePoint = {
@@ -38,15 +39,26 @@ export function toAuthoritativePerformanceSeries(
   history: PersistedNavRecord[],
   latestNav: PersistedNavRecord,
 ): { latest: PerformancePoint | null; points: PerformancePoint[] } {
-  const latestIsPersisted = history.some((point) => point.id === latestNav.id)
-  if (!latestIsPersisted) {
-    return {
-      latest: null,
-      points: toPerformanceSeries([{ availableAt: latestNav.availableAt, nav: latestNav.nav }]),
-    }
+  const failClosed = () => ({
+    latest: null,
+    points: toPerformanceSeries([{ availableAt: latestNav.availableAt, nav: latestNav.nav }]),
+  })
+  const latestEventTime = awareInstantKey(latestNav.eventTime)
+  const latestAvailableTime = awareInstantKey(latestNav.availableAt)
+  const sameIdRecords = history.filter((point) => point.id === latestNav.id)
+  const authoritativeRecordMatches = sameIdRecords.length > 0 && sameIdRecords.every((point) => (
+    point.portfolioId === latestNav.portfolioId
+    && compareDecimals(point.nav, latestNav.nav) === 0
+    && awareInstantKey(point.eventTime) === latestEventTime
+    && awareInstantKey(point.availableAt) === latestAvailableTime
+  ))
+  const historyEndsAtLatest = history.every(
+    (point) => awareInstantKey(point.eventTime) <= latestEventTime,
+  )
+  if (!authoritativeRecordMatches || !historyEndsAtLatest) {
+    return failClosed()
   }
 
-  const latestEventTime = awareInstantKey(latestNav.eventTime)
   const canonicalByEventTime = new Map<bigint, PersistedNavRecord>()
 
   for (const point of history) {
