@@ -72,7 +72,7 @@ describe('TodayPage', () => {
     expect(within(portfolio).getByRole('img', { name: 'Day return history' }))
       .toHaveProperty('parentElement.dataset.metric', 'dailyReturn')
     expect(within(portfolio).getByText(
-      'Day return, measured in percentage points, decreased from +1.33% on Jul 25 to +0.42% on Aug 21.',
+      'Day return, measured in percent, decreased from +1.33% on Jul 25 to +0.42% on Aug 21.',
     )).toBeInTheDocument()
 
     fireEvent.keyDown(dayReturn, { key: 'ArrowRight' })
@@ -102,7 +102,7 @@ describe('TodayPage', () => {
     fireEvent.click(within(portfolio).getByRole('tab', { name: 'Day return' }))
 
     expect(within(portfolio).getByText(
-      'Day return, measured in percentage points: not enough persisted history for this metric.',
+      'Day return, measured in percent: not enough persisted history for this metric.',
     )).toBeInTheDocument()
     expect(within(portfolio).queryByRole('img', { name: 'Day return history' })).not.toBeInTheDocument()
     expect(portfolio.querySelector('.chart-line')).not.toBeInTheDocument()

@@ -308,7 +308,7 @@ describe('API mode pages', () => {
     fireEvent.click(within(chart).getByRole('tab', { name: 'Day return' }))
 
     expect(within(chart).getByText(
-      'Day return, measured in percentage points: not enough persisted history for this metric.',
+      'Day return, measured in percent: not enough persisted history for this metric.',
     )).toBeInTheDocument()
     expect(within(chart).queryByRole('img')).not.toBeInTheDocument()
     expect(within(chart).getByText('Unavailable')).toBeInTheDocument()
@@ -364,7 +364,7 @@ describe('API mode pages', () => {
 
     fireEvent.click(within(chart).getByRole('tab', { name: 'Day return' }))
     expect(within(chart).getByText(
-      'Day return, measured in percentage points: not enough persisted history for this metric.',
+      'Day return, measured in percent: not enough persisted history for this metric.',
     )).toBeInTheDocument()
     expect(within(chart).queryByRole('img')).not.toBeInTheDocument()
   })

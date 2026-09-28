@@ -363,7 +363,7 @@ test('Today portfolio tabs control one chart and remain readable in both themes'
       await expect(dayReturn).toHaveAttribute('aria-selected', 'true')
       await expect(plot).toHaveAttribute('data-metric', 'dailyReturn')
       await expect(figure.getByRole('img', { name: 'Day return history' })).toBeVisible()
-      await expect(figure.getByText(/Day return, measured in percentage points, (?:increased|decreased|was unchanged) from/)).toBeVisible()
+      await expect(figure.getByText(/Day return, measured in percent, (?:increased|decreased|was unchanged) from/)).toBeVisible()
 
       await page.keyboard.press('ArrowRight')
       await expect(drawdown).toBeFocused()
@@ -372,6 +372,7 @@ test('Today portfolio tabs control one chart and remain readable in both themes'
       await expect(figure.getByRole('img', { name: 'Current drawdown history' })).toBeVisible()
       await expect(plot.locator('svg')).toHaveCount(1)
       await expect(drawdown).toHaveCSS('outline-style', 'solid')
+      expect(Number.parseFloat(await drawdown.evaluate((element) => getComputedStyle(element).outlineOffset))).toBeLessThanOrEqual(0)
 
       const tabContrast = await tabs.getByRole('tab').evaluateAll((elements) => {
         const rgba = (value: string) => {

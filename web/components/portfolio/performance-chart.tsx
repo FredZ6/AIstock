@@ -57,6 +57,7 @@ export function PerformanceChart({
   const metrics = compact ? compactMetrics : fullMetrics
   const [metric, setMetric] = useState<Metric>('nav')
   const chartId = useId()
+  const gradientId = `${chartId.replaceAll(':', '')}-performance-fill`
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
   const [range, setRange] = useState<Range>(30)
   const lastTime = parseAwareInstant(snapshot.performanceHistory.at(-1)?.time ?? snapshot.asOf).getTime()
@@ -80,7 +81,7 @@ export function PerformanceChart({
   const selectedLabel = selectedMetric?.label ?? 'Performance'
   const first = usable.at(0)
   const last = usable.at(-1)
-  const metricUnit = metric === 'nav' ? snapshot.currency : 'percentage points'
+  const metricUnit = metric === 'nav' ? snapshot.currency : 'percent'
   const formatMetricValue = (value: string) => metric === 'nav'
     ? formatMoney(value, snapshot.currency)
     : formatPercent(value)
@@ -164,10 +165,10 @@ export function PerformanceChart({
 
       <div aria-describedby={`${chartId}-summary`} aria-labelledby={`${chartId}-${metric}`} className="performance-plot" data-metric={metric} id={`${chartId}-panel`} role="tabpanel" tabIndex={0}>
         {usable.length >= 2 ? <>
-          <svg aria-describedby={`${chartId}-summary`} aria-label={`${selectedLabel} history`} preserveAspectRatio="none" role="img" viewBox="0 0 1000 260">
-            <defs><linearGradient id="portfolio-performance-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopOpacity="0.32" /><stop offset="100%" stopOpacity="0" /></linearGradient></defs>
+          <svg aria-label={`${selectedLabel} history`} preserveAspectRatio="none" role="img" viewBox="0 0 1000 260">
+            <defs><linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopOpacity="0.32" /><stop offset="100%" stopOpacity="0" /></linearGradient></defs>
             <line className="chart-baseline" x1="0" x2="1000" y1="240" y2="240" />
-            <path className="chart-area" d={area} />
+            <path className="chart-area" d={area} fill={`url(#${gradientId})`} />
             <path className="chart-line" d={line} />
           </svg>
           <div className="chart-dates"><time dateTime={first?.point.time}>{first ? shortDate(first.point.time) : '—'}</time><time dateTime={last?.point.time}>{last ? shortDate(last.point.time) : '—'}</time></div>

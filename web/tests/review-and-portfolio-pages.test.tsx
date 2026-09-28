@@ -58,6 +58,26 @@ describe('portfolio and review pages', () => {
     )
   })
 
+  it('uses instance-scoped chart gradients without repeating the text summary on the image', () => {
+    const { container } = render(<>
+      <PerformanceChart compact snapshot={fixturePortfolioSnapshot} />
+      <PerformanceChart compact snapshot={fixturePortfolioSnapshot} />
+    </>)
+
+    const gradients = [...container.querySelectorAll('linearGradient')]
+    const gradientIds = gradients.map((gradient) => gradient.id)
+    expect(gradientIds).toHaveLength(2)
+    expect(new Set(gradientIds).size).toBe(2)
+    expect([...container.querySelectorAll('.chart-area')].map((path) => path.getAttribute('fill')))
+      .toEqual(gradientIds.map((id) => `url(#${id})`))
+    for (const image of container.querySelectorAll('svg[role="img"]')) {
+      expect(image).not.toHaveAttribute('aria-describedby')
+    }
+    for (const panel of container.querySelectorAll('[role="tabpanel"]')) {
+      expect(panel).toHaveAttribute('aria-describedby')
+    }
+  })
+
   it('renders an auditable paper portfolio with cash baseline and deterministic execution facts', () => {
     render(<PortfolioPage snapshot={fixturePortfolioSnapshot} />)
 
