@@ -4308,3 +4308,33 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   for 340 files, Mypy clean for 292 source files, Alembic drift checks passed, backend 768 passed / 5
   optional live-provider tests skipped, frontend 36 files and 263/263 tests passed, and the Next.js
   production build succeeded.
+
+## 2026-09-29 — Today persisted chart and Watchlist ordering closure
+
+- The compact Paper Portfolio now uses its three headline facts as the only metric controls. Net asset
+  value, Day return and Current drawdown switch one shared chart with roving tab focus, metric-aware
+  currency/percent copy, explicit first/last values and dates, and an honest insufficient-history
+  message when persisted points cannot support a line. The full Portfolio page retains its separate
+  cumulative-return controls. Instance-scoped SVG gradient IDs and one summary reference per tabpanel
+  prevent duplicate IDs and repeated screen-reader descriptions.
+- Today Watchlist continues to render two rows initially and disclose the remaining rows on demand,
+  but the order is now a persisted backend fact rather than an incidental frontend sort. Migration
+  `0042_watchlist_display_order` backfills the legacy alphabetical order deterministically, owns an
+  `INTEGER` sequence for later append-only ranks, enforces positive unique values, and round-trips
+  cleanly through downgrade and upgrade. GET, POST and PATCH share the closed response schema;
+  clients cannot submit or mutate `display_order`, and the strict frontend parser preserves the API
+  order without guessing a confidence-based rank.
+- Review-driven corrections removed an unauthorized ticker-specific priority list, bound the sequence
+  lifecycle to the Watchlist column, updated the migration head gate, bounded canonical NAV reads to
+  365 event times after PostgreSQL `DISTINCT ON` winner selection, and retained exact aware-instant and
+  Decimal-string comparisons across the API/frontend boundary. No current-market Fixture data or
+  live-broker path was introduced.
+- Focused verification passed 49/49 Portfolio/Today/API component tests and the targeted Playwright
+  acceptance across 1440x800, 1280x720 and 393x852 in both themes. It verified native keyboard metric
+  switching, 44 px controls, visible inset focus, opaque WCAG-AA tab surfaces, unique SVG references
+  and no horizontal overflow. Watchlist ordering verification passed the complete 15-test migration
+  group, 27 related backend/API tests and 82 related frontend tests before final integration.
+- With no managed writer started by this task, the final fresh `make verify` at current HEAD exited 0:
+  Ruff format/check clean for 342 files, Mypy clean for 292 source files, Alembic drift and generated
+  MCP/OpenAPI contract checks passed, backend 774 passed / 5 optional live-provider tests skipped,
+  frontend 36 files and 277/277 tests passed, and the Next.js production build succeeded.
