@@ -12,11 +12,12 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE SEQUENCE watchlist_display_order_seq START WITH 1")
+    op.execute("CREATE SEQUENCE watchlist_display_order_seq AS INTEGER START WITH 1")
     op.add_column(
         "watchlist_item",
         sa.Column("display_order", sa.Integer(), nullable=True),
     )
+    op.execute("ALTER SEQUENCE watchlist_display_order_seq OWNED BY watchlist_item.display_order")
     op.execute(
         """
         WITH ranked AS (
@@ -71,4 +72,3 @@ def downgrade() -> None:
         type_="check",
     )
     op.drop_column("watchlist_item", "display_order")
-    op.execute("DROP SEQUENCE watchlist_display_order_seq")

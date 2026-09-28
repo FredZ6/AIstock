@@ -134,7 +134,7 @@ def test_head_can_downgrade_to_0024_and_upgrade_again(
     engine = create_engine(migration_database_url)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-            "0041_portfolio_nav_read_index"
+            "0042_watchlist_display_order"
         )
     engine.dispose()
 
@@ -772,4 +772,62 @@ def test_0042_preserves_alphabetical_watchlist_order_and_appends_new_symbols(
         ).scalar_one()
 
     assert appended_order == 3
+    engine.dispose()
+
+
+def test_0042_owns_an_int4_sequence_and_round_trips(
+    migration_database_url: str,
+) -> None:
+    config = _alembic_config(migration_database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(migration_database_url)
+
+    def sequence_contract() -> tuple[str | None, bool]:
+        with engine.connect() as connection:
+            row = connection.execute(
+                text(
+                    """
+                    SELECT pg_get_serial_sequence(
+                               'public.watchlist_item',
+                               'display_order'
+                           ) AS owned_sequence,
+                           sequence.seqtypid = 'int4'::regtype AS is_int4
+                    FROM pg_sequence AS sequence
+                    JOIN pg_class AS relation ON relation.oid = sequence.seqrelid
+                    JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+                    WHERE namespace.nspname = 'public'
+                      AND relation.relname = 'watchlist_display_order_seq'
+                    """
+                )
+            ).one()
+        return row.owned_sequence, row.is_int4
+
+    initial_contract = sequence_contract()
+
+    command.downgrade(config, "0041_portfolio_nav_read_index")
+    with engine.connect() as connection:
+        column_exists = connection.execute(
+            text(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'watchlist_item'
+                      AND column_name = 'display_order'
+                )
+                """
+            )
+        ).scalar_one()
+        sequence_exists = connection.execute(
+            text("SELECT to_regclass('public.watchlist_display_order_seq') IS NOT NULL")
+        ).scalar_one()
+
+    command.upgrade(config, "head")
+    restored_contract = sequence_contract()
+
+    assert initial_contract == ("public.watchlist_display_order_seq", True)
+    assert column_exists is False
+    assert sequence_exists is False
+    assert restored_contract == initial_contract
     engine.dispose()
