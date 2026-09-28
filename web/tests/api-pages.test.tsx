@@ -307,7 +307,9 @@ describe('API mode pages', () => {
     const chart = screen.getByRole('figure', { name: 'Paper portfolio performance' })
     fireEvent.click(within(chart).getByRole('tab', { name: 'Day return' }))
 
-    expect(within(chart).getByText('Not enough persisted history for this metric.')).toBeInTheDocument()
+    expect(within(chart).getByText(
+      'Day return, measured in percentage points: not enough persisted history for this metric.',
+    )).toBeInTheDocument()
     expect(within(chart).queryByRole('img')).not.toBeInTheDocument()
     expect(within(chart).getByText('Unavailable')).toBeInTheDocument()
     expect(within(chart).queryByText(/Frozen synthetic/)).not.toBeInTheDocument()
@@ -361,7 +363,9 @@ describe('API mode pages', () => {
     expect(within(chart).getByText('Persisted paper NAV history').parentElement?.querySelector('time')).toHaveAttribute('dateTime', '2026-08-29T09:21:00Z')
 
     fireEvent.click(within(chart).getByRole('tab', { name: 'Day return' }))
-    expect(within(chart).getByText('Not enough persisted history for this metric.')).toBeInTheDocument()
+    expect(within(chart).getByText(
+      'Day return, measured in percentage points: not enough persisted history for this metric.',
+    )).toBeInTheDocument()
     expect(within(chart).queryByRole('img')).not.toBeInTheDocument()
   })
 

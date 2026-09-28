@@ -327,8 +327,19 @@ test('Today portfolio tabs control one chart and remain readable in both themes'
     const dayReturn = tabs.getByRole('tab', { name: 'Day return' })
     const drawdown = tabs.getByRole('tab', { name: 'Current drawdown' })
 
+    await expect(tabs).toHaveClass(/performance-facts/)
+    await expect(figure.locator('.metric-tabs')).toHaveCount(0)
+    await expect(nav).toContainText('USD 100,425.18')
+    await expect(dayReturn).toContainText('+0.42%')
+    await expect(drawdown).toContainText('-1.80%')
+    for (const tab of [nav, dayReturn, drawdown]) {
+      const box = await tab.boundingBox()
+      expect(box?.height).toBeGreaterThanOrEqual(44)
+    }
     await expect(figure.getByRole('img', { name: 'Net asset value history' })).toBeVisible()
     await expect(plot).toHaveAttribute('data-metric', 'nav')
+    await expect(plot).toHaveAttribute('aria-describedby', /summary/)
+    await expect(figure.getByText(/Net asset value, measured in USD, (?:increased|decreased|was unchanged) from/)).toBeVisible()
     await expect(plot.locator('svg')).toHaveCount(1)
 
     for (const theme of ['light', 'dark'] as const) {
@@ -352,6 +363,7 @@ test('Today portfolio tabs control one chart and remain readable in both themes'
       await expect(dayReturn).toHaveAttribute('aria-selected', 'true')
       await expect(plot).toHaveAttribute('data-metric', 'dailyReturn')
       await expect(figure.getByRole('img', { name: 'Day return history' })).toBeVisible()
+      await expect(figure.getByText(/Day return, measured in percentage points, (?:increased|decreased|was unchanged) from/)).toBeVisible()
 
       await page.keyboard.press('ArrowRight')
       await expect(drawdown).toBeFocused()

@@ -21,7 +21,7 @@ describe('TodayPage', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument()
     expect(screen.getByText('RISK_ON')).toBeInTheDocument()
     expect(screen.getByText('market-regime-v1')).toBeInTheDocument()
-    expect(screen.getByText(/100,425\.18/)).toBeInTheDocument()
+    expect(screen.getByText('USD 100,425.18')).toBeInTheDocument()
     expect(screen.getByText('+0.42%')).toBeInTheDocument()
     expect(screen.getByText('-1.80%')).toBeInTheDocument()
     for (const benchmark of ['Cash', 'QQQ', 'Equal weight', 'Momentum']) {
@@ -52,16 +52,28 @@ describe('TodayPage', () => {
     const dayReturn = within(tabs).getByRole('tab', { name: 'Day return' })
     const drawdown = within(tabs).getByRole('tab', { name: 'Current drawdown' })
 
+    expect(tabs).toHaveClass('performance-facts')
+    expect(portfolio.querySelector('.metric-tabs')).not.toBeInTheDocument()
+    expect(within(portfolio).getAllByRole('tablist')).toHaveLength(1)
+    expect(nav).toHaveTextContent('USD 100,425.18')
+    expect(dayReturn).toHaveTextContent('+0.42%')
+    expect(drawdown).toHaveTextContent('-1.80%')
     expect(nav).toHaveAttribute('aria-selected', 'true')
     expect(dayReturn).toHaveAttribute('aria-selected', 'false')
     expect(drawdown).toHaveAttribute('aria-selected', 'false')
     expect(within(portfolio).getByRole('img', { name: 'Net asset value history' }))
       .toHaveProperty('parentElement.dataset.metric', 'nav')
+    expect(within(portfolio).getByText(
+      'Net asset value, measured in USD, decreased from USD 102,265.97 on Jul 25 to USD 100,425.18 on Aug 21.',
+    )).toBeInTheDocument()
     expect(within(portfolio).getAllByRole('img')).toHaveLength(1)
 
     fireEvent.click(dayReturn)
     expect(within(portfolio).getByRole('img', { name: 'Day return history' }))
       .toHaveProperty('parentElement.dataset.metric', 'dailyReturn')
+    expect(within(portfolio).getByText(
+      'Day return, measured in percentage points, decreased from +1.33% on Jul 25 to +0.42% on Aug 21.',
+    )).toBeInTheDocument()
 
     fireEvent.keyDown(dayReturn, { key: 'ArrowRight' })
     expect(drawdown).toHaveFocus()
@@ -89,7 +101,9 @@ describe('TodayPage', () => {
     const portfolio = screen.getByRole('figure', { name: 'Paper portfolio performance' })
     fireEvent.click(within(portfolio).getByRole('tab', { name: 'Day return' }))
 
-    expect(within(portfolio).getByText('Not enough persisted history for this metric.')).toBeInTheDocument()
+    expect(within(portfolio).getByText(
+      'Day return, measured in percentage points: not enough persisted history for this metric.',
+    )).toBeInTheDocument()
     expect(within(portfolio).queryByRole('img', { name: 'Day return history' })).not.toBeInTheDocument()
     expect(portfolio.querySelector('.chart-line')).not.toBeInTheDocument()
   })
