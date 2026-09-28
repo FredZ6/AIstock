@@ -4338,3 +4338,28 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   Ruff format/check clean for 342 files, Mypy clean for 292 source files, Alembic drift and generated
   MCP/OpenAPI contract checks passed, backend 774 passed / 5 optional live-provider tests skipped,
   frontend 36 files and 277/277 tests passed, and the Next.js production build succeeded.
+
+## 2026-09-29 — Today real-API runtime acceptance closure
+
+- The isolated browser harness now seeds a Decimal-valued, UTC-aware paper ledger and three persisted
+  NAV facts before opening Today. Desktop and mobile acceptance prove that Net asset value, Day return
+  and Current drawdown switch the same real persisted chart; no Fixture label, frozen series or fallback
+  is present. The latest research card is checked against the API's actual point-in-time latest Run
+  instead of a test-order-dependent fixed identifier.
+- Today keeps the authoritative Watchlist order even when a ranked symbol has no eligible quote. The
+  collapsed surface renders the first two configured symbols, never promotes a later quoted symbol,
+  and reveals all 11 persisted rows through one keyboard-operable disclosure. Secondary context,
+  thesis copy and provenance remain collapsed until disclosure so the first view stays decision-dense.
+- Short-desktop rules preserve the approved two-column workspace at 1440x800 and 1280x720 while the
+  393x852 mobile layout retains semantic reading order. The checks also prove matched horizontal and
+  vertical gutters, no horizontal overflow, and no serious or critical automated accessibility
+  violations. Compact chart narration remains available to assistive technology without duplicating
+  visible evidence copy.
+- The final isolated real-API closure exited 0: Celery recovery/replay reported exactly three received
+  and three succeeded tasks, Playwright passed 14/14 desktop/mobile API cases, and the worker/SSE
+  integration group passed 28/28. Provider failures remained explicit and no Fixture substitution was
+  introduced.
+- After the runtime harness stopped its managed writers, the final fresh `make verify` at current HEAD
+  exited 0: Ruff format/check clean for 343 files, Mypy clean for 292 source files, Alembic drift and
+  generated MCP/OpenAPI contract checks passed, backend 774 passed / 5 optional live-provider tests
+  skipped, frontend 36 files and 278/278 tests passed, and the Next.js production build succeeded.
