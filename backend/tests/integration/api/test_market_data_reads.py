@@ -1117,10 +1117,28 @@ def test_portfolio_nav_read_model_canonicalizes_revisions_before_history_limit(
     ]
     connection.execute(portfolio_nav.insert(), rows)
     cutoff = datetime.now(UTC) + timedelta(minutes=1)
+    nav_queries: list[str] = []
 
-    response = client.get("/api/v1/portfolio", params={"decision_time": cutoff.isoformat()})
+    def capture_nav_query(
+        _connection: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,
+    ) -> None:
+        if "FROM portfolio_nav" in statement:
+            nav_queries.append(statement)
+
+    event.listen(connection, "before_cursor_execute", capture_nav_query)
+    try:
+        response = client.get("/api/v1/portfolio", params={"decision_time": cutoff.isoformat()})
+    finally:
+        event.remove(connection, "before_cursor_execute", capture_nav_query)
 
     assert response.status_code == 200
+    assert len(nav_queries) == 1
+    assert "SELECT DISTINCT ON (portfolio_nav.event_time)" in nav_queries[0]
     payload = response.json()
     history = payload["performance_history"]
     assert len(history) == 365
