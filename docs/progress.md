@@ -4350,6 +4350,8 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   collapsed surface renders the first two configured symbols, never promotes a later quoted symbol,
   and reveals all 11 persisted rows through one keyboard-operable disclosure. Secondary context,
   thesis copy and provenance remain collapsed until disclosure so the first view stays decision-dense.
+  Real-API acceptance locks the complete order as NVDA, AVGO, TSM, SKHY, WDC, SNDK, MU, NBIS, MRVL,
+  BE and INTC, and verifies Enter expansion plus Space collapse before rechecking the NVDA/AVGO pair.
 - Short-desktop rules preserve the approved two-column workspace at 1440x800 and 1280x720 while the
   393x852 mobile layout retains semantic reading order. The checks also prove matched horizontal and
   vertical gutters, no horizontal overflow, and no serious or critical automated accessibility
@@ -4362,4 +4364,7 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
 - After the runtime harness stopped its managed writers, the final fresh `make verify` at current HEAD
   exited 0: Ruff format/check clean for 343 files, Mypy clean for 292 source files, Alembic drift and
   generated MCP/OpenAPI contract checks passed, backend 774 passed / 5 optional live-provider tests
-  skipped, frontend 36 files and 278/278 tests passed, and the Next.js production build succeeded.
+  skipped, frontend 36 files and 278/278 tests passed, and the Next.js production build succeeded. A
+  full-suite-only live-region timing race in the Watchlist deletion test was then reproduced, traced to
+  an over-broad pending/success status query, corrected to await the success message, and passed five
+  consecutive focused runs before the final suite rerun.

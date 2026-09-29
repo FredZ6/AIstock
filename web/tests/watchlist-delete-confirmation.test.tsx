@@ -62,7 +62,7 @@ describe('Watchlist deletion confirmation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm remove NVDA' }))
 
     await waitFor(() => expect(deleteItem).toHaveBeenCalledTimes(1))
-    expect(await screen.findByRole('status')).toHaveTextContent('NVDA deleted.')
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('NVDA deleted.'))
   })
 
   it('cancels with Escape without changing settings and restores trigger focus', () => {
