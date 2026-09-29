@@ -142,11 +142,21 @@ test.describe('isolated real API runtime', () => {
 
     const watchlist = page.getByRole('list', { name: 'Watchlist signals' })
     await expect(watchlist.getByRole('listitem')).toHaveCount(2)
-    await expect(watchlist.getByRole('link', { name: 'NVDA', exact: true })).toBeVisible()
-    await expect(watchlist.getByRole('link', { name: 'AVGO', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Show all (11)' }).click()
+    await expect(watchlist.getByRole('listitem').nth(0).getByRole('link')).toHaveText('NVDA')
+    await expect(watchlist.getByRole('listitem').nth(1).getByRole('link')).toHaveText('AVGO')
+    const disclosure = page.getByRole('button', { name: 'Show all (11)' })
+    await disclosure.focus()
+    await disclosure.press('Enter')
+    const collapse = page.getByRole('button', { name: 'Show less' })
+    await expect(collapse).toHaveAttribute('aria-expanded', 'true')
     await expect(watchlist.getByRole('listitem')).toHaveCount(11)
-    await expect(watchlist.getByRole('link', { name: 'INTC', exact: true })).toBeVisible()
+    await expect(watchlist.getByRole('link')).toHaveText([
+      'NVDA', 'AVGO', 'TSM', 'SKHY', 'WDC', 'SNDK', 'MU', 'NBIS', 'MRVL', 'BE', 'INTC',
+    ])
+    await collapse.press('Space')
+    await expect(page.getByRole('button', { name: 'Show all (11)' })).toHaveAttribute('aria-expanded', 'false')
+    await expect(watchlist.getByRole('listitem')).toHaveCount(2)
+    await expect(watchlist.getByRole('link')).toHaveText(['NVDA', 'AVGO'])
 
     const decisionTime = new Date(Date.now() + 1000).toISOString()
     const latestResponse = await request.get(`${base}/api/v1/research-runs/latest?decision_time=${encodeURIComponent(decisionTime)}`)
