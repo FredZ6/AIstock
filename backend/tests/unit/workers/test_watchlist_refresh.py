@@ -301,27 +301,27 @@ def test_only_confirmed_queued_jobs_are_published() -> None:
     ]
 
 
-def test_existing_nonqueued_jobs_report_already_queued_without_publish() -> None:
-    existing_id = uuid4()
-    store = RecordingJobStore((existing_id,))
+def test_new_job_not_confirmed_queued_is_not_published() -> None:
+    job_id = uuid4()
+    store = RecordingJobStore((job_id,))
 
     result, published = request_refresh(store=store, eligible=set())
 
     assert result.status is WatchlistRefreshStatus.ALREADY_QUEUED
-    assert result.job_ids == (existing_id,)
+    assert result.job_ids == (job_id,)
     assert published == []
 
 
-def test_repeat_request_reuses_ids_without_republishing() -> None:
+def test_active_repeat_click_one_second_later_reuses_ids_without_republishing() -> None:
     store = IdempotentRecordingJobStore()
     published: list[tuple[str, UUID, str]] = []
 
-    def request() -> WatchlistRefreshResult:
+    def request(now: datetime) -> WatchlistRefreshResult:
         return request_watchlist_market_data_refresh(
             store=store,
             symbols=("NVDA", "AVGO"),
             entitlement=alpaca_entitlement(MarketDataCoverage.IEX),
-            now=datetime(2026, 10, 5, 14, 31, 42, tzinfo=UTC),
+            now=now,
             is_queued=lambda _job_id: True,
             publish=lambda task, job_id, queue: published.append(
                 (
@@ -332,12 +332,49 @@ def test_repeat_request_reuses_ids_without_republishing() -> None:
             ),
         )
 
-    first = request()
+    first_now = datetime(2026, 10, 5, 14, 31, 42, tzinfo=UTC)
+    first = request(first_now)
     first_publish_count = len(published)
-    second = request()
+    second = request(first_now + timedelta(seconds=1))
 
     assert first.status is WatchlistRefreshStatus.QUEUED
     assert first_publish_count == 2
+    assert second.requested_at == first_now + timedelta(seconds=1)
+    assert second.job_ids == first.job_ids
+    assert second.status is WatchlistRefreshStatus.ALREADY_QUEUED
+    assert len(published) == first_publish_count
+
+
+def test_closed_repeat_click_minutes_later_reuses_daily_ids_without_republishing() -> None:
+    store = IdempotentRecordingJobStore()
+    published: list[tuple[str, UUID, str]] = []
+
+    def request(now: datetime) -> WatchlistRefreshResult:
+        return request_watchlist_market_data_refresh(
+            store=store,
+            symbols=("NVDA", "AVGO"),
+            entitlement=alpaca_entitlement(MarketDataCoverage.IEX),
+            now=now,
+            is_queued=lambda _job_id: True,
+            publish=lambda task, job_id, queue: published.append(
+                (
+                    task,
+                    job_id,
+                    queue,
+                )
+            ),
+        )
+
+    first_now = datetime(2026, 10, 4, 12, tzinfo=UTC)
+    first = request(first_now)
+    first_publish_count = len(published)
+    second = request(first_now + timedelta(minutes=17))
+
+    assert first.status is WatchlistRefreshStatus.QUEUED
+    assert first.timeframe is BarTimeframe.DAY
+    assert first_publish_count == 2
+    assert second.requested_at == first_now + timedelta(minutes=17)
+    assert second.data_cutoff == first.data_cutoff
     assert second.job_ids == first.job_ids
     assert second.status is WatchlistRefreshStatus.ALREADY_QUEUED
     assert len(published) == first_publish_count

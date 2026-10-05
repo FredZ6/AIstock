@@ -120,7 +120,7 @@ def request_watchlist_market_data_refresh(
         window_start = minute_start
         request_session = completed_interval_session
 
-    observed_entitlement = replace(entitlement, observed_at=requested_at)
+    observed_entitlement = replace(entitlement, observed_at=data_cutoff)
     admitted_ids: list[UUID] = []
     created_ids: list[UUID] = []
     for symbol in normalized_symbols:
