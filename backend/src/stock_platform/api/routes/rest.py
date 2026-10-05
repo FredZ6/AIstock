@@ -42,6 +42,7 @@ from stock_platform.api.schemas.rest import (
     WeeklyReviewPage,
 )
 from stock_platform.application.ingestion.watchlist_refresh import (
+    MAX_WATCHLIST_REFRESH_SYMBOLS,
     request_watchlist_market_data_refresh,
 )
 from stock_platform.application.learning.approval import LessonNotFound, record_lesson_decision
@@ -672,8 +673,17 @@ def refresh_watchlist_market_data(
             select(watchlist_item.c.symbol)
             .where(watchlist_item.c.intraday_monitoring.is_(True))
             .order_by(watchlist_item.c.symbol)
+            .limit(MAX_WATCHLIST_REFRESH_SYMBOLS + 1)
         ).scalars()
     )
+    if len(symbols) > MAX_WATCHLIST_REFRESH_SYMBOLS:
+        raise ApiError(
+            409,
+            "WATCHLIST_REFRESH_LIMIT_EXCEEDED",
+            "More than 50 Watchlist symbols are monitored. "
+            "Reduce the monitored set before updating.",
+            details={"max_symbols": MAX_WATCHLIST_REFRESH_SYMBOLS},
+        )
     engine = connection.engine
     try:
         result = request_watchlist_market_data_refresh(

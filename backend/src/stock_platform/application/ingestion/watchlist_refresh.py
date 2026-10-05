@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, time, timedelta
 from enum import StrEnum
+from itertools import islice
 from typing import TYPE_CHECKING, Protocol
 from uuid import UUID
 
@@ -26,6 +27,8 @@ if TYPE_CHECKING:
 
 ALPACA_INGESTION_TASK = "stock_platform.workers.ingestion_tasks.run_alpaca_ingestion_job"
 ALPACA_INGESTION_QUEUE = "ingestion-low"
+# One operator request may admit at most this many durable provider jobs.
+MAX_WATCHLIST_REFRESH_SYMBOLS = 50
 
 
 class BackfillJobStore(Protocol):
@@ -66,7 +69,7 @@ def request_watchlist_market_data_refresh(
     is_queued: QueuedJobEligibility,
     publish: RefreshPublisher,
 ) -> WatchlistRefreshResult:
-    """Admit a bounded latest-bar request and publish eligible durable jobs."""
+    """Admit at most 50 latest-bar jobs and publish eligible durable jobs."""
     from stock_platform.workers.ingestion_tasks import BarTimeframe
     from stock_platform.workers.schedules import (
         latest_completed_market_cutoff,
@@ -74,7 +77,10 @@ def request_watchlist_market_data_refresh(
     )
 
     requested_at = require_aware(now).astimezone(UTC)
-    normalized_symbols = tuple(str(Symbol(symbol.strip())) for symbol in symbols)
+    selected_symbols = tuple(islice(symbols, MAX_WATCHLIST_REFRESH_SYMBOLS + 1))
+    if len(selected_symbols) > MAX_WATCHLIST_REFRESH_SYMBOLS:
+        raise ValueError("Watchlist refresh accepts at most 50 monitored symbols")
+    normalized_symbols = tuple(str(Symbol(symbol.strip())) for symbol in selected_symbols)
     if (
         entitlement is None
         or entitlement.provider.upper() != "ALPACA"

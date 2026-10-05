@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
-from sqlalchemy import Engine, create_engine, delete, insert, select, update
+from sqlalchemy import Engine, create_engine, func, insert, select
 from stock_platform.api.dependencies import get_connection, get_settings
 from stock_platform.api.main import app
 from stock_platform.api.routes import rest
@@ -21,14 +22,12 @@ from stock_platform.infrastructure.db.models.tables import (
 from stock_platform.settings import Settings
 
 
-@pytest.fixture(scope="module")
-def engine() -> Iterator[Engine]:
-    value = create_engine(
-        os.getenv(
-            "DATABASE_URL",
-            "postgresql+psycopg://postgres:postgres@localhost:55432/stock_platform",
-        )
-    )
+@pytest.fixture
+def engine(isolated_database_url: str) -> Iterator[Engine]:
+    config = Config("backend/alembic.ini")
+    config.set_main_option("sqlalchemy.url", isolated_database_url)
+    command.upgrade(config, "head")
+    value = create_engine(isolated_database_url)
     try:
         yield value
     finally:
@@ -36,21 +35,10 @@ def engine() -> Iterator[Engine]:
 
 
 @pytest.fixture
-def refresh_rows(engine: Engine) -> Iterator[None]:
+def refresh_rows(engine: Engine) -> None:
     symbols = ("TSKA", "TSKB", "TSKC")
     security_ids = {symbol: uuid4() for symbol in symbols}
     with engine.begin() as connection:
-        prior_monitoring = tuple(
-            connection.execute(
-                select(watchlist_item.c.security_id, watchlist_item.c.intraday_monitoring)
-            ).mappings()
-        )
-        connection.execute(update(watchlist_item).values(intraday_monitoring=False))
-        connection.execute(
-            delete(ingestion_job).where(ingestion_job.c.policy_version == "operator-verified-test")
-        )
-        connection.execute(delete(watchlist_item).where(watchlist_item.c.symbol.in_(symbols)))
-        connection.execute(delete(security).where(security.c.id.in_(security_ids.values())))
         for symbol, security_id in security_ids.items():
             connection.execute(insert(security).values(id=security_id, instrument_type="EQUITY"))
             connection.execute(
@@ -61,23 +49,6 @@ def refresh_rows(engine: Engine) -> Iterator[None]:
                     intraday_monitoring=symbol != "TSKC",
                 )
             )
-    try:
-        yield
-    finally:
-        with engine.begin() as connection:
-            connection.execute(
-                delete(ingestion_job).where(
-                    ingestion_job.c.policy_version == "operator-verified-test"
-                )
-            )
-            connection.execute(delete(watchlist_item).where(watchlist_item.c.symbol.in_(symbols)))
-            connection.execute(delete(security).where(security.c.id.in_(security_ids.values())))
-            for row in prior_monitoring:
-                connection.execute(
-                    update(watchlist_item)
-                    .where(watchlist_item.c.security_id == row["security_id"])
-                    .values(intraday_monitoring=row["intraday_monitoring"])
-                )
 
 
 def paper_settings() -> Settings:
@@ -283,3 +254,36 @@ def test_repeat_requests_with_same_cutoff_reuse_active_jobs(
     assert second_payload["job_ids"] == first_payload["job_ids"]
     assert len(published) == 2
     assert len(refresh_jobs(engine)) == 2
+
+
+def test_over_limit_watchlist_rejects_without_queuing_or_publishing(
+    client: TestClient,
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    published: list[UUID] = []
+    monkeypatch.setattr(
+        rest,
+        "_publish_watchlist_refresh_job",
+        lambda _task, job_id, _queue: published.append(job_id),
+    )
+    with engine.begin() as connection:
+        for index in range(49):
+            symbol = f"T{chr(65 + index // 26)}{chr(65 + index % 26)}"
+            security_id = uuid4()
+            connection.execute(insert(security).values(id=security_id, instrument_type="EQUITY"))
+            connection.execute(
+                insert(watchlist_item).values(
+                    security_id=security_id,
+                    symbol=symbol,
+                    intraday_monitoring=True,
+                )
+            )
+
+    response = client.post("/api/v1/watchlist/refresh-market-data", headers=authorize())
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "WATCHLIST_REFRESH_LIMIT_EXCEEDED"
+    with engine.connect() as connection:
+        assert connection.execute(select(func.count()).select_from(ingestion_job)).scalar_one() == 0
+    assert published == []

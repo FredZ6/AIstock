@@ -214,6 +214,36 @@ def test_zero_symbols_returns_no_symbols_without_publishing() -> None:
     assert published == []
 
 
+def test_refresh_accepts_fifty_monitored_symbols() -> None:
+    symbols = tuple(f"T{chr(65 + index // 26)}{chr(65 + index % 26)}" for index in range(50))
+    store = RecordingJobStore()
+
+    result, published = request_refresh(store=store, symbols=symbols)
+
+    assert result.symbol_count == 50
+    assert len(store.specs) == 50
+    assert len(published) == 50
+
+
+def test_refresh_rejects_more_than_fifty_symbols_without_side_effects() -> None:
+    symbols = tuple(f"T{chr(65 + index // 26)}{chr(65 + index % 26)}" for index in range(51))
+    store = RecordingJobStore()
+    published: list[UUID] = []
+
+    with pytest.raises(ValueError, match="at most 50"):
+        request_watchlist_market_data_refresh(
+            store=store,
+            symbols=symbols,
+            entitlement=alpaca_entitlement(MarketDataCoverage.IEX),
+            now=datetime(2026, 10, 5, 14, 31, tzinfo=UTC),
+            is_queued=lambda _job_id: True,
+            publish=lambda _task, job_id, _queue: published.append(job_id),
+        )
+
+    assert store.specs == []
+    assert published == []
+
+
 def test_refresh_always_selects_iex_from_operator_entitlement() -> None:
     store = RecordingJobStore()
 
