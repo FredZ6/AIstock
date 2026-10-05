@@ -6,6 +6,7 @@ import {
   deleteWatchlistItem,
   listWatchlist,
   patchWatchlistItem,
+  refreshWatchlistMarketData,
   WatchlistApiError,
 } from '../lib/server/watchlist-api'
 
@@ -248,5 +249,128 @@ describe('watchlist API mutations', () => {
       { baseUrl: 'http://api.test', fetchImpl },
       { symbol: 'NVDA', dailyResearch: true, intradayMonitoring: true, thresholds: {} },
     )).rejects.toMatchObject({ kind: 'contract' })
+  })
+})
+
+describe('Watchlist market-data refresh client', () => {
+  const validRefresh = {
+    status: 'queued',
+    job_ids: ['72e81d35-9400-4d2b-91d4-3f2aa4d12d15'],
+    symbol_count: 1,
+    requested_at: '2026-10-05T12:30:00+00:00',
+    data_cutoff: '2026-10-02T16:00:00Z',
+    timeframe: '1Day',
+    feed: 'IEX',
+    message: 'Latest Watchlist market-data jobs were queued.',
+  }
+
+  it('posts the exact refresh route with a server-only bearer token and parses the 202 contract', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(validRefresh, 202))
+    const result = await refreshWatchlistMarketData({
+      adminToken: 'server-secret',
+      baseUrl: 'http://api.test',
+      fetchImpl,
+    })
+
+    expect(result).toEqual({
+      dataCutoff: validRefresh.data_cutoff,
+      feed: 'IEX',
+      jobIds: validRefresh.job_ids,
+      message: validRefresh.message,
+      requestedAt: validRefresh.requested_at,
+      status: 'queued',
+      symbolCount: 1,
+      timeframe: '1Day',
+    })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://api.test/api/v1/watchlist/refresh-market-data',
+      expect.objectContaining({
+        cache: 'no-store',
+        headers: { Accept: 'application/json', Authorization: 'Bearer server-secret' },
+        method: 'POST',
+        signal: expect.any(AbortSignal),
+      }),
+    )
+  })
+
+  it('accepts an explicit unavailable 202 result without turning it into a transport error', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      ...validRefresh,
+      status: 'unavailable',
+      job_ids: [],
+      data_cutoff: null,
+      timeframe: null,
+      feed: null,
+      message: 'Alpaca IEX entitlement is unavailable.',
+    }, 202))
+
+    await expect(refreshWatchlistMarketData({
+      adminToken: 'server-secret', baseUrl: 'http://api.test', fetchImpl,
+    })).resolves.toMatchObject({ status: 'unavailable', jobIds: [], dataCutoff: null })
+  })
+
+  it('refuses to send the operator request without a server-only token', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(validRefresh, 202))
+    await expect(refreshWatchlistMarketData({
+      baseUrl: 'http://api.test', fetchImpl,
+    })).rejects.toMatchObject({ kind: 'contract', message: 'Watchlist API authorization is unavailable' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['naive requested_at', { requested_at: '2026-10-05T12:30:00' }],
+    ['naive data_cutoff', { data_cutoff: '2026-10-02T16:00:00' }],
+    ['unknown status', { status: 'completed' }],
+    ['unknown timeframe', { timeframe: '5Min' }],
+    ['unknown feed', { feed: 'SIP' }],
+    ['invalid UUID', { job_ids: ['not-a-uuid'] }],
+    ['invalid count', { symbol_count: -1 }],
+    ['missing message', { message: undefined }],
+    ['extra field', { upstream_secret: 'private' }],
+  ])('rejects %s as an invalid contract', async (_label, patch) => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ ...validRefresh, ...patch }, 202))
+    await expect(refreshWatchlistMarketData({
+      adminToken: 'server-secret', baseUrl: 'http://api.test', fetchImpl,
+    })).rejects.toMatchObject({ kind: 'contract', message: 'Watchlist API returned an invalid refresh response' })
+  })
+
+  it('requires HTTP 202 even if another 2xx response has a valid body', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(validRefresh, 200))
+    await expect(refreshWatchlistMarketData({
+      adminToken: 'server-secret', baseUrl: 'http://api.test', fetchImpl,
+    })).rejects.toMatchObject({ kind: 'contract', status: 200 })
+  })
+
+  it.each([403, 409, 503])('classifies HTTP %i without exposing upstream content', async (status) => {
+    const fetchImpl = vi.fn(async () => new Response('secret upstream diagnostic', { status }))
+    const error = await refreshWatchlistMarketData({
+      adminToken: 'server-secret', baseUrl: 'http://api.test', fetchImpl,
+    }).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(WatchlistApiError)
+    expect(error).toMatchObject({ kind: 'response', status })
+    expect((error as Error).message).not.toContain('secret upstream diagnostic')
+    expect((error as Error).message).not.toContain('server-secret')
+  })
+
+  it('classifies network failure without leaking credentials or a provider error', async () => {
+    const fetchImpl = vi.fn(async () => { throw new Error('server-secret private provider detail') })
+    await expect(refreshWatchlistMarketData({
+      adminToken: 'server-secret', baseUrl: 'http://api.test', fetchImpl,
+    })).rejects.toMatchObject({ kind: 'unavailable', message: 'Watchlist API is unavailable' })
+  })
+
+  it('aborts a refresh request after its timeout', async () => {
+    vi.useFakeTimers()
+    const fetchImpl = vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+      }))
+    const operation = refreshWatchlistMarketData({
+      adminToken: 'server-secret', baseUrl: 'http://api.test', fetchImpl, timeoutMs: 10,
+    })
+    const assertion = expect(operation).rejects.toMatchObject({ kind: 'unavailable' })
+    await vi.advanceTimersByTimeAsync(10)
+    await assertion
   })
 })

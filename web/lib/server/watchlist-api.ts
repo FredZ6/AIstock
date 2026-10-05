@@ -1,14 +1,27 @@
 import 'server-only'
 
 import type { ApiWatchlistItem } from '../product-types'
+import { parseAwareInstant } from '../time'
 import { parseWatchlistRow, parseWatchlistRows } from '../watchlist-contract'
 
 type Fetch = typeof fetch
 
 export type WatchlistClientOptions = {
+  adminToken?: string
   baseUrl: string
   fetchImpl?: Fetch
   timeoutMs?: number
+}
+
+export type WatchlistRefreshResult = {
+  dataCutoff: string | null
+  feed: 'IEX' | null
+  jobIds: string[]
+  message: string
+  requestedAt: string
+  status: 'queued' | 'already_queued' | 'no_symbols' | 'unavailable'
+  symbolCount: number
+  timeframe: '1Min' | '1Day' | null
 }
 
 export type AddWatchlistItem = {
@@ -150,5 +163,82 @@ export async function deleteWatchlistItem(
       'Watchlist API returned an invalid delete response',
       response.status,
     )
+  }
+}
+
+const refreshResponseKeys = [
+  'data_cutoff', 'feed', 'job_ids', 'message', 'requested_at', 'status',
+  'symbol_count', 'timeframe',
+] as const
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function parseRefreshResponse(value: unknown): WatchlistRefreshResult {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError('Refresh response must be an object')
+  }
+  const row = value as Record<string, unknown>
+  if (
+    Object.keys(row).length !== refreshResponseKeys.length
+    || refreshResponseKeys.some((key) => !Object.hasOwn(row, key))
+  ) {
+    throw new TypeError('Refresh response fields are invalid')
+  }
+  if (
+    row.status !== 'queued' && row.status !== 'already_queued'
+    && row.status !== 'no_symbols' && row.status !== 'unavailable'
+  ) throw new TypeError('Refresh status is invalid')
+  if (!Array.isArray(row.job_ids) || !row.job_ids.every(
+    (jobId) => typeof jobId === 'string' && uuidPattern.test(jobId),
+  )) throw new TypeError('Refresh job IDs are invalid')
+  if (!Number.isSafeInteger(row.symbol_count) || Number(row.symbol_count) < 0) {
+    throw new TypeError('Refresh symbol count is invalid')
+  }
+  if (typeof row.requested_at !== 'string') throw new TypeError('Refresh request time is invalid')
+  parseAwareInstant(row.requested_at)
+  if (row.data_cutoff !== null) {
+    if (typeof row.data_cutoff !== 'string') throw new TypeError('Refresh data cutoff is invalid')
+    parseAwareInstant(row.data_cutoff)
+  }
+  if (row.timeframe !== null && row.timeframe !== '1Min' && row.timeframe !== '1Day') {
+    throw new TypeError('Refresh timeframe is invalid')
+  }
+  if (row.feed !== null && row.feed !== 'IEX') throw new TypeError('Refresh feed is invalid')
+  if (typeof row.message !== 'string') throw new TypeError('Refresh message is invalid')
+
+  return {
+    dataCutoff: row.data_cutoff,
+    feed: row.feed,
+    jobIds: row.job_ids,
+    message: row.message,
+    requestedAt: row.requested_at,
+    status: row.status,
+    symbolCount: Number(row.symbol_count),
+    timeframe: row.timeframe,
+  }
+}
+
+export async function refreshWatchlistMarketData(
+  options: WatchlistClientOptions,
+): Promise<WatchlistRefreshResult> {
+  if (typeof options.adminToken !== 'string' || !options.adminToken.trim()) {
+    throw new WatchlistApiError('contract', 'Watchlist API authorization is unavailable')
+  }
+  const response = await request(options, '/api/v1/watchlist/refresh-market-data', {
+    cache: 'no-store',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${options.adminToken}`,
+    },
+    method: 'POST',
+  })
+  if (response.status !== 202) {
+    throw new WatchlistApiError(
+      'contract', 'Watchlist API returned an invalid refresh status', response.status,
+    )
+  }
+  try {
+    return parseRefreshResponse(await response.json())
+  } catch {
+    throw new WatchlistApiError('contract', 'Watchlist API returned an invalid refresh response')
   }
 }
