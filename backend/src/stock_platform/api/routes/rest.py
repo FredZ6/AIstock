@@ -42,7 +42,6 @@ from stock_platform.api.schemas.rest import (
     WeeklyReviewPage,
 )
 from stock_platform.application.ingestion.watchlist_refresh import (
-    WatchlistRefreshStatus,
     request_watchlist_market_data_refresh,
 )
 from stock_platform.application.learning.approval import LessonNotFound, record_lesson_decision
@@ -692,17 +691,8 @@ def refresh_watchlist_market_data(
             "Watchlist market-data refresh could not be dispatched.",
         ) from exception
 
-    if result.status is WatchlistRefreshStatus.UNAVAILABLE:
-        raise ApiError(
-            503,
-            "MARKET_DATA_UNAVAILABLE",
-            "Alpaca IEX market-data access is unavailable.",
-        )
     return WatchlistMarketDataRefreshResponse(
-        status=cast(
-            Literal["queued", "already_queued", "no_symbols", "unavailable"],
-            result.status.value,
-        ),
+        status=result.status.value,
         job_ids=list(result.job_ids),
         symbol_count=result.symbol_count,
         requested_at=result.requested_at,

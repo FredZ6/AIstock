@@ -195,7 +195,14 @@ def test_fixture_mode_is_rejected_without_creating_jobs(
 def test_missing_entitlement_is_explicitly_unavailable_without_creating_jobs(
     client: TestClient,
     engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    published: list[UUID] = []
+    monkeypatch.setattr(
+        rest,
+        "_publish_watchlist_refresh_job",
+        lambda _task, job_id, _queue: published.append(job_id),
+    )
     app.dependency_overrides[get_settings] = lambda: Settings(  # type: ignore[call-arg]
         environment="paper",
         admin_api_token=SecretStr("test-admin-token"),
@@ -205,11 +212,15 @@ def test_missing_entitlement_is_explicitly_unavailable_without_creating_jobs(
 
     response = client.post("/api/v1/watchlist/refresh-market-data", headers=authorize())
 
-    assert response.status_code == 503
-    error = response.json()["error"]
-    assert error["code"] == "MARKET_DATA_UNAVAILABLE"
-    assert "credential" not in error["message"].casefold()
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["status"] == "unavailable"
+    assert payload["job_ids"] == []
+    assert payload["symbol_count"] == 2
+    assert payload["feed"] is None
+    assert "credential" not in payload["message"].casefold()
     assert refresh_jobs(engine) == []
+    assert published == []
 
 
 def test_publisher_failure_is_sanitized_and_jobs_remain_queued(

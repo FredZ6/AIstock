@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from stock_platform.domain.common.ids import Symbol
 from stock_platform.domain.common.time import require_aware
@@ -348,11 +348,16 @@ class WatchlistMarketDataRefreshResponse(StrictModel):
     status: Literal["queued", "already_queued", "no_symbols", "unavailable"]
     job_ids: list[UUID]
     symbol_count: int = Field(ge=0)
-    requested_at: datetime
-    data_cutoff: datetime | None
+    requested_at: AwareDatetime
+    data_cutoff: AwareDatetime | None
     timeframe: Literal["1Min", "1Day"] | None
     feed: Literal["IEX"] | None
     message: str
+
+    @field_validator("requested_at", "data_cutoff")
+    @classmethod
+    def utc_time(cls, value: datetime | None) -> datetime | None:
+        return value.astimezone(UTC) if value is not None else None
 
 
 class WatchlistPatch(StrictModel):

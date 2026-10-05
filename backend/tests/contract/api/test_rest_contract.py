@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 from sqlalchemy import create_engine, delete, insert, update
 from sqlalchemy.engine import Engine
 from stock_platform.api.dependencies import (
@@ -17,6 +17,7 @@ from stock_platform.api.dependencies import (
     get_settings,
 )
 from stock_platform.api.main import app
+from stock_platform.api.schemas.rest import WatchlistMarketDataRefreshResponse
 from stock_platform.application.learning.promotion import HumanActor
 from stock_platform.infrastructure.db.models.tables import (
     agent_run,
@@ -193,6 +194,45 @@ def test_watchlist_market_data_refresh_publishes_a_closed_accepted_response() ->
         "feed",
         "message",
     }
+
+
+@pytest.mark.parametrize("field", ["requested_at", "data_cutoff"])
+def test_watchlist_market_data_refresh_response_rejects_naive_datetimes(field: str) -> None:
+    payload: dict[str, object] = {
+        "status": "queued",
+        "job_ids": [],
+        "symbol_count": 0,
+        "requested_at": datetime(2026, 10, 5, 14, 31, tzinfo=UTC),
+        "data_cutoff": datetime(2026, 10, 5, 14, 31, tzinfo=UTC),
+        "timeframe": "1Min",
+        "feed": "IEX",
+        "message": "queued",
+    }
+    payload[field] = datetime(2026, 10, 5, 14, 31)
+
+    with pytest.raises(ValidationError, match="timezone"):
+        WatchlistMarketDataRefreshResponse.model_validate(payload)
+
+
+def test_watchlist_market_data_refresh_response_normalizes_datetimes_to_utc() -> None:
+    response = WatchlistMarketDataRefreshResponse(
+        status="queued",
+        job_ids=[],
+        symbol_count=0,
+        requested_at=datetime.fromisoformat("2026-10-05T22:31:42+08:00"),
+        data_cutoff=datetime.fromisoformat("2026-10-05T22:31:00+08:00"),
+        timeframe="1Min",
+        feed="IEX",
+        message="queued",
+    )
+
+    assert response.requested_at == datetime(2026, 10, 5, 14, 31, 42, tzinfo=UTC)
+    assert response.requested_at.tzinfo is UTC
+    assert response.data_cutoff == datetime(2026, 10, 5, 14, 31, tzinfo=UTC)
+    assert response.data_cutoff.tzinfo is UTC
+    serialized = response.model_dump(mode="json")
+    assert serialized["requested_at"] == "2026-10-05T14:31:42Z"
+    assert serialized["data_cutoff"] == "2026-10-05T14:31:00Z"
 
 
 def test_provider_health_inventory_matches_implemented_adapters(client: TestClient) -> None:
