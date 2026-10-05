@@ -235,7 +235,7 @@ export function WatchlistApiControls({
             ? parseAwareInstant(asOf).getTime() - parseAwareInstant(latestBar.availableAt).getTime() > MAX_VISIBLE_QUOTE_AGE_MS
             : false
           const quoteIsStale = quote
-            ? parseAwareInstant(asOf).getTime() - parseAwareInstant(quote.availableAt).getTime() > MAX_VISIBLE_QUOTE_AGE_MS
+            ? parseAwareInstant(asOf).getTime() - parseAwareInstant(quote.eventTime).getTime() > MAX_VISIBLE_QUOTE_AGE_MS
             : false
           return <li key={item.symbol}>
             <span className="watchlist-rank" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
@@ -250,6 +250,8 @@ export function WatchlistApiControls({
             </div>
             <div className="watchlist-provenance">
               <span>{quote ? `${quote.provider} · ${quote.coverage}` : 'Quality unavailable'}</span>
+              {quote ? <span>{quote.timeframe === '1Min' ? '1-minute' : quote.timeframe === '1Day' ? 'Daily' : 'Timeframe unavailable'} · {quote.session === 'PRE_MARKET' ? 'pre-market' : quote.session === 'REGULAR' ? 'regular' : quote.session === 'AFTER_HOURS' ? 'after-hours' : quote.session === 'OVERNIGHT' ? 'overnight' : 'session unavailable'}</span> : null}
+              {quote ? <span>Bar event <time dateTime={quote.eventTime}>{formatDualTime(quote.eventTime).newYork}</time></span> : null}
               {quoteIsStale ? <Signal tone="stale">STALE</Signal> : null}
               {quote
                 ? <time dateTime={quote.availableAt}>Persisted {formatDualTime(quote.availableAt).newYork}</time>

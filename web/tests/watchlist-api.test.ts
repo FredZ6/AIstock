@@ -393,6 +393,28 @@ describe('Watchlist market-data refresh client', () => {
     expect((error as Error).message).not.toContain('server-secret')
   })
 
+  it.each(['WATCHLIST_REFRESH_LIMIT_EXCEEDED', 'PAPER_MODE_REQUIRED'])('preserves only the recognized 409 code %s', async (code) => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ error: {
+      code, message: 'server-secret private provider diagnostic', details: { secret: 'server-secret' },
+    } }, 409))
+    const error = await refreshWatchlistMarketData({
+      adminToken: 'server-secret', baseUrl: 'http://api.test', fetchImpl,
+    }).catch((caught: unknown) => caught)
+    expect(error).toMatchObject({ kind: 'response', status: 409, code })
+    expect((error as Error).message).not.toContain('server-secret')
+  })
+
+  it('ignores unknown error codes and never forwards their message', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ error: {
+      code: 'PRIVATE_PROVIDER_ERROR', message: 'server-secret private provider diagnostic',
+    } }, 409))
+    const error = await refreshWatchlistMarketData({
+      adminToken: 'server-secret', baseUrl: 'http://api.test', fetchImpl,
+    }).catch((caught: unknown) => caught)
+    expect(error).toMatchObject({ kind: 'response', status: 409, code: undefined })
+    expect((error as Error).message).not.toContain('server-secret')
+  })
+
   it('classifies network failure without leaking credentials or a provider error', async () => {
     const fetchImpl = vi.fn(async () => { throw new Error('server-secret private provider detail') })
     await expect(refreshWatchlistMarketData({

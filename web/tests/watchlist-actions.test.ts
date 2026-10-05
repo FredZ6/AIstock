@@ -66,7 +66,7 @@ describe('manual Watchlist market refresh', () => {
     const result = await refreshWatchlistAction(initialWatchlistActionState, new FormData())
     expect(refreshData).toHaveBeenCalledOnce()
     expect(refreshData).toHaveBeenCalledWith({ baseUrl: 'http://127.0.0.1:8000/', adminToken: 'private-token' })
-    expect(result).toEqual({ message: 'Refresh queued for 12 symbols.', status: 'success' })
+    expect(result).toEqual({ message: 'Latest completed trading-day bars queued for 12 symbols through Oct 2, 2026, 4:00 PM New York time. Prices update after ingestion completes.', status: 'success' })
     expect(revalidate).toHaveBeenCalledWith('/watchlist')
   })
 
@@ -74,7 +74,7 @@ describe('manual Watchlist market refresh', () => {
     process.env.ADMIN_API_TOKEN = 'private-token'
     refreshData.mockResolvedValue({ ...accepted, status: 'already_queued' })
     const result = await refreshWatchlistAction(initialWatchlistActionState, new FormData())
-    expect(result).toEqual({ message: 'A refresh is already processing for 12 symbols.', status: 'success' })
+    expect(result).toEqual({ message: 'Latest completed trading-day bars are already processing for 12 symbols through Oct 2, 2026, 4:00 PM New York time. Prices update after ingestion completes.', status: 'success' })
     expect(revalidate).toHaveBeenCalledWith('/watchlist')
   })
 
@@ -82,7 +82,14 @@ describe('manual Watchlist market refresh', () => {
     process.env.ADMIN_API_TOKEN = 'private-token'
     refreshData.mockResolvedValue({ ...accepted, symbolCount: 1 })
     expect(await refreshWatchlistAction(initialWatchlistActionState, new FormData()))
-      .toEqual({ message: 'Refresh queued for 1 symbol.', status: 'success' })
+      .toEqual({ message: 'Latest completed trading-day bars queued for 1 symbol through Oct 2, 2026, 4:00 PM New York time. Prices update after ingestion completes.', status: 'success' })
+  })
+
+  it('reports active-session minute bar cutoff without implying the prices changed', async () => {
+    process.env.ADMIN_API_TOKEN = 'private-token'
+    refreshData.mockResolvedValue({ ...accepted, timeframe: '1Min', dataCutoff: '2026-10-05T14:31:00Z' })
+    expect(await refreshWatchlistAction(initialWatchlistActionState, new FormData()))
+      .toEqual({ message: '1-minute bars queued for 12 symbols through Oct 5, 2026, 10:31 AM New York time. Prices update after ingestion completes.', status: 'success' })
   })
 
   it('reports empty and unavailable states without revalidation', async () => {
@@ -111,11 +118,17 @@ describe('manual Watchlist market refresh', () => {
     expect(refreshData).not.toHaveBeenCalled()
   })
 
-  it('returns actionable limit copy for 409 and sanitizes other failures', async () => {
+  it('returns actionable limit copy only for the matching API code and sanitizes other failures', async () => {
     process.env.ADMIN_API_TOKEN = 'private-token'
-    refreshData.mockRejectedValueOnce(new WatchlistApiError('response', 'secret provider body', 409))
+    refreshData.mockRejectedValueOnce(new WatchlistApiError('response', 'secret provider body', 409, 'WATCHLIST_REFRESH_LIMIT_EXCEEDED'))
     expect(await refreshWatchlistAction(initialWatchlistActionState, new FormData()))
       .toEqual({ message: 'More than 50 monitored symbols. Reduce the Watchlist and try again.', status: 'error' })
+    refreshData.mockRejectedValueOnce(new WatchlistApiError('response', 'secret provider body', 409, 'PAPER_MODE_REQUIRED'))
+    expect(await refreshWatchlistAction(initialWatchlistActionState, new FormData()))
+      .toEqual({ message: 'Market data refresh requires paper mode.', status: 'error' })
+    refreshData.mockRejectedValueOnce(new WatchlistApiError('response', 'secret provider body', 409))
+    expect(await refreshWatchlistAction(initialWatchlistActionState, new FormData()))
+      .toEqual({ message: 'Unable to request market data refresh. Try again.', status: 'error' })
     refreshData.mockRejectedValueOnce(new Error('private-token secret provider body'))
     expect(await refreshWatchlistAction(initialWatchlistActionState, new FormData()))
       .toEqual({ message: 'Unable to request market data refresh. Try again.', status: 'error' })

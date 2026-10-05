@@ -208,6 +208,49 @@ class PostgresMarketDataRepository:
         ).mappings()
         return tuple(self._market_bar_record(row) for row in rows)
 
+    def latest_watchlist_bars_as_of(
+        self,
+        *,
+        symbols: Sequence[str],
+        decision_time: datetime,
+        coverage: MarketDataCoverage,
+    ) -> tuple[ProviderRecord, ...]:
+        """Latest eligible minute or regular daily bar per Watchlist symbol."""
+        cutoff = require_aware(decision_time)
+        if not symbols:
+            return ()
+        ranked = (
+            select(
+                market_bar,
+                func.row_number().over(
+                    partition_by=market_bar.c.symbol,
+                    order_by=(
+                        market_bar.c.event_time.desc(),
+                        market_bar.c.available_at.desc(),
+                        market_bar.c.ingested_at.desc(),
+                        market_bar.c.content_hash.desc(),
+                        market_bar.c.raw_object_key.desc(),
+                    ),
+                ).label("latest_rank"),
+            )
+            .where(
+                market_bar.c.symbol.in_([str(Symbol(symbol)) for symbol in symbols]),
+                market_bar.c.provider == "ALPACA",
+                market_bar.c.feed_type == FeedType.PRICE_BARS.value,
+                market_bar.c.coverage == coverage.value,
+                market_bar.c.payload["timeframe"].astext.in_(("1Min", "1Day")),
+                (market_bar.c.payload["timeframe"].astext == "1Min")
+                | (market_bar.c.session == MarketSession.REGULAR.value),
+                market_bar.c.event_time <= cutoff,
+                market_bar.c.available_at <= cutoff,
+            )
+            .subquery()
+        )
+        rows = self._connection.execute(
+            select(ranked).where(ranked.c.latest_rank == 1).order_by(ranked.c.symbol)
+        ).mappings()
+        return tuple(self._market_bar_record(row) for row in rows)
+
     def historical_bars_as_of(
         self,
         *,

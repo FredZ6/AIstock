@@ -13,6 +13,7 @@ import {
   type WatchlistClientOptions,
 } from '../../lib/server/watchlist-api'
 import type { WatchlistActionState } from '../../lib/watchlist-action-state'
+import { formatDualTime } from '../../lib/time'
 
 const decimalPattern = /^-?\d+(?:\.\d+)?$/
 const symbolPattern = /^[A-Z.]{1,10}$/
@@ -42,15 +43,20 @@ export async function refreshWatchlistAction(
     }
     revalidatePath('/watchlist')
     const symbols = `${result.symbolCount} ${result.symbolCount === 1 ? 'symbol' : 'symbols'}`
+    const bars = result.timeframe === '1Min' ? '1-minute bars' : 'Latest completed trading-day bars'
+    const cutoff = result.dataCutoff ? formatDualTime(result.dataCutoff).newYork : 'the latest cutoff'
     return {
       message: result.status === 'queued'
-        ? `Refresh queued for ${symbols}.`
-        : `A refresh is already processing for ${symbols}.`,
+        ? `${bars} queued for ${symbols} through ${cutoff} New York time. Prices update after ingestion completes.`
+        : `${bars} are already processing for ${symbols} through ${cutoff} New York time. Prices update after ingestion completes.`,
       status: 'success',
     }
   } catch (error) {
-    if (error instanceof WatchlistApiError && error.status === 409) {
+    if (error instanceof WatchlistApiError && error.code === 'WATCHLIST_REFRESH_LIMIT_EXCEEDED') {
       return { message: 'More than 50 monitored symbols. Reduce the Watchlist and try again.', status: 'error' }
+    }
+    if (error instanceof WatchlistApiError && error.code === 'PAPER_MODE_REQUIRED') {
+      return { message: 'Market data refresh requires paper mode.', status: 'error' }
     }
     return { message: 'Unable to request market data refresh. Try again.', status: 'error' }
   }

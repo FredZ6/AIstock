@@ -162,12 +162,33 @@ describe('Watchlist route data boundaries', () => {
     expect(screen.getByLabelText('Live data refresh')).toBeInTheDocument()
     expect(screen.queryByRole('status', { name: 'Market and research data unavailable' })).not.toBeInTheDocument()
     expect(screen.getByText('USD 217.55')).toBeInTheDocument()
-    expect(screen.queryByText('STALE')).not.toBeInTheDocument()
+    expect(screen.getByText('STALE')).toBeInTheDocument()
     const summary = screen.getByRole('region', { name: 'Watchlist critical summary' })
     expect(summary).toHaveClass('route-critical-summary')
     expect(within(summary).getByRole('textbox', { name: 'Add symbol' })).toBeInTheDocument()
     expect(within(summary).getByRole('button', { name: 'Update latest data' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Watchlist settings' })).not.toHaveAttribute('open')
+  })
+
+  it('requests latest Watchlist quotes and shows their actual minute provenance', async () => {
+    process.env.WEB_DATA_MODE = 'api'
+    process.env.API_BASE_URL = 'http://127.0.0.1:8000'
+    await mockWatchlistRead(() => [apiRow])
+    let requestedMode: unknown
+    await mockMarketQuotes((_options, _symbols, mode) => {
+      requestedMode = mode
+      return { status: 'SUCCESS', missingSymbols: [], items: [{
+        availableAt: '2026-08-29T09:29:10Z', close: '218.00', coverage: 'IEX',
+        eventTime: '2026-08-29T09:29:00Z', provider: 'ALPACA', symbol: 'NVDA',
+        timeframe: '1Min', session: 'PRE_MARKET',
+      }] }
+    })
+    const { default: WatchlistRoute } = await import('../app/watchlist/page')
+    render(await WatchlistRoute())
+    expect(requestedMode).toBe('latest')
+    const row = within(screen.getByRole('list', { name: 'Ranked research watchlist' })).getByRole('listitem')
+    expect(row).toHaveTextContent('1-minute · pre-market')
+    expect(within(row).getByText(/Bar event/)).toContainHTML('2026-08-29T09:29:00Z')
   })
 
   it('labels a persisted quote stale relative to the visible point-in-time cutoff', () => {

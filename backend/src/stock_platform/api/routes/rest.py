@@ -499,7 +499,7 @@ def latest_quotes(
     settings: SettingsDependency,
     symbols: Annotated[str, Query(min_length=1)],
     decision_time: datetime,
-    timeframe: Literal["1Min", "1Day"] = "1Day",
+    timeframe: Literal["1Min", "1Day", "latest"] = "1Day",
 ) -> dict[str, Any]:
     cutoff = _aware_query_time(decision_time, "decision_time")
     requested = tuple(
@@ -509,12 +509,21 @@ def latest_quotes(
         raise ApiError(422, "INVALID_REQUEST", "symbols must contain at least one symbol")
     if len(requested) > 50:
         raise ApiError(422, "INVALID_REQUEST", "symbols cannot contain more than 50 entries")
-    records = PostgresMarketDataRepository(connection).latest_bars_as_of(
-        symbols=requested,
-        decision_time=cutoff,
-        coverage=_coverage(settings),
-        session=MarketSession.REGULAR,
-        timeframe=timeframe,
+    repository = PostgresMarketDataRepository(connection)
+    records = (
+        repository.latest_watchlist_bars_as_of(
+            symbols=requested,
+            decision_time=cutoff,
+            coverage=_coverage(settings),
+        )
+        if timeframe == "latest"
+        else repository.latest_bars_as_of(
+            symbols=requested,
+            decision_time=cutoff,
+            coverage=_coverage(settings),
+            session=MarketSession.REGULAR,
+            timeframe=timeframe,
+        )
     )
     record_by_symbol = {str(record.symbol): record for record in records}
     items = [

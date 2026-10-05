@@ -25,6 +25,7 @@ export default async function WatchlistRoute() {
       ? await getMarketQuotes(
         { baseUrl: config.baseUrl, decisionTime },
         items.map((item) => item.symbol),
+        'latest',
       ).catch((error) => {
         reportLiveDataFailure('/watchlist', 'market-quotes', error)
         return { items: [], missingSymbols: items.map((item) => item.symbol), status: 'FAILURE' as const }

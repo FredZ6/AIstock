@@ -38,16 +38,19 @@ export type PatchWatchlistItem = {
 }
 
 export type WatchlistApiErrorKind = 'contract' | 'response' | 'unavailable'
+type KnownWatchlistErrorCode = 'PAPER_MODE_REQUIRED' | 'WATCHLIST_REFRESH_LIMIT_EXCEEDED'
 
 export class WatchlistApiError extends Error {
   readonly kind: WatchlistApiErrorKind
   readonly status?: number
+  readonly code?: KnownWatchlistErrorCode
 
-  constructor(kind: WatchlistApiErrorKind, message: string, status?: number) {
+  constructor(kind: WatchlistApiErrorKind, message: string, status?: number, code?: KnownWatchlistErrorCode) {
     super(message)
     this.name = 'WatchlistApiError'
     this.kind = kind
     this.status = status
+    this.code = code
   }
 }
 
@@ -79,10 +82,26 @@ async function request(
   }
 
   if (!response.ok) {
+    let code: KnownWatchlistErrorCode | undefined
+    if (response.status === 409) {
+      try {
+        const body: unknown = await response.json()
+        const candidate = typeof body === 'object' && body !== null && 'error' in body
+          ? body.error : undefined
+        const rawCode = typeof candidate === 'object' && candidate !== null && 'code' in candidate
+          ? candidate.code : undefined
+        if (rawCode === 'PAPER_MODE_REQUIRED' || rawCode === 'WATCHLIST_REFRESH_LIMIT_EXCEEDED') {
+          code = rawCode
+        }
+      } catch {
+        // Unknown upstream errors retain only their HTTP status.
+      }
+    }
     throw new WatchlistApiError(
       'response',
       `Watchlist API returned HTTP ${response.status}`,
       response.status,
+      code,
     )
   }
 
