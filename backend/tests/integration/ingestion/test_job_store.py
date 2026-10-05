@@ -64,9 +64,11 @@ def test_concurrent_enqueue_and_claim_have_one_winner(isolated_database_url: str
     store = IngestionJobStore(engine)
 
     with ThreadPoolExecutor(max_workers=4) as pool:
-        job_ids = list(pool.map(lambda _: store.enqueue(_spec(), now=NOW), range(4)))
+        admissions = list(pool.map(lambda _: store.enqueue_with_result(_spec(), now=NOW), range(4)))
 
+    job_ids = [admission.job_id for admission in admissions]
     assert len(set(job_ids)) == 1
+    assert sum(admission.created for admission in admissions) == 1
     job_id = job_ids[0]
     with ThreadPoolExecutor(max_workers=2) as pool:
         leases = list(
@@ -82,6 +84,24 @@ def test_concurrent_enqueue_and_claim_have_one_winner(isolated_database_url: str
         )
 
     assert sum(lease is not None for lease in leases) == 1
+    with engine.connect() as connection:
+        assert connection.execute(select(func.count()).select_from(ingestion_job)).scalar_one() == 1
+    engine.dispose()
+
+
+def test_enqueue_with_result_atomically_reports_created_then_reused(
+    isolated_database_url: str,
+) -> None:
+    command.upgrade(_alembic_config(isolated_database_url), "head")
+    engine = create_engine(isolated_database_url)
+    store = IngestionJobStore(engine)
+
+    created = store.enqueue_with_result(_spec(), now=NOW)
+    reused = store.enqueue_with_result(_spec(), now=NOW)
+
+    assert created.created is True
+    assert reused.created is False
+    assert reused.job_id == created.job_id
     with engine.connect() as connection:
         assert connection.execute(select(func.count()).select_from(ingestion_job)).scalar_one() == 1
     engine.dispose()

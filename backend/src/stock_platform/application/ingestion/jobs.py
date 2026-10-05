@@ -24,6 +24,12 @@ class StaleIngestionLease(RuntimeError):
     """Raised when work is presented under a superseded or expired lease."""
 
 
+@dataclass(frozen=True, slots=True)
+class IngestionJobAdmission:
+    job_id: UUID
+    created: bool
+
+
 def transition_job(current: IngestionJobState, target: IngestionJobState) -> IngestionJobState:
     if not can_transition(current, target):
         raise InvalidJobTransition(f"illegal ingestion transition: {current} -> {target}")

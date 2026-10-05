@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol
 from uuid import UUID
 
-from stock_platform.application.ingestion.jobs import IngestionJobSpec
+from stock_platform.application.ingestion.jobs import IngestionJobAdmission, IngestionJobSpec
 from stock_platform.application.market_data.policy import (
     EntitlementSnapshot,
     MarketCalendar,
@@ -29,7 +29,9 @@ ALPACA_INGESTION_QUEUE = "ingestion-low"
 
 
 class BackfillJobStore(Protocol):
-    def enqueue(self, spec: IngestionJobSpec, *, now: datetime) -> UUID: ...
+    def enqueue_with_result(
+        self, spec: IngestionJobSpec, *, now: datetime
+    ) -> IngestionJobAdmission: ...
 
 
 QueuedJobEligibility = Callable[[UUID], bool]
@@ -102,20 +104,25 @@ def request_watchlist_market_data_refresh(
             message="No monitored Watchlist symbols are available.",
         )
 
-    session = MarketCalendar().session_at(requested_at)
-    if session is None:
+    minute_cutoff = requested_at.replace(second=0, microsecond=0)
+    minute_start = minute_cutoff - timedelta(minutes=1)
+    completed_interval_session = MarketCalendar().session_at(minute_start)
+    if completed_interval_session is None or (
+        completed_interval_session is MarketSession.OVERNIGHT and not entitlement.overnight
+    ):
         data_cutoff = latest_completed_market_cutoff(requested_at, cutoff=time(16))
         timeframe = BarTimeframe.DAY
         window_start = data_cutoff - timedelta(days=1)
         request_session = MarketSession.REGULAR
     else:
-        data_cutoff = requested_at.replace(second=0, microsecond=0)
+        data_cutoff = minute_cutoff
         timeframe = BarTimeframe.MINUTE
-        window_start = data_cutoff - timedelta(minutes=1)
-        request_session = session
+        window_start = minute_start
+        request_session = completed_interval_session
 
     observed_entitlement = replace(entitlement, observed_at=requested_at)
     admitted_ids: list[UUID] = []
+    created_ids: list[UUID] = []
     for symbol in normalized_symbols:
         scheduled = schedule_alpaca_backfills(
             store,
@@ -132,11 +139,13 @@ def request_watchlist_market_data_refresh(
             max_jobs=1,
         )
         admitted_ids.extend(scheduled.job_ids)
+        created_ids.extend(scheduled.created_job_ids)
 
     job_ids = tuple(dict.fromkeys(admitted_ids))
+    newly_created = frozenset(created_ids)
     published = 0
     for job_id in job_ids:
-        if is_queued(job_id):
+        if job_id in newly_created and is_queued(job_id):
             publish(ALPACA_INGESTION_TASK, job_id, ALPACA_INGESTION_QUEUE)
             published += 1
 

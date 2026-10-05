@@ -5,7 +5,10 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from stock_platform.application.ingestion.jobs import IngestionJobSpec
+from stock_platform.application.ingestion.jobs import (
+    IngestionJobAdmission,
+    IngestionJobSpec,
+)
 from stock_platform.application.ingestion.watchlist_refresh import (
     WatchlistRefreshResult,
     WatchlistRefreshStatus,
@@ -25,9 +28,28 @@ class RecordingJobStore:
         self.specs: list[IngestionJobSpec] = []
         self._job_ids = iter(job_ids)
 
-    def enqueue(self, spec: IngestionJobSpec, *, now: datetime) -> UUID:
+    def enqueue_with_result(
+        self, spec: IngestionJobSpec, *, now: datetime
+    ) -> IngestionJobAdmission:
         self.specs.append(spec)
-        return next(self._job_ids, uuid4())
+        return IngestionJobAdmission(next(self._job_ids, uuid4()), created=True)
+
+
+class IdempotentRecordingJobStore:
+    def __init__(self) -> None:
+        self.specs: list[IngestionJobSpec] = []
+        self._job_ids_by_request: dict[str, UUID] = {}
+
+    def enqueue_with_result(
+        self, spec: IngestionJobSpec, *, now: datetime
+    ) -> IngestionJobAdmission:
+        self.specs.append(spec)
+        existing = self._job_ids_by_request.get(spec.request.request_hash)
+        if existing is not None:
+            return IngestionJobAdmission(existing, created=False)
+        job_id = uuid4()
+        self._job_ids_by_request[spec.request.request_hash] = job_id
+        return IngestionJobAdmission(job_id, created=True)
 
 
 def alpaca_entitlement(*coverage: MarketDataCoverage) -> EntitlementSnapshot:
@@ -110,6 +132,51 @@ def test_closed_session_requests_latest_completed_trading_day() -> None:
     assert store.specs[0].window_end == result.data_cutoff
     assert store.specs[0].purpose is DataPurpose.REALTIME_CONTEXT
     assert store.specs[0].request.canonical_payload["session"] == MarketSession.REGULAR.value
+
+
+@pytest.mark.parametrize(
+    ("now", "expected_session"),
+    [
+        (datetime(2026, 10, 5, 13, 30, 42, tzinfo=UTC), MarketSession.PRE_MARKET),
+        (datetime(2026, 10, 5, 20, 0, 42, tzinfo=UTC), MarketSession.REGULAR),
+        (datetime(2026, 10, 6, 0, 0, 42, tzinfo=UTC), MarketSession.AFTER_HOURS),
+    ],
+)
+def test_boundary_minute_uses_session_covering_the_completed_interval(
+    now: datetime,
+    expected_session: MarketSession,
+) -> None:
+    store = RecordingJobStore()
+
+    result, _ = request_refresh(store=store, now=now)
+
+    assert result.timeframe is BarTimeframe.MINUTE
+    assert store.specs[0].window_start == now.replace(second=0) - timedelta(minutes=1)
+    assert store.specs[0].request.canonical_payload["session"] == expected_session.value
+
+
+def test_unentitled_overnight_interval_falls_back_to_latest_completed_day() -> None:
+    now = datetime(2026, 10, 6, 0, 1, 42, tzinfo=UTC)
+    store = RecordingJobStore()
+
+    result, published = request_refresh(store=store, now=now)
+
+    assert result.status is WatchlistRefreshStatus.QUEUED
+    assert result.timeframe is BarTimeframe.DAY
+    assert result.data_cutoff == datetime(2026, 10, 5, 20, tzinfo=UTC)
+    assert store.specs[0].window_start == datetime(2026, 10, 4, 20, tzinfo=UTC)
+    assert store.specs[0].request.canonical_payload["session"] == MarketSession.REGULAR.value
+    assert len(published) == 1
+
+
+def test_closed_holiday_weekend_uses_latest_completed_trading_day() -> None:
+    now = datetime(2026, 7, 5, 12, tzinfo=UTC)
+    store = RecordingJobStore()
+
+    result, _ = request_refresh(store=store, now=now)
+
+    assert result.timeframe is BarTimeframe.DAY
+    assert result.data_cutoff == datetime(2026, 7, 2, 20, tzinfo=UTC)
 
 
 def test_refresh_rejects_naive_time() -> None:
@@ -243,6 +310,37 @@ def test_existing_nonqueued_jobs_report_already_queued_without_publish() -> None
     assert result.status is WatchlistRefreshStatus.ALREADY_QUEUED
     assert result.job_ids == (existing_id,)
     assert published == []
+
+
+def test_repeat_request_reuses_ids_without_republishing() -> None:
+    store = IdempotentRecordingJobStore()
+    published: list[tuple[str, UUID, str]] = []
+
+    def request() -> WatchlistRefreshResult:
+        return request_watchlist_market_data_refresh(
+            store=store,
+            symbols=("NVDA", "AVGO"),
+            entitlement=alpaca_entitlement(MarketDataCoverage.IEX),
+            now=datetime(2026, 10, 5, 14, 31, 42, tzinfo=UTC),
+            is_queued=lambda _job_id: True,
+            publish=lambda task, job_id, queue: published.append(
+                (
+                    task,
+                    job_id,
+                    queue,
+                )
+            ),
+        )
+
+    first = request()
+    first_publish_count = len(published)
+    second = request()
+
+    assert first.status is WatchlistRefreshStatus.QUEUED
+    assert first_publish_count == 2
+    assert second.job_ids == first.job_ids
+    assert second.status is WatchlistRefreshStatus.ALREADY_QUEUED
+    assert len(published) == first_publish_count
 
 
 def test_refresh_service_has_no_research_portfolio_or_broker_execution_dependency() -> None:

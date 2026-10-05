@@ -186,6 +186,8 @@ def test_entitlement_aware_schedule_is_durable_idempotent_and_purpose_safe(
     assert research.decision.outcome is PolicyOutcome.ALLOWED_WITH_GAP
     assert research.job_ids == replayed.job_ids
     assert len(research.job_ids) == 1
+    assert research.created_job_ids == research.job_ids
+    assert replayed.created_job_ids == ()
     assert denied.decision.outcome is PolicyOutcome.DENIED_NO_ACTION
     assert denied.job_ids == ()
     with engine.connect() as connection:

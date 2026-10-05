@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from celery.schedules import crontab  # type: ignore[import-untyped]
 from sqlalchemy import Connection, Engine, create_engine, func, select, update
 
-from stock_platform.application.ingestion.jobs import IngestionJobSpec
+from stock_platform.application.ingestion.jobs import IngestionJobAdmission, IngestionJobSpec
 from stock_platform.application.market_data.policy import (
     EntitlementSnapshot,
     MarketCalendar,
@@ -48,13 +48,16 @@ Dispatch = Callable[[str, str], None]
 
 
 class BackfillJobStore(Protocol):
-    def enqueue(self, spec: IngestionJobSpec, *, now: datetime) -> UUID: ...
+    def enqueue_with_result(
+        self, spec: IngestionJobSpec, *, now: datetime
+    ) -> IngestionJobAdmission: ...
 
 
 @dataclass(frozen=True, slots=True)
 class ScheduledAlpacaBackfill:
     decision: MarketDataDecision
     job_ids: tuple[UUID, ...]
+    created_job_ids: tuple[UUID, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,7 +172,7 @@ def schedule_alpaca_backfills(
         entitlement=entitlement,
     )
     if decision.outcome is PolicyOutcome.DENIED_NO_ACTION:
-        return ScheduledAlpacaBackfill(decision=decision, job_ids=())
+        return ScheduledAlpacaBackfill(decision=decision, job_ids=(), created_job_ids=())
     slices = plan_alpaca_backfill(
         dataset=dataset,
         timeframe=timeframe,
@@ -180,6 +183,7 @@ def schedule_alpaca_backfills(
         raise ValueError("backfill plan exceeds bounded job count")
     queued_at = require_aware(now).astimezone(UTC)
     job_ids: list[UUID] = []
+    created_job_ids: list[UUID] = []
     for item in slices:
         request = IngestionRequest(
             {
@@ -208,22 +212,27 @@ def schedule_alpaca_backfills(
                 "gap_reason": decision.reason,
             }
         )
-        job_ids.append(
-            store.enqueue(
-                IngestionJobSpec(
-                    request=request,
-                    provider="ALPACA",
-                    dataset=dataset,
-                    window_start=item.start,
-                    window_end=item.end,
-                    purpose=purpose,
-                    policy_version=entitlement.version,
-                    max_attempts=3,
-                ),
-                now=queued_at,
-            )
+        admission = store.enqueue_with_result(
+            IngestionJobSpec(
+                request=request,
+                provider="ALPACA",
+                dataset=dataset,
+                window_start=item.start,
+                window_end=item.end,
+                purpose=purpose,
+                policy_version=entitlement.version,
+                max_attempts=3,
+            ),
+            now=queued_at,
         )
-    return ScheduledAlpacaBackfill(decision=decision, job_ids=tuple(job_ids))
+        job_ids.append(admission.job_id)
+        if admission.created:
+            created_job_ids.append(admission.job_id)
+    return ScheduledAlpacaBackfill(
+        decision=decision,
+        job_ids=tuple(job_ids),
+        created_job_ids=tuple(created_job_ids),
+    )
 
 
 def schedule_alpaca_reconnect_gap_fill(

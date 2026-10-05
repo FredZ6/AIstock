@@ -10,7 +10,11 @@ from uuid import UUID, uuid4
 from sqlalchemy import Engine, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from stock_platform.application.ingestion.jobs import IngestionJobSpec, IngestionLease
+from stock_platform.application.ingestion.jobs import (
+    IngestionJobAdmission,
+    IngestionJobSpec,
+    IngestionLease,
+)
 from stock_platform.domain.common.time import require_aware
 from stock_platform.domain.ingestion.models import (
     FeedType,
@@ -54,6 +58,14 @@ class IngestionJobStore:
         self._engine = engine
 
     def enqueue(self, spec: IngestionJobSpec, *, now: datetime) -> UUID:
+        return self.enqueue_with_result(spec, now=now).job_id
+
+    def enqueue_with_result(
+        self,
+        spec: IngestionJobSpec,
+        *,
+        now: datetime,
+    ) -> IngestionJobAdmission:
         queued_at = require_aware(now).astimezone(UTC)
         job_request = _job_request(spec)
         with self._engine.begin() as connection:
@@ -68,8 +80,8 @@ class IngestionJobStore:
                 )
             ).scalar_one_or_none()
             if existing is not None:
-                return cast(UUID, existing)
-            return cast(
+                return IngestionJobAdmission(cast(UUID, existing), created=False)
+            job_id = cast(
                 UUID,
                 connection.execute(
                     insert(ingestion_job)
@@ -90,6 +102,7 @@ class IngestionJobStore:
                     .returning(ingestion_job.c.id)
                 ).scalar_one(),
             )
+            return IngestionJobAdmission(job_id, created=True)
 
     def claim(
         self,
