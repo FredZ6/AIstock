@@ -205,6 +205,21 @@ function parseRefreshResponse(value: unknown): WatchlistRefreshResult {
   if (row.feed !== null && row.feed !== 'IEX') throw new TypeError('Refresh feed is invalid')
   if (typeof row.message !== 'string') throw new TypeError('Refresh message is invalid')
 
+  const hasSession = row.data_cutoff !== null && row.timeframe !== null && row.feed === 'IEX'
+  const hasNoSession = row.data_cutoff === null && row.timeframe === null && row.feed === null
+  if (row.status === 'queued' || row.status === 'already_queued') {
+    if (Number(row.symbol_count) === 0 || row.job_ids.length === 0 || !hasSession) {
+      throw new TypeError('Queued refresh response is contradictory')
+    }
+  } else if (row.status === 'no_symbols') {
+    if (
+      Number(row.symbol_count) !== 0 || row.job_ids.length !== 0
+      || row.data_cutoff !== null || row.timeframe !== null || row.feed !== 'IEX'
+    ) throw new TypeError('Empty refresh response is contradictory')
+  } else if (row.job_ids.length !== 0 || (!hasSession && !hasNoSession)) {
+    throw new TypeError('Unavailable refresh response is contradictory')
+  }
+
   return {
     dataCutoff: row.data_cutoff,
     feed: row.feed,

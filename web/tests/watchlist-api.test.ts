@@ -309,6 +309,46 @@ describe('Watchlist market-data refresh client', () => {
     })).resolves.toMatchObject({ status: 'unavailable', jobIds: [], dataCutoff: null })
   })
 
+  it('accepts the backend no-symbols and session-unavailable results', async () => {
+    const noSymbols = { ...validRefresh, status: 'no_symbols', job_ids: [], symbol_count: 0,
+      data_cutoff: null, timeframe: null, feed: 'IEX' }
+    const sessionUnavailable = { ...validRefresh, status: 'unavailable', job_ids: [] }
+    for (const payload of [noSymbols, sessionUnavailable]) {
+      const fetchImpl = vi.fn(async () => jsonResponse(payload, 202))
+      await expect(refreshWatchlistMarketData({
+        adminToken: 'server-secret', baseUrl: 'http://api.test', fetchImpl,
+      })).resolves.toMatchObject({ status: payload.status, jobIds: [] })
+    }
+  })
+
+  it.each([
+    ['queued without job IDs', { job_ids: [] }],
+    ['queued without symbols', { symbol_count: 0 }],
+    ['queued without cutoff', { data_cutoff: null }],
+    ['queued without timeframe', { timeframe: null }],
+    ['queued without IEX feed', { feed: null }],
+    ['already queued without job IDs', { status: 'already_queued', job_ids: [] }],
+    ['already queued without symbols', { status: 'already_queued', symbol_count: 0 }],
+    ['no symbols with positive count', { status: 'no_symbols', job_ids: [], symbol_count: 1,
+      data_cutoff: null, timeframe: null }],
+    ['no symbols with job IDs', { status: 'no_symbols', symbol_count: 0,
+      data_cutoff: null, timeframe: null }],
+    ['no symbols with cutoff', { status: 'no_symbols', job_ids: [], symbol_count: 0,
+      timeframe: null }],
+    ['no symbols with timeframe', { status: 'no_symbols', job_ids: [], symbol_count: 0,
+      data_cutoff: null }],
+    ['no symbols without IEX feed', { status: 'no_symbols', job_ids: [], symbol_count: 0,
+      data_cutoff: null, timeframe: null, feed: null }],
+    ['unavailable with job IDs', { status: 'unavailable' }],
+    ['unavailable with partial session metadata', { status: 'unavailable', job_ids: [],
+      data_cutoff: null }],
+  ])('rejects contradictory %s response', async (_label, patch) => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ ...validRefresh, ...patch }, 202))
+    await expect(refreshWatchlistMarketData({
+      adminToken: 'server-secret', baseUrl: 'http://api.test', fetchImpl,
+    })).rejects.toMatchObject({ kind: 'contract', message: 'Watchlist API returned an invalid refresh response' })
+  })
+
   it('refuses to send the operator request without a server-only token', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(validRefresh, 202))
     await expect(refreshWatchlistMarketData({
