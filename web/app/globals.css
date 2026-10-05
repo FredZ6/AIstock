@@ -629,6 +629,8 @@ input { min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--l
 .watchlist-critical-summary .watchlist-primary-action { margin: 0 0 0.65rem; padding: 0.65rem 0.75rem; }
 .watchlist-critical-summary { padding: 1rem 1rem 0.35rem; }
 .watchlist-critical-summary .section-heading { margin-bottom: 0.5rem; }
+.watchlist-critical-summary .watchlist-heading-actions { flex-wrap: wrap; justify-content: flex-end; }
+.watchlist-critical-summary .watchlist-refresh-form { min-width: 0; }
 .watchlist-critical-summary .watchlist-primary-action { align-items: center; }
 .watchlist-critical-summary .ranked-watchlist { margin-top: 0; }
 .watchlist-critical-summary .ranked-watchlist > li { min-height: var(--row-compact); padding: 0; }

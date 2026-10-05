@@ -8,6 +8,8 @@ import {
   deleteWatchlistItem,
   listWatchlist,
   patchWatchlistItem,
+  refreshWatchlistMarketData,
+  WatchlistApiError,
   type WatchlistClientOptions,
 } from '../../lib/server/watchlist-api'
 import type { WatchlistActionState } from '../../lib/watchlist-action-state'
@@ -15,6 +17,44 @@ import type { WatchlistActionState } from '../../lib/watchlist-action-state'
 const decimalPattern = /^-?\d+(?:\.\d+)?$/
 const symbolPattern = /^[A-Z.]{1,10}$/
 const persistenceError = 'Unable to persist watchlist changes. Try again.'
+
+export async function refreshWatchlistAction(
+  _previousState: WatchlistActionState,
+  _formData: FormData,
+): Promise<WatchlistActionState> {
+  void _previousState
+  void _formData
+  try {
+    const config = readWebDataConfig(process.env)
+    if (config.mode !== 'api') {
+      return { message: 'Market data refresh requires API mode.', status: 'error' }
+    }
+    const adminToken = process.env.ADMIN_API_TOKEN
+    if (!adminToken?.trim()) {
+      return { message: 'Market data refresh is not configured. Contact the operator.', status: 'error' }
+    }
+    const result = await refreshWatchlistMarketData({ adminToken, baseUrl: config.baseUrl })
+    if (result.status === 'no_symbols') {
+      return { message: 'No monitored Watchlist symbols are available to refresh.', status: 'success' }
+    }
+    if (result.status === 'unavailable') {
+      return { message: 'Market data refresh is unavailable. Try again later.', status: 'error' }
+    }
+    revalidatePath('/watchlist')
+    const symbols = `${result.symbolCount} ${result.symbolCount === 1 ? 'symbol' : 'symbols'}`
+    return {
+      message: result.status === 'queued'
+        ? `Refresh queued for ${symbols}.`
+        : `A refresh is already processing for ${symbols}.`,
+      status: 'success',
+    }
+  } catch (error) {
+    if (error instanceof WatchlistApiError && error.status === 409) {
+      return { message: 'More than 50 monitored symbols. Reduce the Watchlist and try again.', status: 'error' }
+    }
+    return { message: 'Unable to request market data refresh. Try again.', status: 'error' }
+  }
+}
 
 function clientOptions(): WatchlistClientOptions {
   const config = readWebDataConfig(process.env)

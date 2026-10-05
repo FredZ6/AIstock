@@ -8,6 +8,7 @@ import { useFormStatus } from 'react-dom'
 import {
   addWatchlistAction,
   deleteWatchlistAction,
+  refreshWatchlistAction,
   updateWatchlistAction,
 } from '../../app/watchlist/actions'
 import type { ApiWatchlistItem } from '../../lib/product-types'
@@ -42,7 +43,7 @@ function DeleteSubmitButton({ buttonRef, symbol }: { buttonRef: RefObject<HTMLBu
 function ActionMessage({ state }: { state: WatchlistActionState }) {
   if (state.status === 'idle') return null
   return (
-    <p className="watchlist-action-message" data-status={state.status} role={state.status === 'error' ? 'alert' : 'status'}>
+    <p aria-live={state.status === 'error' ? undefined : 'polite'} className="watchlist-action-message" data-status={state.status} role={state.status === 'error' ? 'alert' : 'status'}>
       {state.message}
     </p>
   )
@@ -60,6 +61,14 @@ function AddWatchlistForm() {
       <ActionMessage state={state} />
     </form>
   )
+}
+
+function RefreshWatchlistForm() {
+  const [state, action] = useActionState(refreshWatchlistAction, initialWatchlistActionState)
+  return <form action={action} className="watchlist-refresh-form">
+    <SubmitButton label="Update latest data" pendingLabel="Requesting…" />
+    <ActionMessage state={state} />
+  </form>
 }
 
 function PersistedTrend({ bars, symbol }: { bars: MarketBar[]; symbol: string }) {
@@ -208,7 +217,10 @@ export function WatchlistApiControls({
           <p className="section-kicker">Persisted research universe</p>
           <h2 id="watchlist-api-count">{items.length} symbols</h2>
         </div>
-        <span className="muted-copy">PostgreSQL configuration · paper trading only</span>
+        <div className="watchlist-heading-actions">
+          <span className="muted-copy">PostgreSQL configuration · paper trading only</span>
+          <RefreshWatchlistForm />
+        </div>
       </div>
       <section aria-label="Watchlist configuration" className="watchlist-mutation-region">
       <div className="watchlist-controls watchlist-primary-action"><AddWatchlistForm /></div>

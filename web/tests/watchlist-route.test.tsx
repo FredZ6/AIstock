@@ -1,11 +1,18 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('../app/watchlist/actions', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../app/watchlist/actions')>()
+  return { ...original, refreshWatchlistAction: vi.fn() }
+})
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }))
 
 import { ApiWatchlistPage } from '../components/watchlist/watchlist-page'
+import { refreshWatchlistAction } from '../app/watchlist/actions'
+import type { WatchlistActionState } from '../lib/watchlist-action-state'
 
 const apiRow = {
   alertThreshold: '0.025',
@@ -74,9 +81,33 @@ afterEach(() => {
   vi.useRealTimers()
   delete process.env.WEB_DATA_MODE
   delete process.env.API_BASE_URL
+  delete process.env.ADMIN_API_TOKEN
+  vi.unstubAllGlobals()
+  vi.clearAllMocks()
 })
 
 describe('Watchlist route data boundaries', () => {
+  it('disables refresh while requesting and announces the queued result politely', async () => {
+    let accept!: (state: WatchlistActionState) => void
+    vi.mocked(refreshWatchlistAction).mockImplementationOnce(() => new Promise((resolve) => { accept = resolve }))
+    render(<ApiWatchlistPage asOf="2026-08-29T09:30:00Z" items={[apiRow]} quotes={[]} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Update latest data' }))
+    expect(screen.getByRole('button', { name: 'Requesting…' })).toBeDisabled()
+    accept({ message: 'Refresh queued for 1 symbol.', status: 'success' })
+    const summary = screen.getByRole('region', { name: 'Watchlist critical summary' })
+    await waitFor(() => expect(within(summary).getByRole('status')).toHaveTextContent('Refresh queued for 1 symbol.'))
+    expect(within(summary).getByRole('status')).toHaveAttribute('aria-live', 'polite')
+  })
+
+  it('announces request failure as an alert without replacing persisted prices', async () => {
+    vi.mocked(refreshWatchlistAction).mockResolvedValueOnce({ message: 'Market data refresh is unavailable. Try again later.', status: 'error' })
+    render(<ApiWatchlistPage asOf="2026-08-29T09:30:00Z" items={[apiRow]} quotes={[]} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Update latest data' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Market data refresh is unavailable. Try again later.'))
+    expect(screen.getByText('Price unavailable')).toBeInTheDocument()
+  })
   it('uses the request decision time as the page point-in-time context', async () => {
     let queriedDecisionTime: string | undefined
     let reportedError: unknown
@@ -135,6 +166,7 @@ describe('Watchlist route data boundaries', () => {
     const summary = screen.getByRole('region', { name: 'Watchlist critical summary' })
     expect(summary).toHaveClass('route-critical-summary')
     expect(within(summary).getByRole('textbox', { name: 'Add symbol' })).toBeInTheDocument()
+    expect(within(summary).getByRole('button', { name: 'Update latest data' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Watchlist settings' })).not.toHaveAttribute('open')
   })
 
@@ -203,6 +235,7 @@ describe('Watchlist route data boundaries', () => {
 
     expect(screen.getByText('Fixture Mode')).toBeInTheDocument()
     expect(screen.queryByLabelText('Live data refresh')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Update latest data' })).not.toBeInTheDocument()
     expect(within(screen.getByRole('list', { name: 'Ranked research watchlist' }))
       .getByRole('link', { name: 'NVDA' })).toBeInTheDocument()
     expect(screen.queryByRole('alert', { name: 'Watchlist unavailable' })).not.toBeInTheDocument()
@@ -263,6 +296,7 @@ describe('Watchlist route data boundaries', () => {
     render(await WatchlistRoute())
 
     expect(screen.getByRole('button', { name: 'Add to watchlist' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Update latest data' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save NVDA settings' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete NVDA' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'NVDA daily research' })).toBeChecked()
