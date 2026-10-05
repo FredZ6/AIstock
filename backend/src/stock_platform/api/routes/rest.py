@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Response
-from sqlalchemy import Connection, and_, func, insert, or_, select, text, update
+from sqlalchemy import Connection, Engine, and_, func, insert, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import NoResultFound
 
@@ -35,10 +35,15 @@ from stock_platform.api.schemas.rest import (
     ResearchRunRequest,
     RunResponse,
     WatchlistItem,
+    WatchlistMarketDataRefreshResponse,
     WatchlistPatch,
     WatchlistRequest,
     WeeklyReviewDetail,
     WeeklyReviewPage,
+)
+from stock_platform.application.ingestion.watchlist_refresh import (
+    WatchlistRefreshStatus,
+    request_watchlist_market_data_refresh,
 )
 from stock_platform.application.learning.approval import LessonNotFound, record_lesson_decision
 from stock_platform.application.learning.promotion import (
@@ -52,6 +57,7 @@ from stock_platform.application.market_data.policy import (
     MarketCalendar,
     PolicyOutcome,
     admission_payload,
+    alpaca_entitlement_from_settings,
     paper_market_data_admission,
 )
 from stock_platform.application.market_data.quality import QualityPolicy
@@ -122,6 +128,7 @@ from stock_platform.infrastructure.db.models.tables import (
     watchlist_item,
     weekly_review_run,
 )
+from stock_platform.infrastructure.ingestion.job_store import IngestionJobStore
 from stock_platform.infrastructure.observability.context import current_correlation
 from stock_platform.settings import Settings
 
@@ -133,6 +140,32 @@ ConnectionDependency = Annotated[Connection, Depends(get_connection)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 ActorDependency = Annotated[HumanActor, Depends(get_human_actor)]
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=200)]
+
+
+def _watchlist_refresh_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _publish_watchlist_refresh_job(task: str, job_id: UUID, queue: str) -> None:
+    from stock_platform.workers.celery_app import celery_app
+
+    try:
+        celery_app.send_task(
+            task,
+            args=[str(job_id)],
+            task_id=str(job_id),
+            queue=queue,
+        )
+    except Exception as exception:
+        raise RuntimeError("Watchlist refresh dispatch failed") from exception
+
+
+def _ingestion_job_is_queued(engine: Engine, job_id: UUID) -> bool:
+    with engine.connect() as connection:
+        state = connection.execute(
+            select(ingestion_job.c.state).where(ingestion_job.c.id == job_id)
+        ).scalar_one_or_none()
+    return cast(str | None, state) == "QUEUED"
 
 
 def _value(value: Any) -> Any:
@@ -614,6 +647,70 @@ def add_watchlist(request: WatchlistRequest, connection: ConnectionDependency) -
         .one()
     )
     return _row(row)
+
+
+@router.post(
+    "/watchlist/refresh-market-data",
+    response_model=WatchlistMarketDataRefreshResponse,
+    status_code=202,
+)
+def refresh_watchlist_market_data(
+    connection: ConnectionDependency,
+    settings: SettingsDependency,
+    _actor: ActorDependency,
+) -> WatchlistMarketDataRefreshResponse:
+    if settings.environment != "paper":
+        raise ApiError(
+            409,
+            "PAPER_MODE_REQUIRED",
+            "Watchlist market-data refresh is available only in paper mode.",
+        )
+
+    requested_at = _watchlist_refresh_now()
+    entitlement = alpaca_entitlement_from_settings(settings, observed_at=requested_at)
+    symbols = tuple(
+        connection.execute(
+            select(watchlist_item.c.symbol)
+            .where(watchlist_item.c.intraday_monitoring.is_(True))
+            .order_by(watchlist_item.c.symbol)
+        ).scalars()
+    )
+    engine = connection.engine
+    try:
+        result = request_watchlist_market_data_refresh(
+            store=IngestionJobStore(engine),
+            symbols=symbols,
+            entitlement=entitlement,
+            now=requested_at,
+            is_queued=lambda job_id: _ingestion_job_is_queued(engine, job_id),
+            publish=_publish_watchlist_refresh_job,
+        )
+    except Exception as exception:
+        raise ApiError(
+            503,
+            "REFRESH_DISPATCH_UNAVAILABLE",
+            "Watchlist market-data refresh could not be dispatched.",
+        ) from exception
+
+    if result.status is WatchlistRefreshStatus.UNAVAILABLE:
+        raise ApiError(
+            503,
+            "MARKET_DATA_UNAVAILABLE",
+            "Alpaca IEX market-data access is unavailable.",
+        )
+    return WatchlistMarketDataRefreshResponse(
+        status=cast(
+            Literal["queued", "already_queued", "no_symbols", "unavailable"],
+            result.status.value,
+        ),
+        job_ids=list(result.job_ids),
+        symbol_count=result.symbol_count,
+        requested_at=result.requested_at,
+        data_cutoff=result.data_cutoff,
+        timeframe=result.timeframe.value if result.timeframe is not None else None,
+        feed=cast(Literal["IEX"] | None, result.feed.value if result.feed is not None else None),
+        message=result.message,
+    )
 
 
 @router.patch("/watchlist/{symbol}", response_model=WatchlistItem)

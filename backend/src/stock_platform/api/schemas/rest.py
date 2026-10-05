@@ -344,6 +344,17 @@ class WatchlistItem(StrictModel):
     created_at: datetime
 
 
+class WatchlistMarketDataRefreshResponse(StrictModel):
+    status: Literal["queued", "already_queued", "no_symbols", "unavailable"]
+    job_ids: list[UUID]
+    symbol_count: int = Field(ge=0)
+    requested_at: datetime
+    data_cutoff: datetime | None
+    timeframe: Literal["1Min", "1Day"] | None
+    feed: Literal["IEX"] | None
+    message: str
+
+
 class WatchlistPatch(StrictModel):
     daily_research: bool | None = None
     intraday_monitoring: bool | None = None

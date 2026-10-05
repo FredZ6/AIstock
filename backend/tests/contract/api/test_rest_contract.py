@@ -38,6 +38,7 @@ LOCKED_OPERATIONS = {
     ("POST", "/api/v1/watchlist"),
     ("PATCH", "/api/v1/watchlist/{symbol}"),
     ("DELETE", "/api/v1/watchlist/{symbol}"),
+    ("POST", "/api/v1/watchlist/refresh-market-data"),
     ("POST", "/api/v1/research-runs"),
     ("GET", "/api/v1/research-runs/latest"),
     ("GET", "/api/v1/research-runs/{run_id}"),
@@ -171,6 +172,27 @@ def test_watchlist_read_and_mutation_responses_share_one_closed_ranked_schema() 
     component = document["components"]["schemas"]["WatchlistItem"]
     assert component["additionalProperties"] is False
     assert "display_order" in component["required"]
+
+
+def test_watchlist_market_data_refresh_publishes_a_closed_accepted_response() -> None:
+    document = app.openapi()
+    response = document["paths"]["/api/v1/watchlist/refresh-market-data"]["post"]["responses"][
+        "202"
+    ]["content"]["application/json"]["schema"]
+
+    assert response["$ref"].endswith("/WatchlistMarketDataRefreshResponse")
+    component = document["components"]["schemas"]["WatchlistMarketDataRefreshResponse"]
+    assert component["additionalProperties"] is False
+    assert set(component["required"]) == {
+        "status",
+        "job_ids",
+        "symbol_count",
+        "requested_at",
+        "data_cutoff",
+        "timeframe",
+        "feed",
+        "message",
+    }
 
 
 def test_provider_health_inventory_matches_implemented_adapters(client: TestClient) -> None:
