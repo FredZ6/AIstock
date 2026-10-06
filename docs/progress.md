@@ -4390,3 +4390,15 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   `36 files / 327 tests passed`, TypeScript check clean, ESLint completed with one existing unused-import
   warning, and Next.js production build succeeded. No live-broker endpoint, credential, or Fixture
   fallback was added.
+
+## 2026-10-06 — Watchlist refresh pre-merge verification (PR #27)
+
+- Review found that daily-bar priority could hide a newer same-day after-hours minute.
+  Added an assertion that failed with daily close 210 instead of minute close 212, then
+  ranked eligible after-hours minutes above the completed daily bar. PIT filtering remains intact.
+- On code commit `d9816bd`, fresh `make verify` exited 0: backend 811 passed / 5 skipped,
+  frontend 327 passed, lint and type checks passed, migration/contract checks and production
+  build passed. Removed the unused import introduced by the previous mock update.
+- Actual controlled-unavailable API browser execution passed 6/6 cases across desktop and
+  mobile. The temporary test frontend stopped after completion. This does not verify the
+  queued-success browser flow or live Alpaca/Celery/MinIO completion; those remain unverified.
