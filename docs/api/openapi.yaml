@@ -3025,6 +3025,94 @@
         "title": "WatchlistItem",
         "type": "object"
       },
+      "WatchlistMarketDataRefreshResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data_cutoff": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Cutoff"
+          },
+          "feed": {
+            "anyOf": [
+              {
+                "const": "IEX",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feed"
+          },
+          "job_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Job Ids",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "already_queued",
+              "no_symbols",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol_count": {
+            "minimum": 0.0,
+            "title": "Symbol Count",
+            "type": "integer"
+          },
+          "timeframe": {
+            "anyOf": [
+              {
+                "enum": [
+                  "1Min",
+                  "1Day"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe"
+          }
+        },
+        "required": [
+          "status",
+          "job_ids",
+          "symbol_count",
+          "requested_at",
+          "data_cutoff",
+          "timeframe",
+          "feed",
+          "message"
+        ],
+        "title": "WatchlistMarketDataRefreshResponse",
+        "type": "object"
+      },
       "WatchlistPatch": {
         "additionalProperties": false,
         "properties": {
@@ -4223,7 +4311,8 @@
               "default": "1Day",
               "enum": [
                 "1Min",
-                "1Day"
+                "1Day",
+                "latest"
               ],
               "title": "Timeframe",
               "type": "string"
@@ -5051,6 +5140,52 @@
           }
         },
         "summary": "Add Watchlist"
+      }
+    },
+    "/api/v1/watchlist/refresh-market-data": {
+      "post": {
+        "operationId": "refresh_watchlist_market_data_api_v1_watchlist_refresh_market_data_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WatchlistMarketDataRefreshResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Watchlist Market Data"
       }
     },
     "/api/v1/watchlist/{symbol}": {
