@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   addWatchlistAction,
   deleteWatchlistAction,
+  refreshWatchlistAction,
   updateWatchlistAction,
 } from '../app/watchlist/actions'
 import { WatchlistApiControls } from '../components/watchlist/watchlist-api-controls'
@@ -11,6 +12,7 @@ import { WatchlistApiControls } from '../components/watchlist/watchlist-api-cont
 vi.mock('../app/watchlist/actions', () => ({
   addWatchlistAction: vi.fn(),
   deleteWatchlistAction: vi.fn(),
+  refreshWatchlistAction: vi.fn(),
   updateWatchlistAction: vi.fn(),
 }))
 
