@@ -230,6 +230,7 @@ class PostgresMarketDataRepository:
                             func.timezone("America/New_York", market_bar.c.event_time)
                         ).desc(),
                         case(
+                            (market_bar.c.session == MarketSession.AFTER_HOURS.value, 2),
                             (market_bar.c.payload["timeframe"].astext == "1Day", 1),
                             else_=0,
                         ).desc(),

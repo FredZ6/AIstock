@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   addWatchlistAction,
   deleteWatchlistAction,
-  refreshWatchlistAction,
   updateWatchlistAction,
 } from '../app/watchlist/actions'
 import { WatchlistApiControls } from '../components/watchlist/watchlist-api-controls'

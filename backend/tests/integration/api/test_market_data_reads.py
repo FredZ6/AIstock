@@ -586,6 +586,17 @@ def test_latest_quotes_switch_from_same_day_minute_to_daily_only_when_daily_is_a
         session="PRE_MARKET",
     )
 
+    _bar(
+        connection,
+        symbol="NVDA",
+        event_time=datetime(2026, 10, 5, 21, tzinfo=UTC),
+        available_at=datetime(2026, 10, 5, 21, 1, tzinfo=UTC),
+        close="212",
+        suffix="r",
+        timeframe="1Min",
+        session="AFTER_HOURS",
+    )
+
     def quote(at: datetime) -> dict[str, object]:
         response = client.get(
             "/api/v1/market-data/quotes",
@@ -603,6 +614,8 @@ def test_latest_quotes_switch_from_same_day_minute_to_daily_only_when_daily_is_a
     next_session = quote(datetime(2026, 10, 6, 12, 2, tzinfo=UTC))
     assert (before_daily["close"], before_daily["timeframe"]) == ("209", "1Min")
     assert (after_daily["close"], after_daily["timeframe"]) == ("210", "1Day")
+    after_hours = quote(datetime(2026, 10, 5, 21, 2, tzinfo=UTC))
+    assert (after_hours["close"], after_hours["timeframe"]) == ("212", "1Min")
     assert (next_session["close"], next_session["timeframe"]) == ("211", "1Min")
 
 
