@@ -222,10 +222,13 @@ class PostgresMarketDataRepository:
         ranked = (
             select(
                 market_bar,
-                func.row_number().over(
+                func.row_number()
+                .over(
                     partition_by=market_bar.c.symbol,
                     order_by=(
-                        func.date(func.timezone("America/New_York", market_bar.c.event_time)).desc(),
+                        func.date(
+                            func.timezone("America/New_York", market_bar.c.event_time)
+                        ).desc(),
                         case(
                             (market_bar.c.payload["timeframe"].astext == "1Day", 1),
                             else_=0,
@@ -236,7 +239,8 @@ class PostgresMarketDataRepository:
                         market_bar.c.content_hash.desc(),
                         market_bar.c.raw_object_key.desc(),
                     ),
-                ).label("latest_rank"),
+                )
+                .label("latest_rank"),
             )
             .where(
                 market_bar.c.symbol.in_([str(Symbol(symbol)) for symbol in symbols]),
