@@ -11,6 +11,7 @@ import { WatchlistApiControls } from '../components/watchlist/watchlist-api-cont
 vi.mock('../app/watchlist/actions', () => ({
   addWatchlistAction: vi.fn(),
   deleteWatchlistAction: vi.fn(),
+  refreshWatchlistAction: vi.fn(),
   updateWatchlistAction: vi.fn(),
 }))
 

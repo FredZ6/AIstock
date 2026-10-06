@@ -234,7 +234,7 @@ describe('live data API client', () => {
         event_time: '2026-08-28T04:00:00Z', available_at: '2026-08-29T09:20:00Z',
         ingested_at: '2026-08-29T09:20:01Z', content_hash: 'a'.repeat(64),
         raw_object_key: `live/ALPACA/price_bars/${'a'.repeat(64)}.json`, close: '217.545',
-        open: '220', high: '221', low: '216', volume: '5357434', session: 'REGULAR',
+        open: '220', high: '221', low: '216', volume: '5357434', session: 'REGULAR', timeframe: '1Min',
       }],
     }))
 
@@ -245,6 +245,24 @@ describe('live data API client', () => {
       expect.stringContaining('/api/v1/market-data/quotes?'),
       expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
     )
+    expect(result.items[0]).toMatchObject({ timeframe: '1Min', session: 'REGULAR' })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringMatching(/\/quotes\?decision_time=[^&]+&symbols=NVDA$/), expect.any(Object),
+    )
+  })
+
+  it('requests the latest eligible minute or day quote only when explicitly selected', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      status: 'SUCCESS', decision_time: options.decisionTime, missing_symbols: [],
+      items: [{ symbol: 'NVDA', provider: 'ALPACA', coverage: 'IEX',
+        event_time: '2026-08-29T09:29:00Z', available_at: '2026-08-29T09:29:10Z',
+        close: '218.00', timeframe: '1Min', session: 'PRE_MARKET' }],
+    }))
+    const result = await getMarketQuotes({ ...options, fetchImpl }, ['NVDA'], 'latest')
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining('timeframe=latest'), expect.any(Object),
+    )
+    expect(result.items[0]).toMatchObject({ close: '218.00', timeframe: '1Min', session: 'PRE_MARKET' })
   })
 
   it('parses point-in-time historical bars with complete provenance', async () => {

@@ -6,7 +6,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Any, Protocol
 
-from sqlalchemy import Connection, Engine, and_, func, select
+from sqlalchemy import Connection, Engine, and_, case, func, select
 from sqlalchemy.engine import RowMapping
 
 from stock_platform.domain.common.ids import Symbol
@@ -205,6 +205,59 @@ class PostgresMarketDataRepository:
         latest = select(canonical, latest_rank).where(canonical.c.revision_rank == 1).subquery()
         rows = self._connection.execute(
             select(latest).where(latest.c.latest_rank == 1).order_by(latest.c.symbol)
+        ).mappings()
+        return tuple(self._market_bar_record(row) for row in rows)
+
+    def latest_watchlist_bars_as_of(
+        self,
+        *,
+        symbols: Sequence[str],
+        decision_time: datetime,
+        coverage: MarketDataCoverage,
+    ) -> tuple[ProviderRecord, ...]:
+        """Latest eligible minute or regular daily bar per Watchlist symbol."""
+        cutoff = require_aware(decision_time)
+        if not symbols:
+            return ()
+        ranked = (
+            select(
+                market_bar,
+                func.row_number()
+                .over(
+                    partition_by=market_bar.c.symbol,
+                    order_by=(
+                        func.date(
+                            func.timezone("America/New_York", market_bar.c.event_time)
+                        ).desc(),
+                        case(
+                            (market_bar.c.session == MarketSession.AFTER_HOURS.value, 2),
+                            (market_bar.c.payload["timeframe"].astext == "1Day", 1),
+                            else_=0,
+                        ).desc(),
+                        market_bar.c.event_time.desc(),
+                        market_bar.c.available_at.desc(),
+                        market_bar.c.ingested_at.desc(),
+                        market_bar.c.content_hash.desc(),
+                        market_bar.c.raw_object_key.desc(),
+                    ),
+                )
+                .label("latest_rank"),
+            )
+            .where(
+                market_bar.c.symbol.in_([str(Symbol(symbol)) for symbol in symbols]),
+                market_bar.c.provider == "ALPACA",
+                market_bar.c.feed_type == FeedType.PRICE_BARS.value,
+                market_bar.c.coverage == coverage.value,
+                market_bar.c.payload["timeframe"].astext.in_(("1Min", "1Day")),
+                (market_bar.c.payload["timeframe"].astext == "1Min")
+                | (market_bar.c.session == MarketSession.REGULAR.value),
+                market_bar.c.event_time <= cutoff,
+                market_bar.c.available_at <= cutoff,
+            )
+            .subquery()
+        )
+        rows = self._connection.execute(
+            select(ranked).where(ranked.c.latest_rank == 1).order_by(ranked.c.symbol)
         ).mappings()
         return tuple(self._market_bar_record(row) for row in rows)
 

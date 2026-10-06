@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta, tzinfo
 from decimal import Decimal
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -77,6 +78,8 @@ def _bar(
     provider: str = "ALPACA",
     feed_type: str = "price_bars",
     timeframe: str = "1Day",
+    session: str = "REGULAR",
+    coverage: str = "IEX",
     conflict: bool = False,
     payload_extra: dict[str, str] | None = None,
 ) -> None:
@@ -113,8 +116,8 @@ def _bar(
             normalized_record_id=normalized_id,
             provider=provider,
             feed_type=feed_type,
-            coverage="IEX",
-            session="REGULAR",
+            coverage=coverage,
+            session=session,
             content_hash=content_hash,
             raw_object_key=f"live/ALPACA/price_bars/{content_hash}.json",
             available_at=available_at,
@@ -137,7 +140,7 @@ def _bar(
             dimension="COVERAGE",
             status="PASS",
             observed_at=available_at,
-            coverage="IEX",
+            coverage=coverage,
             conflict=False,
             policy_version="test-v1",
             details={"symbol": symbol, "timeframe": timeframe},
@@ -382,6 +385,238 @@ def test_quotes_batch_source_and_timeframe_with_partial_degradation(
         (item["symbol"], item["close"], item["timeframe"]) for item in response.json()["items"]
     ] == [("NVDA", "180.50", "1Day")]
     assert len(market_queries) == 1
+
+
+def test_latest_quotes_select_newest_persisted_bar_per_symbol_across_sessions(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    cutoff = datetime(2026, 10, 5, 21, tzinfo=UTC)
+    _bar(
+        connection,
+        symbol="NVDA",
+        event_time=datetime(2026, 10, 3, 20, tzinfo=UTC),
+        available_at=datetime(2026, 10, 3, 20, 1, tzinfo=UTC),
+        close="200",
+        suffix="a",
+    )
+    _bar(
+        connection,
+        symbol="NVDA",
+        event_time=datetime(2026, 10, 5, 12, tzinfo=UTC),
+        available_at=datetime(2026, 10, 5, 12, 1, tzinfo=UTC),
+        close="201",
+        suffix="b",
+        timeframe="1Min",
+        session="PRE_MARKET",
+    )
+    _bar(
+        connection,
+        symbol="NVDA",
+        event_time=datetime(2026, 10, 5, 19, tzinfo=UTC),
+        available_at=datetime(2026, 10, 5, 19, 1, tzinfo=UTC),
+        close="202",
+        suffix="c",
+        timeframe="1Min",
+        session="REGULAR",
+    )
+    _bar(
+        connection,
+        symbol="NVDA",
+        event_time=datetime(2026, 10, 5, 20, 30, tzinfo=UTC),
+        available_at=datetime(2026, 10, 5, 20, 31, tzinfo=UTC),
+        close="203",
+        suffix="d",
+        timeframe="1Min",
+        session="AFTER_HOURS",
+    )
+    _bar(
+        connection,
+        symbol="MSFT",
+        event_time=datetime(2026, 10, 3, 20, tzinfo=UTC),
+        available_at=datetime(2026, 10, 3, 20, 1, tzinfo=UTC),
+        close="300",
+        suffix="e",
+    )
+    _bar(
+        connection,
+        symbol="TSM",
+        event_time=datetime(2026, 10, 3, 20, tzinfo=UTC),
+        available_at=datetime(2026, 10, 3, 20, 1, tzinfo=UTC),
+        close="400",
+        suffix="f",
+        timeframe="1Min",
+    )
+    _bar(
+        connection,
+        symbol="TSM",
+        event_time=datetime(2026, 10, 5, 20, tzinfo=UTC),
+        available_at=datetime(2026, 10, 5, 20, 1, tzinfo=UTC),
+        close="401",
+        suffix="g",
+    )
+
+    response = client.get(
+        "/api/v1/market-data/quotes",
+        params={
+            "symbols": "NVDA,MSFT,TSM",
+            "decision_time": cutoff.isoformat(),
+            "timeframe": "latest",
+        },
+    )
+
+    assert response.status_code == 200
+    assert [
+        (row["symbol"], row["close"], row["timeframe"], row["session"])
+        for row in response.json()["items"]
+    ] == [
+        ("NVDA", "203", "1Min", "AFTER_HOURS"),
+        ("MSFT", "300", "1Day", "REGULAR"),
+        ("TSM", "401", "1Day", "REGULAR"),
+    ]
+
+
+def test_latest_quotes_respect_pit_and_never_substitute_fixture_or_other_provider(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    cutoff = datetime(2026, 10, 5, 19, tzinfo=UTC)
+    _bar(
+        connection,
+        symbol="NVDA",
+        event_time=datetime(2026, 10, 3, 20, tzinfo=UTC),
+        available_at=datetime(2026, 10, 3, 20, 1, tzinfo=UTC),
+        close="200",
+        suffix="h",
+    )
+    _bar(
+        connection,
+        symbol="NVDA",
+        event_time=datetime(2026, 10, 5, 18, tzinfo=UTC),
+        available_at=datetime(2026, 10, 5, 19, 1, tzinfo=UTC),
+        close="999",
+        suffix="i",
+        timeframe="1Min",
+    )
+    _bar(
+        connection,
+        symbol="NVDA",
+        event_time=datetime(2026, 10, 5, 20, tzinfo=UTC),
+        available_at=datetime(2026, 10, 5, 20, 1, tzinfo=UTC),
+        close="998",
+        suffix="j",
+        timeframe="1Min",
+    )
+    _bar(
+        connection,
+        symbol="MSFT",
+        event_time=datetime(2026, 10, 5, 18, tzinfo=UTC),
+        available_at=datetime(2026, 10, 5, 18, 1, tzinfo=UTC),
+        close="777",
+        suffix="k",
+        provider="FIXTURE",
+        timeframe="1Min",
+    )
+    _bar(
+        connection,
+        symbol="TSM",
+        event_time=datetime(2026, 10, 5, 18, tzinfo=UTC),
+        available_at=datetime(2026, 10, 5, 18, 1, tzinfo=UTC),
+        close="666",
+        suffix="l",
+        provider="OTHER",
+        timeframe="1Min",
+    )
+    _bar(
+        connection,
+        symbol="NVDA",
+        event_time=datetime(2026, 10, 5, 18, tzinfo=UTC),
+        available_at=datetime(2026, 10, 5, 18, 1, tzinfo=UTC),
+        close="555",
+        suffix="n",
+        coverage="SIP",
+        timeframe="1Min",
+    )
+
+    response = client.get(
+        "/api/v1/market-data/quotes",
+        params={
+            "symbols": "NVDA,MSFT,TSM",
+            "decision_time": cutoff.isoformat(),
+            "timeframe": "latest",
+        },
+    )
+
+    assert response.status_code == 200
+    assert [(row["symbol"], row["close"]) for row in response.json()["items"]] == [("NVDA", "200")]
+    assert response.json()["missing_symbols"] == ["MSFT", "TSM"]
+    assert response.json()["status"] == "DEGRADED"
+
+
+def test_latest_quotes_switch_from_same_day_minute_to_daily_only_when_daily_is_available(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    _bar(
+        connection,
+        symbol="NVDA",
+        event_time=datetime(2026, 10, 5, 4, tzinfo=UTC),
+        available_at=datetime(2026, 10, 5, 20, 5, tzinfo=UTC),
+        close="210",
+        suffix="o",
+        timeframe="1Day",
+    )
+    _bar(
+        connection,
+        symbol="NVDA",
+        event_time=datetime(2026, 10, 5, 19, 59, tzinfo=UTC),
+        available_at=datetime(2026, 10, 5, 20, tzinfo=UTC),
+        close="209",
+        suffix="p",
+        timeframe="1Min",
+    )
+    _bar(
+        connection,
+        symbol="NVDA",
+        event_time=datetime(2026, 10, 6, 12, tzinfo=UTC),
+        available_at=datetime(2026, 10, 6, 12, 1, tzinfo=UTC),
+        close="211",
+        suffix="q",
+        timeframe="1Min",
+        session="PRE_MARKET",
+    )
+
+    _bar(
+        connection,
+        symbol="NVDA",
+        event_time=datetime(2026, 10, 5, 21, tzinfo=UTC),
+        available_at=datetime(2026, 10, 5, 21, 1, tzinfo=UTC),
+        close="212",
+        suffix="r",
+        timeframe="1Min",
+        session="AFTER_HOURS",
+    )
+
+    def quote(at: datetime) -> dict[str, object]:
+        response = client.get(
+            "/api/v1/market-data/quotes",
+            params={
+                "symbols": "NVDA",
+                "decision_time": at.isoformat(),
+                "timeframe": "latest",
+            },
+        )
+        assert response.status_code == 200
+        return cast(dict[str, object], response.json()["items"][0])
+
+    before_daily = quote(datetime(2026, 10, 5, 20, 2, tzinfo=UTC))
+    after_daily = quote(datetime(2026, 10, 5, 20, 6, tzinfo=UTC))
+    next_session = quote(datetime(2026, 10, 6, 12, 2, tzinfo=UTC))
+    assert (before_daily["close"], before_daily["timeframe"]) == ("209", "1Min")
+    assert (after_daily["close"], after_daily["timeframe"]) == ("210", "1Day")
+    after_hours = quote(datetime(2026, 10, 5, 21, 2, tzinfo=UTC))
+    assert (after_hours["close"], after_hours["timeframe"]) == ("212", "1Min")
+    assert (next_session["close"], next_session["timeframe"]) == ("211", "1Min")
 
 
 def test_historical_bars_isolates_timeframe_and_propagates_conflict(

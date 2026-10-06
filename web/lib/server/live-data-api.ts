@@ -60,7 +60,9 @@ export type MarketQuote = {
   coverage: 'IEX' | 'SIP'
   eventTime: string
   provider: string
+  session?: 'PRE_MARKET' | 'REGULAR' | 'AFTER_HOURS' | 'OVERNIGHT'
   symbol: string
+  timeframe?: '1Min' | '1Day'
 }
 
 export type MarketBar = MarketQuote & {
@@ -765,6 +767,7 @@ export async function getResearchRunReport(
 export async function getMarketQuotes(
   options: LiveDataClientOptions,
   symbols: string[],
+  timeframe?: 'latest',
 ): Promise<{
   decisionTime: string
   items: MarketQuote[]
@@ -778,6 +781,7 @@ export async function getMarketQuotes(
     decision_time: options.decisionTime,
     symbols: symbols.join(','),
   })
+  if (timeframe) query.set('timeframe', timeframe)
   const value = await requestJson(options, `/api/v1/market-data/quotes?${query}`)
   return contract(() => {
     const source = record(value, 'quotes')
@@ -800,6 +804,8 @@ export async function getMarketQuotes(
           close: decimal(row.close, 'quote.close'),
           provider: text(row.provider, 'quote.provider'),
           coverage: enumeration(row.coverage, ['IEX', 'SIP'] as const, 'quote.coverage'),
+          timeframe: enumeration(row.timeframe, ['1Min', '1Day'] as const, 'quote.timeframe'),
+          session: enumeration(row.session, ['PRE_MARKET', 'REGULAR', 'AFTER_HOURS', 'OVERNIGHT'] as const, 'quote.session'),
           eventTime: instant(row.event_time, 'quote.event_time'),
           availableAt: instant(row.available_at, 'quote.available_at'),
         }
