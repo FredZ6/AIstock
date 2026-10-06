@@ -74,3 +74,46 @@ test('shows Failure without Fixture substitution when FastAPI is unavailable', a
   await expect(page.getByText(/fixture-market/i)).toHaveCount(0)
   await expect(page.getByRole('list', { name: 'Ranked research watchlist' })).toHaveCount(0)
 })
+
+test.describe('manual Watchlist refresh admission', () => {
+  test.skip(process.env.RUN_API_BROWSER !== '1', 'Requires isolated API browser harness')
+
+  for (const viewport of [
+    { name: 'desktop', width: 1440, height: 900 },
+    { name: 'mobile', width: 393, height: 852 },
+  ]) {
+    test(`${viewport.name} exposes a focused, truthful refresh flow`, async ({ page }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height })
+      await page.goto('/watchlist')
+
+      const summary = page.getByRole('region', { name: 'Watchlist critical summary' })
+      const refresh = summary.getByRole('button', { name: 'Update latest data' })
+      await expect(refresh).toBeVisible()
+      await refresh.focus()
+      await expect.poll(() => refresh.evaluate((element) => {
+        const style = getComputedStyle(element)
+        return style.outlineStyle !== 'none' && style.outlineWidth !== '0px'
+      })).toBe(true)
+
+      const persistedTimes = await summary.locator('time').allTextContents()
+      await refresh.click()
+
+      const status = summary.getByRole('status').or(summary.getByRole('alert'))
+      await expect(status).toBeVisible()
+      await expect(status).not.toContainText(/prices? (?:are|were) updated/i)
+      await expect(status).toContainText(/(?:queued|already processing|paper mode|unavailable|try again)/i)
+      await expect(summary).not.toContainText('Fixture Mode')
+
+      // The current test harness deliberately uses environment=test and therefore
+      // reports PAPER_MODE_REQUIRED. A paper harness can opt into the admitted
+      // response without changing this deterministic browser contract.
+      if (process.env.EXPECT_REFRESH_QUEUED === '1') {
+        await expect(status).toContainText(/queued|already processing/i)
+        await expect(status).toContainText(/newly persisted prices after ingestion completes/i)
+      }
+      for (const timestamp of persistedTimes) {
+        if (timestamp.trim()) await expect(summary).toContainText(timestamp)
+      }
+    })
+  }
+})

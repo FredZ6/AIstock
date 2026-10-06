@@ -26,3 +26,15 @@ docker compose logs --since=15m otel-collector
 ```
 
 Keep the circuit open, expose `UNAVAILABLE`, preserve cutoff-safe facts, and never invent data.
+
+## Manual Watchlist refresh
+
+The Watchlist `Update latest data` control only admits durable paper-market-data
+jobs. It does not start stopped Celery workers or claim that prices changed before
+the worker has persisted a newer fact. Completion requires the Celery worker,
+Redis, PostgreSQL, MinIO, and valid Alpaca data credentials to be available.
+
+Outside market hours, a successful admission targets the latest completed trading
+session rather than inventing a current quote. During an active session it targets
+the latest completed minute. Provider or worker failure remains an explicit
+`Failure`/`Unavailable` state; the UI never falls back to Fixture data.
