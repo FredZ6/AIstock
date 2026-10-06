@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta, tzinfo
 from decimal import Decimal
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -595,7 +596,7 @@ def test_latest_quotes_switch_from_same_day_minute_to_daily_only_when_daily_is_a
             },
         )
         assert response.status_code == 200
-        return response.json()["items"][0]
+        return cast(dict[str, object], response.json()["items"][0])
 
     before_daily = quote(datetime(2026, 10, 5, 20, 2, tzinfo=UTC))
     after_daily = quote(datetime(2026, 10, 5, 20, 6, tzinfo=UTC))
