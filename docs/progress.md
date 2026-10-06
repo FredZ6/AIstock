@@ -4368,3 +4368,25 @@ on 2026-08-23. Linear milestone: M7 Quality (FRE-20, FRE-21).
   full-suite-only live-region timing race in the Watchlist deletion test was then reproduced, traced to
   an over-broad pending/success status query, corrected to await the success message, and passed five
   consecutive focused runs before the final suite rerun.
+
+## 2026-10-06 — Watchlist manual refresh closure
+
+- Added a paper-only `Update latest data` command for the configured Watchlist. The scheduler selects
+  completed IEX one-minute bars during an active session and the latest completed regular trading day
+  outside market hours, admits bounded idempotent jobs, and publishes only confirmed queued jobs to
+  `ingestion-low`. The FastAPI `202` contract, strict server-side client, and Server Action preserve
+  explicit queued/already-processing/no-symbols/unavailable/failure states without a Fixture fallback.
+- Watchlist reads now use the latest persisted Alpaca/IEX bar with point-in-time filtering. Same-day
+  daily bars rank by effective trading date over a later minute bar once the daily fact is available;
+  next-session minute data still wins. The regression covers before/after daily availability and the
+  next-session transition.
+- Added desktop/mobile browser coverage for focus visibility, truthful admission copy, persisted
+  timestamps, failure states, no Fixture substitution, and no horizontal overflow. Provider outage
+  runbook now documents worker/dependency requirements and active/closed-session cutoffs.
+- Focused evidence: backend market-read regression `23 passed`; frontend Watchlist/API regression
+  `117 passed`; TypeScript and ESLint completed. Playwright discovery listed 14 desktop/mobile cases;
+  full browser execution requires the isolated API harness and was not claimed here.
+- Final `make verify` exited 0: Alembic drift clean, backend `811 passed, 5 skipped`, frontend
+  `36 files / 327 tests passed`, TypeScript check clean, ESLint completed with one existing unused-import
+  warning, and Next.js production build succeeded. No live-broker endpoint, credential, or Fixture
+  fallback was added.
