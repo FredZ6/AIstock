@@ -47,8 +47,8 @@ export async function refreshWatchlistAction(
     const cutoff = result.dataCutoff ? formatDualTime(result.dataCutoff).newYork : 'the latest cutoff'
     return {
       message: result.status === 'queued'
-        ? `${bars} queued for ${symbols} through ${cutoff} New York time. Prices update after ingestion completes.`
-        : `${bars} are already processing for ${symbols} through ${cutoff} New York time. Prices update after ingestion completes.`,
+        ? `${bars} queued for ${symbols} through ${cutoff} New York time. The page will show any newly persisted prices after ingestion completes.`
+        : `${bars} are already processing for ${symbols} through ${cutoff} New York time. The page will show any newly persisted prices after ingestion completes.`,
       status: 'success',
     }
   } catch (error) {

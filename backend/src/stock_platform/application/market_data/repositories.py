@@ -6,7 +6,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Any, Protocol
 
-from sqlalchemy import Connection, Engine, and_, func, select
+from sqlalchemy import Connection, Engine, and_, case, func, select
 from sqlalchemy.engine import RowMapping
 
 from stock_platform.domain.common.ids import Symbol
@@ -225,6 +225,11 @@ class PostgresMarketDataRepository:
                 func.row_number().over(
                     partition_by=market_bar.c.symbol,
                     order_by=(
+                        func.date(func.timezone("America/New_York", market_bar.c.event_time)).desc(),
+                        case(
+                            (market_bar.c.payload["timeframe"].astext == "1Day", 1),
+                            else_=0,
+                        ).desc(),
                         market_bar.c.event_time.desc(),
                         market_bar.c.available_at.desc(),
                         market_bar.c.ingested_at.desc(),

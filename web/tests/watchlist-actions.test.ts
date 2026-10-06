@@ -66,7 +66,7 @@ describe('manual Watchlist market refresh', () => {
     const result = await refreshWatchlistAction(initialWatchlistActionState, new FormData())
     expect(refreshData).toHaveBeenCalledOnce()
     expect(refreshData).toHaveBeenCalledWith({ baseUrl: 'http://127.0.0.1:8000/', adminToken: 'private-token' })
-    expect(result).toEqual({ message: 'Latest completed trading-day bars queued for 12 symbols through Oct 2, 2026, 4:00 PM New York time. Prices update after ingestion completes.', status: 'success' })
+    expect(result).toEqual({ message: 'Latest completed trading-day bars queued for 12 symbols through Oct 2, 2026, 4:00 PM New York time. The page will show any newly persisted prices after ingestion completes.', status: 'success' })
     expect(revalidate).toHaveBeenCalledWith('/watchlist')
   })
 
@@ -74,7 +74,7 @@ describe('manual Watchlist market refresh', () => {
     process.env.ADMIN_API_TOKEN = 'private-token'
     refreshData.mockResolvedValue({ ...accepted, status: 'already_queued' })
     const result = await refreshWatchlistAction(initialWatchlistActionState, new FormData())
-    expect(result).toEqual({ message: 'Latest completed trading-day bars are already processing for 12 symbols through Oct 2, 2026, 4:00 PM New York time. Prices update after ingestion completes.', status: 'success' })
+    expect(result).toEqual({ message: 'Latest completed trading-day bars are already processing for 12 symbols through Oct 2, 2026, 4:00 PM New York time. The page will show any newly persisted prices after ingestion completes.', status: 'success' })
     expect(revalidate).toHaveBeenCalledWith('/watchlist')
   })
 
@@ -82,14 +82,22 @@ describe('manual Watchlist market refresh', () => {
     process.env.ADMIN_API_TOKEN = 'private-token'
     refreshData.mockResolvedValue({ ...accepted, symbolCount: 1 })
     expect(await refreshWatchlistAction(initialWatchlistActionState, new FormData()))
-      .toEqual({ message: 'Latest completed trading-day bars queued for 1 symbol through Oct 2, 2026, 4:00 PM New York time. Prices update after ingestion completes.', status: 'success' })
+      .toEqual({ message: 'Latest completed trading-day bars queued for 1 symbol through Oct 2, 2026, 4:00 PM New York time. The page will show any newly persisted prices after ingestion completes.', status: 'success' })
   })
 
   it('reports active-session minute bar cutoff without implying the prices changed', async () => {
     process.env.ADMIN_API_TOKEN = 'private-token'
     refreshData.mockResolvedValue({ ...accepted, timeframe: '1Min', dataCutoff: '2026-10-05T14:31:00Z' })
     expect(await refreshWatchlistAction(initialWatchlistActionState, new FormData()))
-      .toEqual({ message: '1-minute bars queued for 12 symbols through Oct 5, 2026, 10:31 AM New York time. Prices update after ingestion completes.', status: 'success' })
+      .toEqual({ message: '1-minute bars queued for 12 symbols through Oct 5, 2026, 10:31 AM New York time. The page will show any newly persisted prices after ingestion completes.', status: 'success' })
+  })
+
+  it('does not promise a price change when the provider has no newer bar', async () => {
+    process.env.ADMIN_API_TOKEN = 'private-token'
+    refreshData.mockResolvedValue(accepted)
+    const result = await refreshWatchlistAction(initialWatchlistActionState, new FormData())
+    expect(result.message).toContain('any newly persisted prices')
+    expect(result.message).not.toContain('Prices update after ingestion completes.')
   })
 
   it('reports empty and unavailable states without revalidation', async () => {

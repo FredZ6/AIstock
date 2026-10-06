@@ -456,6 +456,35 @@ def test_latest_quotes_respect_pit_and_never_substitute_fixture_or_other_provide
     assert response.json()["status"] == "DEGRADED"
 
 
+def test_latest_quotes_switch_from_same_day_minute_to_daily_only_when_daily_is_available(
+    market_client: tuple[TestClient, Connection],
+) -> None:
+    client, connection = market_client
+    _bar(connection, symbol="NVDA", event_time=datetime(2026, 10, 5, 4, tzinfo=UTC),
+         available_at=datetime(2026, 10, 5, 20, 5, tzinfo=UTC), close="210", suffix="o",
+         timeframe="1Day")
+    _bar(connection, symbol="NVDA", event_time=datetime(2026, 10, 5, 19, 59, tzinfo=UTC),
+         available_at=datetime(2026, 10, 5, 20, tzinfo=UTC), close="209", suffix="p",
+         timeframe="1Min")
+    _bar(connection, symbol="NVDA", event_time=datetime(2026, 10, 6, 12, tzinfo=UTC),
+         available_at=datetime(2026, 10, 6, 12, 1, tzinfo=UTC), close="211", suffix="q",
+         timeframe="1Min", session="PRE_MARKET")
+
+    def quote(at: datetime) -> dict[str, object]:
+        response = client.get("/api/v1/market-data/quotes", params={
+            "symbols": "NVDA", "decision_time": at.isoformat(), "timeframe": "latest",
+        })
+        assert response.status_code == 200
+        return response.json()["items"][0]
+
+    before_daily = quote(datetime(2026, 10, 5, 20, 2, tzinfo=UTC))
+    after_daily = quote(datetime(2026, 10, 5, 20, 6, tzinfo=UTC))
+    next_session = quote(datetime(2026, 10, 6, 12, 2, tzinfo=UTC))
+    assert (before_daily["close"], before_daily["timeframe"]) == ("209", "1Min")
+    assert (after_daily["close"], after_daily["timeframe"]) == ("210", "1Day")
+    assert (next_session["close"], next_session["timeframe"]) == ("211", "1Min")
+
+
 def test_historical_bars_isolates_timeframe_and_propagates_conflict(
     market_client: tuple[TestClient, Connection],
 ) -> None:
