@@ -1,7 +1,7 @@
 # Watchlist Manual Market-Data Refresh Design
 
-**Date:** 2026-10-05  
-**Status:** Approved  
+**Date:** 2026-10-05
+**Status:** Approved
 **Scope:** Paper-research market-data ingestion only
 
 ## Problem
@@ -129,4 +129,3 @@ Tests are written before production code and must cover:
 10. No Fixture fallback and no research or execution side effects.
 
 Run focused backend and frontend suites during red/green/refactor. Before review, run `make verify` and record the exact evidence in `docs/progress.md` as required by repository policy.
-
